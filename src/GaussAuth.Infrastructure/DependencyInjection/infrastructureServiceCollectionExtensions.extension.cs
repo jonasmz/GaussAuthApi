@@ -1,4 +1,6 @@
 using GaussAuth.Application.Users.Ports;
+using GaussAuth.Application.Applications.Ports;
+using GaussAuth.Application.Memberships.Ports;
 using GaussAuth.Infrastructure.Identity;
 using GaussAuth.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Identity;
@@ -42,6 +44,8 @@ public static class InfrastructureServiceCollectionExtensions
             .AddEntityFrameworkStores<AuthenticationDbContext>();
 
         services.AddScoped<IUserRepository, UserRepository>();
+        services.AddScoped<IApplicationRepository, ApplicationRepository>();
+        services.AddScoped<IApplicationMembershipRepository, ApplicationMembershipRepository>();
         services.AddScoped<ICredentialProvisioningService, IdentityCredentialProvisioningService>();
 
         return services;

@@ -1,5 +1,7 @@
 using GaussAuth.Api.DependencyInjection;
 using GaussAuth.Api.Users;
+using GaussAuth.Api.Applications;
+using GaussAuth.Api.Memberships;
 using GaussAuth.Infrastructure.DependencyInjection;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -15,5 +17,7 @@ app.UseStatusCodePages();
 app.UseRateLimiter();
 app.MapGet("/health/live", () => Results.NoContent());
 app.MapUsersEndpoints();
+app.MapApplicationsEndpoints();
+app.MapMembershipsEndpoints();
 
 app.Run();

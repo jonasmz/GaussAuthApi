@@ -28,7 +28,7 @@ public sealed class MigrationTests
 
         await db.Database.MigrateAsync();
         await db.Database.MigrateAsync();
-        Assert.AreEqual(2, (await db.Database.GetAppliedMigrationsAsync()).Count());
+        Assert.AreEqual(3, (await db.Database.GetAppliedMigrationsAsync()).Count());
         Assert.IsEmpty(await db.Database.GetPendingMigrationsAsync());
 
         var connection = db.Database.GetDbConnection();
@@ -55,7 +55,8 @@ public sealed class MigrationTests
         var expectedTables = new[]
         {
             "AspNetUsers", "AspNetUserClaims", "AspNetUserLogins",
-            "AspNetUserTokens", "__EFMigrationsHistory", "Users", "UserProfiles"
+            "AspNetUserTokens", "__EFMigrationsHistory", "Users", "UserProfiles",
+            "Applications", "ApplicationMemberships"
         };
         CollectionAssert.AreEquivalent(expectedTables, tables.ToArray());
 
