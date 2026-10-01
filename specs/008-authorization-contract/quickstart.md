@@ -2,7 +2,19 @@
 
 ## Prerequisites
 
-Start the existing Docker PostgreSQL and SDK/API stack. Configure two distinct external consumer credentials for two test applications; do not place them in source files, `.env.example`, commands, logs, or responses.
+Start the existing Docker PostgreSQL and SDK/API stack. Configure two distinct external consumer credentials for two test applications through the deployment secret mechanism; do not place them in source files, `.env.example`, commands, logs, or responses. The consumer needs only its application code, its independently configured service credential, a user bearer credential received with a request, and the public authorization-context response.
+
+## Consumer integration flow
+
+1. Provision the consumer's application in Auth and record its stable ID in the consumer configuration.
+2. Configure its application code and service credential outside source control; use a different credential for every application.
+3. Send `POST /auth/authorization-context` with the user's bearer credential, the configured application code, and the configured service credential. Do not decode or validate the user credential locally.
+4. On `200`, verify `applicationId` equals the locally configured stable ID, then retain only the needed stable `userId` as a logical reference in consumer-owned data.
+5. Allow an operation only if the public `permissions` list contains that operation's required generic permission; otherwise deny it.
+6. On `401`, `429`, malformed data, or transport failure, deny the operation. Do not infer why the request failed and do not use an older context as fallback.
+7. Request fresh context whenever current authorization is required. Session revocation, membership changes, assignment removal, and role/permission deactivation apply on the next context request.
+8. Do not connect to Auth PostgreSQL, use Auth foreign keys, reference Auth persistence or Identity models, or duplicate bearer-credential validation.
+9. Rotate a service credential by adding the new current value, retaining the prior value only temporarily for that same application, deploying consumers, then removing the retiring value.
 
 ## Scenarios
 

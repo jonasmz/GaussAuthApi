@@ -100,6 +100,42 @@ public sealed class ArchitectureTests
         }
     }
 
+    [TestMethod]
+    public void Authorization_context_contracts_expose_only_safe_public_data_and_inner_layers_do_not_depend_on_infrastructure()
+    {
+        var root = FindRepositoryRoot();
+        var contractFiles = new[]
+        {
+            "src/GaussAuth.Api/AuthorizationContext/authorizationContextResponse.dto.cs",
+            "src/GaussAuth.Api/AuthorizationContext/authorizationContextRoleResponse.dto.cs",
+            "src/GaussAuth.Application/AuthorizationContext/authorizationContext.result.cs",
+            "src/GaussAuth.Application/AuthorizationContext/authorizationContextRole.result.cs",
+            "src/GaussAuth.Application/AuthorizationContext/authorizationContextResolutionResult.result.cs"
+        };
+        var forbiddenContractTerms = new[]
+        {
+            "EntityFramework", "DbContext", "Identity", "SessionEntity", "SecurityStamp", "Password", "Profile", "Secret", "AccessToken", "Hash", "SigningKey"
+        };
+
+        foreach (var relativePath in contractFiles)
+        {
+            var source = File.ReadAllText(Path.Combine(root, relativePath));
+            foreach (var term in forbiddenContractTerms)
+            {
+                Assert.IsFalse(source.Contains(term, StringComparison.Ordinal), $"{relativePath} exposes forbidden contract term {term}.");
+            }
+        }
+
+        foreach (var tree in new[] { "src/GaussAuth.Domain", "src/GaussAuth.Application" })
+        {
+            foreach (var path in Directory.EnumerateFiles(Path.Combine(root, tree), "*.cs", SearchOption.AllDirectories))
+            {
+                Assert.IsFalse(File.ReadAllText(path).Contains("GaussAuth.Infrastructure", StringComparison.Ordinal),
+                    $"{Path.GetRelativePath(root, path)} must not depend on Infrastructure.");
+            }
+        }
+    }
+
     private static string FindRepositoryRoot()
     {
         for (var directory = new DirectoryInfo(AppContext.BaseDirectory);

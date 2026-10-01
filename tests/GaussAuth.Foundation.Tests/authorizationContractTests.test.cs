@@ -218,6 +218,50 @@ public sealed class AuthorizationContractTests
         await AssertUnauthorizedAsync(expired);
     }
 
+    [TestMethod]
+    public async Task Consumer_permission_check_uses_only_the_public_context_and_reflects_current_authorization()
+    {
+        var applicationCode = $"freshness-{Guid.NewGuid():N}";
+        var serviceSecret = $"freshness-service-{Guid.NewGuid():N}";
+        using var factory = await FactoryAsync(new Dictionary<string, string?>
+        {
+            [$"AuthorizationConsumers:{applicationCode}:CurrentSecret"] = serviceSecret
+        });
+        using var client = factory.CreateClient();
+        var user = await CreateUserAsync(client);
+        var applicationId = await CreateApplicationAsync(client, applicationCode);
+        await CreateMembershipAsync(client, applicationId, user.Id);
+        var firstRoleId = await CreateRoleAsync(client, applicationId, "dispatch-primary");
+        var secondRoleId = await CreateRoleAsync(client, applicationId, "dispatch-secondary");
+        var permissionId = await CreatePermissionAsync(client, applicationId, "dispatch.execute");
+        await AssignAsync(client, $"/applications/{applicationId}/roles/{firstRoleId}/permissions/{permissionId}");
+        await AssignAsync(client, $"/applications/{applicationId}/roles/{secondRoleId}/permissions/{permissionId}");
+        await AssignAsync(client, $"/applications/{applicationId}/users/{user.Id}/roles/{firstRoleId}");
+        await AssignAsync(client, $"/applications/{applicationId}/users/{user.Id}/roles/{secondRoleId}");
+        var login = await LoginAsync(client, applicationCode, user.Email);
+
+        await AssertConsumerPermissionAsync(client, login.AccessToken, applicationCode, serviceSecret, "dispatch.execute", true, 1);
+        await AssertConsumerPermissionAsync(client, login.AccessToken, applicationCode, serviceSecret, "dispatch.denied", false, 1);
+
+        await AssertOkAsync(client.PostAsync($"/applications/{applicationId}/users/{user.Id}/roles/{firstRoleId}/remove", null));
+        await AssertConsumerPermissionAsync(client, login.AccessToken, applicationCode, serviceSecret, "dispatch.execute", true, 1);
+
+        await AssertOkAsync(client.PostAsync($"/applications/{applicationId}/users/{user.Id}/roles/{secondRoleId}/remove", null));
+        await AssertConsumerPermissionAsync(client, login.AccessToken, applicationCode, serviceSecret, "dispatch.execute", false, 0);
+
+        await AssignAsync(client, $"/applications/{applicationId}/users/{user.Id}/roles/{firstRoleId}");
+        await AssertOkAsync(client.PostAsync($"/applications/{applicationId}/roles/{firstRoleId}/permissions/{permissionId}/remove", null));
+        await AssertConsumerPermissionAsync(client, login.AccessToken, applicationCode, serviceSecret, "dispatch.execute", false, 0);
+
+        await AssignAsync(client, $"/applications/{applicationId}/roles/{firstRoleId}/permissions/{permissionId}");
+        await AssertOkAsync(client.PostAsync($"/applications/{applicationId}/permissions/{permissionId}/deactivate", null));
+        await AssertConsumerPermissionAsync(client, login.AccessToken, applicationCode, serviceSecret, "dispatch.execute", false, 0);
+
+        await AssertOkAsync(client.PostAsync($"/applications/{applicationId}/permissions/{permissionId}/activate", null));
+        await AssertOkAsync(client.PostAsync($"/applications/{applicationId}/roles/{firstRoleId}/deactivate", null));
+        await AssertConsumerPermissionAsync(client, login.AccessToken, applicationCode, serviceSecret, "dispatch.execute", false, 0);
+    }
+
     private static async Task<WebApplicationFactory<Program>> FactoryAsync(IReadOnlyDictionary<string, string?> values, TimeProvider? timeProvider = null)
     {
         foreach (var key in ManagedEnvironmentKeys)
@@ -283,7 +327,7 @@ public sealed class AuthorizationContractTests
     private static async Task AssignAsync(HttpClient client, string path)
     {
         using var response = await client.PostAsync(path, null);
-        Assert.AreEqual(HttpStatusCode.Created, response.StatusCode);
+        Assert.IsTrue(response.StatusCode is HttpStatusCode.Created or HttpStatusCode.OK);
     }
 
     private static async Task<(Guid SessionId, string AccessToken)> LoginAsync(HttpClient client, string applicationCode, string email)
@@ -317,6 +361,21 @@ public sealed class AuthorizationContractTests
         var problem = JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement;
         Assert.AreEqual("Access is not valid.", problem.GetProperty("title").GetString());
         Assert.AreEqual(401, problem.GetProperty("status").GetInt32());
+    }
+
+    private static async Task AssertConsumerPermissionAsync(HttpClient client, string accessToken, string applicationCode, string serviceSecret, string requiredPermission, bool expected, int expectedPermissionCount)
+    {
+        using var response = await ResolveAsync(client, accessToken, applicationCode, serviceSecret);
+        Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
+        var consumer = AuthorizationContextConsumer.FromJson(await response.Content.ReadAsStringAsync());
+        Assert.AreEqual(expectedPermissionCount, consumer.PermissionCount);
+        Assert.AreEqual(expected, consumer.Allows(requiredPermission));
+    }
+
+    private static async Task AssertOkAsync(Task<HttpResponseMessage> responseTask)
+    {
+        using var response = await responseTask;
+        Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
     }
 
     private static readonly string[] ManagedEnvironmentKeys =

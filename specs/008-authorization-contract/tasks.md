@@ -66,8 +66,8 @@
 
 **Independent Test**: The test consumer allows a synthetic operation only if a returned permission code exists, and current role/permission changes are reflected by its next context call.
 
-- [ ] T015 [US3] Add consumer-boundary and authorization-freshness scenarios in `tests/GaussAuth.Foundation.Tests/authorizationContractTests.test.cs`: permit/deny by required permission, duplicate removal, assignment removal, role/permission deactivation, and no Auth persistence-model reference in the consumer fixture.
-- [ ] T016 [US3] Implement or refine current authorization queries in `src/GaussAuth.Application/AuthorizationContext/authorizationContextService.service.cs` and `src/GaussAuth.Infrastructure/Persistence/userRoleRepository.repository.cs` so every next context lookup reflects current effective authorization without caching.
+- [X] T015 [US3] Add consumer-boundary and authorization-freshness scenarios in `tests/GaussAuth.Foundation.Tests/authorizationContractTests.test.cs`: permit/deny by required permission, duplicate removal, assignment removal, role/permission deactivation, and no Auth persistence-model reference in the consumer fixture.
+- [X] T016 [US3] Implement or refine current authorization queries in `src/GaussAuth.Application/AuthorizationContext/authorizationContextService.service.cs` and `src/GaussAuth.Infrastructure/Persistence/userRoleRepository.repository.cs` so every next context lookup reflects current effective authorization without caching.
 
 **Checkpoint**: A consumer-equivalent permission check works using only the published contract.
 
@@ -79,8 +79,8 @@
 
 **Independent Test**: Documentation and architecture tests demonstrate that a consumer needs only configured application identity, its service credential, a user credential, and the public context DTO.
 
-- [ ] T017 [US4] Add architecture checks in `tests/GaussAuth.Foundation.Tests/architectureTests.test.cs` that public authorization-context DTOs expose no EF, Identity, Session entity, security stamp, profile, or secret fields and Application/Domain contain no Infrastructure dependency.
-- [ ] T018 [US4] Finalize consumer setup, validation, permission-check, rejection, no-database-access, and rotation guidance in `specs/008-authorization-contract/contracts/authorization-context-api.md` and `specs/008-authorization-contract/quickstart.md` to match the implemented headers and response.
+- [X] T017 [US4] Add architecture checks in `tests/GaussAuth.Foundation.Tests/architectureTests.test.cs` that public authorization-context DTOs expose no EF, Identity, Session entity, security stamp, profile, or secret fields and Application/Domain contain no Infrastructure dependency.
+- [X] T018 [US4] Finalize consumer setup, validation, permission-check, rejection, no-database-access, and rotation guidance in `specs/008-authorization-contract/contracts/authorization-context-api.md` and `specs/008-authorization-contract/quickstart.md` to match the implemented headers and response.
 
 **Checkpoint**: An independent consumer can integrate without Auth persistence or internal-model coupling.
 

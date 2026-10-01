@@ -20,6 +20,7 @@ public sealed class UserRoleRepository(AuthenticationDbContext context) : IUserR
                            join user in context.DomainUsers on userId equals user.Id
                            where assignment.UserId == userId && assignment.ApplicationId == applicationId && assignment.IsActive && membership.IsActive && role.IsActive && application.IsActive && user.IsActive
                            select new { role.Id, role.Name })
+            .AsNoTracking()
             .Distinct()
             .OrderBy(item => item.Name)
             .ThenBy(item => item.Id)
@@ -35,7 +36,7 @@ public sealed class UserRoleRepository(AuthenticationDbContext context) : IUserR
         join application in context.Applications on applicationId equals application.Id
         join user in context.DomainUsers on userId equals user.Id
         where assignment.UserId == userId && assignment.ApplicationId == applicationId && assignment.IsActive && membership.IsActive && role.IsActive && rolePermission.IsActive && permission.IsActive && application.IsActive && user.IsActive
-        select permission).Distinct().OrderBy(x => x.Code).ToListAsync(ct);
+        select permission).AsNoTracking().Distinct().OrderBy(x => x.Code).ToListAsync(ct);
     public async Task AddAsync(UserRole userRole, CancellationToken ct) => await context.UserRoles.AddAsync(userRole, ct);
     public Task SaveChangesAsync(CancellationToken ct) => context.SaveChangesAsync(ct);
     public async Task<bool> TrySaveChangesAsync(CancellationToken ct) { try { await context.SaveChangesAsync(ct); return true; } catch (DbUpdateException ex) when (ex.InnerException is PostgresException p && p.SqlState == PostgresErrorCodes.UniqueViolation && p.ConstraintName == "IX_UserRoles_UserId_RoleId_ApplicationId") { return false; } }
