@@ -1,0 +1,119 @@
+# Quickstart Validation: 001-foundation
+
+This is a run guide for the planned implementation. It becomes executable
+after the files named in [plan.md](plan.md) are built by the implementation
+phase. Run every command from the repository root inside the existing
+Codex development container. No host .NET or PostgreSQL installation is
+needed. The SDK and database run in separate containers.
+
+## Prerequisites
+
+- Docker CLI and Compose can reach the host daemon through the mounted socket.
+- `compose.dev.yml`, `.env.example`, and the .NET 10 solution have been
+  created by implementation.
+- Use a private, development-only password in ignored `.env`; never copy
+  it into source, logs, screenshots, or command output.
+
+## 1. Check Docker and configure development settings
+
+```sh
+test -S /var/run/docker.sock
+docker info --format '{{.ServerVersion}}'
+id -u
+id -g
+test -f .env || cp .env.example .env
+```
+
+On first setup, fill the placeholder development values in `.env`, including the database
+password. Set `PROJECT_DIR` to the absolute repository path reported by `pwd`;
+that path must also be visible to the host Docker daemon for the SDK bind mount.
+Set `LOCAL_UID` and `LOCAL_GID` to the displayed numeric user and group IDs so
+generated source files remain editable from the development container.
+The implementation must ignore `.env` in Git and validate missing values
+without printing them. The development container itself is unchanged.
+
+## 2. Start and inspect PostgreSQL 17
+
+```sh
+docker compose --env-file .env -f compose.dev.yml up -d --wait postgres
+docker compose --env-file .env -f compose.dev.yml ps
+docker compose --env-file .env -f compose.dev.yml run --rm sdk dotnet --version
+docker compose --env-file .env -f compose.dev.yml run --rm sdk bash -c 'exec 3<>/dev/tcp/postgres/5432'
+```
+
+Expected: `postgres` reports healthy, its image is PostgreSQL 17, and the
+separate SDK container reports .NET 10. No host database port needs to be
+published when the SDK and database share the Compose network. The final
+command succeeds only when PostgreSQL is reachable from the SDK. If the
+daemon/socket is unavailable, stop here and report that prerequisite; do
+not fall back to a host-installed database.
+
+## 3. Build and apply the initial migration
+
+```sh
+docker compose --env-file .env -f compose.dev.yml run --rm sdk dotnet build GaussAuth.slnx
+docker compose --env-file .env -f compose.dev.yml run --rm sdk sh -lc 'dotnet tool restore && dotnet ef database update --project src/GaussAuth.Infrastructure --startup-project src/GaussAuth.Api'
+docker compose --env-file .env -f compose.dev.yml run --rm sdk sh -lc 'dotnet tool restore && dotnet ef migrations list --project src/GaussAuth.Infrastructure --startup-project src/GaussAuth.Api'
+```
+
+Expected: build succeeds; the single initial migration is applied and listed.
+Repeat the `database update` command; it must complete without adding a
+second schema change. The migration should contain only the user-side
+Identity foundation described in [data-model.md](data-model.md).
+The migration and model snapshot are version-controlled.
+
+## 4. Start the API and check its only route
+
+```sh
+docker compose --env-file .env -f compose.dev.yml up -d sdk
+docker compose --env-file .env -f compose.dev.yml logs -f sdk
+# Wait for "Now listening on: http://0.0.0.0:8080", then Ctrl+C to stop following logs.
+docker compose --env-file .env -f compose.dev.yml ps
+docker compose --env-file .env -f compose.dev.yml exec -T sdk curl -sS -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8080/health/live
+```
+
+Expected: the SDK service runs the API and the final command prints `204`.
+The .NET 10 SDK image used by this workflow provides the `curl` client used here.
+The response body is empty. The route does not query PostgreSQL or disclose
+configuration. The API must expose no identity or business endpoint. The
+first build inside the `sdk` container takes roughly 20-30 seconds before
+Kestrel starts listening; an immediate `curl` after `up -d` can fail with
+a connection error, so wait for the "Now listening" log line first.
+
+## 5. Run essential checks
+
+```sh
+docker compose --env-file .env -f compose.dev.yml run --rm sdk dotnet test GaussAuth.slnx
+```
+
+Expected: architecture, startup/error, and persistence checks pass. Review
+the failure-path test output: production responses and logs must contain
+no SQL, connection string, secret, stack trace, or physical path. Check
+that Domain and Application have no forbidden project/package references
+and that source files follow the constitutional one-type and filename rules.
+
+## 6. Stop or recreate intentionally
+
+```sh
+docker compose --env-file .env -f compose.dev.yml down
+```
+
+This stops and removes the development service containers while preserving
+the named PostgreSQL volume. To deliberately erase disposable development
+data before a fresh validation, run:
+
+```sh
+docker compose --env-file .env -f compose.dev.yml down -v
+docker compose --env-file .env -f compose.dev.yml up -d --wait postgres
+```
+
+Use `down -v` only when losing local development data is intended. No
+obsolete temporary containers should remain after the workflow.
+
+Each `run --rm sdk <command>` uses a disposable container, so its NuGet
+global package cache does not persist between invocations: `dotnet build`
+in a fresh container already performs a full restore and compile. Do not
+run `dotnet clean` in this workflow — it deletes `obj/`/`bin/` output on
+the bind-mounted repository and then fails resolving packages whose cache
+lived only in a previous, now-removed container; a clean rebuild is
+obtained simply by running `dotnet build` in a new `run --rm` container.

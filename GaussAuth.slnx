@@ -1,0 +1,11 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/GaussAuth.Domain/GaussAuth.Domain.csproj" />
+    <Project Path="src/GaussAuth.Application/GaussAuth.Application.csproj" />
+    <Project Path="src/GaussAuth.Infrastructure/GaussAuth.Infrastructure.csproj" />
+    <Project Path="src/GaussAuth.Api/GaussAuth.Api.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/GaussAuth.Foundation.Tests/GaussAuth.Foundation.Tests.csproj" />
+  </Folder>
+</Solution>

@@ -1,0 +1,15 @@
+.env
+.env.*
+!.env.example
+**/bin/
+**/obj/
+**/TestResults/
+*.user
+*.suo
+packages/
+.DS_Store
+Thumbs.db
+*.tmp
+*.swp
+.vscode/
+.idea/
