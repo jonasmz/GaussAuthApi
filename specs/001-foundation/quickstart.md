@@ -66,6 +66,8 @@ The migration and model snapshot are version-controlled.
 
 ```sh
 docker compose --env-file .env -f compose.dev.yml up -d sdk
+docker compose --env-file .env -f compose.dev.yml logs -f sdk
+# Wait for "Now listening on: http://0.0.0.0:8080", then Ctrl+C to stop following logs.
 docker compose --env-file .env -f compose.dev.yml ps
 docker compose --env-file .env -f compose.dev.yml exec -T sdk curl -sS -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8080/health/live
 ```
@@ -73,7 +75,10 @@ docker compose --env-file .env -f compose.dev.yml exec -T sdk curl -sS -o /dev/n
 Expected: the SDK service runs the API and the final command prints `204`.
 The .NET 10 SDK image used by this workflow provides the `curl` client used here.
 The response body is empty. The route does not query PostgreSQL or disclose
-configuration. The API must expose no identity or business endpoint.
+configuration. The API must expose no identity or business endpoint. The
+first build inside the `sdk` container takes roughly 20-30 seconds before
+Kestrel starts listening; an immediate `curl` after `up -d` can fail with
+a connection error, so wait for the "Now listening" log line first.
 
 ## 5. Run essential checks
 
@@ -104,3 +109,11 @@ docker compose --env-file .env -f compose.dev.yml up -d --wait postgres
 
 Use `down -v` only when losing local development data is intended. No
 obsolete temporary containers should remain after the workflow.
+
+Each `run --rm sdk <command>` uses a disposable container, so its NuGet
+global package cache does not persist between invocations: `dotnet build`
+in a fresh container already performs a full restore and compile. Do not
+run `dotnet clean` in this workflow — it deletes `obj/`/`bin/` output on
+the bind-mounted repository and then fails resolving packages whose cache
+lived only in a previous, now-removed container; a clean rebuild is
+obtained simply by running `dotnet build` in a new `run --rm` container.

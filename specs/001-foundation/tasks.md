@@ -132,10 +132,10 @@ without adding a Domain User or speculative slice in this feature.
 
 **Purpose**: Validate the complete foundation and remove accidental scope.
 
-- [ ] T020 Review `GaussAuth.slnx`, every `src/**/*.csproj`, `src/**/*.cs`, and `tests/GaussAuth.Foundation.Tests/*.cs` for the constitutional reference direction, nullable setting, one-type/filename convention, and absence of empty feature stubs, unnecessary packages, and global Identity roles; fix only concrete violations.
-- [ ] T021 Run every command in `specs/001-foundation/quickstart.md` from the existing development container, including build, health, migration, repeat migration, tests, stop, and intentional clean recreation; update `specs/001-foundation/quickstart.md` to the verified commands and expected outcomes.
-- [ ] T022 Review `compose.dev.yml`, `.env.example`, root `.gitignore`, `src/GaussAuth.Api/Program.cs`, and the test output for committed secrets, sensitive logs/responses, unnecessary public routes or containers, and accidental selection of token, password, email, or production deployment policy; correct any findings.
-- [ ] T023 Perform the final clean build and essential tests with `GaussAuth.slnx` from the SDK container, confirm the sole public route matches `specs/001-foundation/contracts/operational-api.md`, and stop/remove disposable services with the lifecycle command in `specs/001-foundation/quickstart.md`.
+- [X] T020 Review `GaussAuth.slnx`, every `src/**/*.csproj`, `src/**/*.cs`, and `tests/GaussAuth.Foundation.Tests/*.cs` for the constitutional reference direction, nullable setting, one-type/filename convention, and absence of empty feature stubs, unnecessary packages, and global Identity roles; fix only concrete violations.
+- [X] T021 Run every command in `specs/001-foundation/quickstart.md` from the existing development container, including build, health, migration, repeat migration, tests, stop, and intentional clean recreation; update `specs/001-foundation/quickstart.md` to the verified commands and expected outcomes.
+- [X] T022 Review `compose.dev.yml`, `.env.example`, root `.gitignore`, `src/GaussAuth.Api/Program.cs`, and the test output for committed secrets, sensitive logs/responses, unnecessary public routes or containers, and accidental selection of token, password, email, or production deployment policy; correct any findings.
+- [X] T023 Perform the final clean build and essential tests with `GaussAuth.slnx` from the SDK container, confirm the sole public route matches `specs/001-foundation/contracts/operational-api.md`, and stop/remove disposable services with the lifecycle command in `specs/001-foundation/quickstart.md`.
 
 ---
 
