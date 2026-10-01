@@ -73,6 +73,16 @@ domain entities MUST NOT use EF Core-specific APIs. Business applications MUST N
 use foreign keys into the authentication database. Cross-service identity references
 SHOULD use stable identifiers instead of physical database relationships.
 
+The development environment MUST use Docker containers managed by the host Docker
+daemon, which the agent can access through its socket. PostgreSQL 17 MUST run in its
+own database container. The .NET 10 development toolchain and application development
+environment MUST run in a separate .NET container; they MUST NOT share a container
+with PostgreSQL. Agents MUST use the host daemon through its socket to operate these
+containers and MUST execute .NET development commands inside the .NET container.
+Host installations of PostgreSQL or the .NET SDK MUST NOT be prerequisites for
+development. This rule does not select a deployment platform or container
+orchestration tool.
+
 ### VI. Security by Design
 
 Security MUST be considered in specifications, plans, implementations, and reviews.
@@ -193,8 +203,9 @@ tasks. Agents MUST NOT silently weaken requirements to simplify implementation.
   another mechanism; refresh tokens; session duration; token rotation; immediate
   revocation strategy; email provider; email-confirmation policy; MFA; OAuth 2.0;
   OpenID Connect; social login; passkeys; exact password policy; exact lockout
-  duration; Docker/containerization; deployment platform; reverse proxy; advanced
-  observability; and distributed caching. Agents MUST NOT silently choose them.
+  duration; production containerization; deployment platform; reverse proxy;
+  advanced observability; and distributed caching. Agents MUST NOT silently choose
+  them.
 
 ## Governance
 
@@ -215,4 +226,4 @@ adoption date; Last Amended MUST record the date of the latest change. Complianc
 reviews MUST verify applicable rules and document required amendments before
 conflicting work proceeds.
 
-**Version**: 1.0.0 | **Ratified**: 2026-09-30 | **Last Amended**: 2026-09-30
+**Version**: 2.0.0 | **Ratified**: 2026-09-30 | **Last Amended**: 2026-10-01
