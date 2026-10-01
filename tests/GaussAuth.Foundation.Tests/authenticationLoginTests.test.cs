@@ -371,7 +371,7 @@ public sealed class AuthenticationLoginTests
     {
         public List<(SecurityEventType Type, Guid? UserId, Guid? ApplicationId)> Events { get; } = [];
 
-        public Task RecordAsync(SecurityEventType type, Guid? userId, Guid? applicationId, CancellationToken cancellationToken)
+        public Task RecordAsync(SecurityEventType type, Guid? userId, Guid? applicationId, Guid? sessionId, CancellationToken cancellationToken)
         {
             Events.Add((type, userId, applicationId));
             return Task.CompletedTask;

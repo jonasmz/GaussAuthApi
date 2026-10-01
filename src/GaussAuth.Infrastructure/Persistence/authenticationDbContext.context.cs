@@ -4,6 +4,7 @@ using GaussAuth.Domain.Memberships;
 using GaussAuth.Domain.Roles;
 using DomainPermission = GaussAuth.Domain.Permissions.Permission;
 using GaussAuth.Domain.Authorization;
+using GaussAuth.Domain.Sessions;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
@@ -22,6 +23,7 @@ public sealed class AuthenticationDbContext(DbContextOptions<AuthenticationDbCon
     public DbSet<DomainPermission> Permissions => Set<DomainPermission>();
     public DbSet<RolePermission> RolePermissions => Set<RolePermission>();
     public DbSet<UserRole> UserRoles => Set<UserRole>();
+    public DbSet<Session> Sessions => Set<Session>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -105,6 +107,15 @@ public sealed class AuthenticationDbContext(DbContextOptions<AuthenticationDbCon
             assignment.HasIndex(x => new { x.UserId, x.RoleId, x.ApplicationId }).IsUnique().HasDatabaseName("IX_UserRoles_UserId_RoleId_ApplicationId");
             assignment.HasOne<ApplicationMembership>().WithMany().HasForeignKey(x => new { x.UserId, x.ApplicationId }).HasPrincipalKey(x => new { x.UserId, x.ApplicationId }).OnDelete(DeleteBehavior.Restrict);
             assignment.HasOne<Role>().WithMany().HasForeignKey(x => new { x.RoleId, x.ApplicationId }).HasPrincipalKey(x => new { x.Id, x.ApplicationId }).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        builder.Entity<Session>(session =>
+        {
+            session.ToTable("Sessions"); session.HasKey(x => x.Id).HasName("PK_Sessions"); session.Property(x => x.Id).ValueGeneratedNever();
+            session.Property(x => x.UserId).IsRequired(); session.Property(x => x.ApplicationId).IsRequired();
+            session.Property(x => x.CreatedAt).IsRequired(); session.Property(x => x.ExpiresAt).IsRequired();
+            session.HasIndex(x => new { x.UserId, x.ApplicationId }).HasDatabaseName("IX_Sessions_UserId_ApplicationId");
+            session.HasOne<ApplicationMembership>().WithMany().HasForeignKey(x => new { x.UserId, x.ApplicationId }).HasPrincipalKey(x => new { x.UserId, x.ApplicationId }).HasConstraintName("FK_Sessions_ApplicationMemberships_UserId_ApplicationId").OnDelete(DeleteBehavior.Restrict);
         });
     }
 }

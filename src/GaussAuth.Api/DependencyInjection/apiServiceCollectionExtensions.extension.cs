@@ -14,6 +14,10 @@ public static class ApiServiceCollectionExtensions
         var userCreationWindow = TimeSpan.FromSeconds(configuration.GetValue("RateLimiting:UserCreation:WindowSeconds", 60));
         var loginPermitLimit = configuration.GetValue("RateLimiting:Login:PermitLimit", 5);
         var loginWindow = TimeSpan.FromSeconds(configuration.GetValue("RateLimiting:Login:WindowSeconds", 60));
+        var signingKeysPermitLimit = configuration.GetValue("RateLimiting:SigningKeys:PermitLimit", 60);
+        var signingKeysWindow = TimeSpan.FromSeconds(configuration.GetValue("RateLimiting:SigningKeys:WindowSeconds", 60));
+        var sessionCredentialsPermitLimit = configuration.GetValue("RateLimiting:SessionCredentials:PermitLimit", 600);
+        var sessionCredentialsWindow = TimeSpan.FromSeconds(configuration.GetValue("RateLimiting:SessionCredentials:WindowSeconds", 60));
 
         services.AddRateLimiter(options =>
         {
@@ -45,6 +49,14 @@ public static class ApiServiceCollectionExtensions
                     Window = loginWindow,
                     QueueLimit = 0
                 }));
+
+            options.AddPolicy("signing-keys", httpContext => RateLimitPartition.GetFixedWindowLimiter(
+                partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+                factory: _ => new FixedWindowRateLimiterOptions { PermitLimit = signingKeysPermitLimit, Window = signingKeysWindow, QueueLimit = 0 }));
+
+            options.AddPolicy("session-credentials", httpContext => RateLimitPartition.GetFixedWindowLimiter(
+                partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+                factory: _ => new FixedWindowRateLimiterOptions { PermitLimit = sessionCredentialsPermitLimit, Window = sessionCredentialsWindow, QueueLimit = 0 }));
         });
 
         return services;

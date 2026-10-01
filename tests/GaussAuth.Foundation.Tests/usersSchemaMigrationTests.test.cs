@@ -17,7 +17,7 @@ public sealed class UsersSchemaMigrationTests
 
         await db.Database.MigrateAsync();
         await db.Database.MigrateAsync();
-        Assert.AreEqual(4, (await db.Database.GetAppliedMigrationsAsync()).Count());
+        Assert.AreEqual(5, (await db.Database.GetAppliedMigrationsAsync()).Count());
         Assert.IsEmpty(await db.Database.GetPendingMigrationsAsync());
 
         var connection = db.Database.GetDbConnection();
@@ -39,13 +39,9 @@ public sealed class UsersSchemaMigrationTests
         {
             "AspNetUsers", "AspNetUserClaims", "AspNetUserLogins", "AspNetUserTokens",
             "__EFMigrationsHistory", "Users", "UserProfiles", "Applications", "ApplicationMemberships",
-            "Roles", "Permissions", "RolePermissions", "UserRoles"
+            "Roles", "Permissions", "RolePermissions", "UserRoles", "Sessions"
         };
         CollectionAssert.AreEquivalent(expectedTables, tables.ToArray());
-
-        var forbiddenNamePatterns = new[] { "Session" };
-        Assert.IsFalse(tables.Any(table =>
-            forbiddenNamePatterns.Any(pattern => table.Contains(pattern, StringComparison.OrdinalIgnoreCase))));
 
         var userIndexes = new List<string>();
         await using (var indexCommand = connection.CreateCommand())

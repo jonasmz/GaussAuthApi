@@ -6,9 +6,9 @@ namespace GaussAuth.Infrastructure.Security;
 
 public sealed class LoggingSecurityEventRecorder(ILogger<LoggingSecurityEventRecorder> logger) : ISecurityEventRecorder
 {
-    public Task RecordAsync(SecurityEventType type, Guid? userId, Guid? applicationId, CancellationToken cancellationToken)
+    public Task RecordAsync(SecurityEventType type, Guid? userId, Guid? applicationId, Guid? sessionId, CancellationToken cancellationToken)
     {
-        logger.LogInformation("Security event {EventType} for user {UserId} in application {ApplicationId}.", type, userId, applicationId);
+        logger.LogInformation("Security event {EventType} for user {UserId} in application {ApplicationId} session {SessionId}.", type, userId, applicationId, sessionId);
         return Task.CompletedTask;
     }
 }

@@ -30,7 +30,7 @@ public sealed class ArchitectureTests
         var forbidden = new[]
         {
             "Microsoft.AspNetCore", "Microsoft.EntityFrameworkCore", "Npgsql",
-            "Microsoft.Extensions.Identity", "GaussAuth.Infrastructure", "GaussAuth.Api", "Docker"
+            "Microsoft.Extensions.Identity", "Microsoft.IdentityModel", "System.IdentityModel", "GaussAuth.Infrastructure", "GaussAuth.Api", "Docker"
         };
         foreach (var name in new[] { "GaussAuth.Domain", "GaussAuth.Application" })
         {

@@ -6,6 +6,10 @@ using GaussAuth.Application.Permissions.Ports;
 using GaussAuth.Application.Authorization.Ports;
 using GaussAuth.Application.Login.Ports;
 using GaussAuth.Application.Security.Ports;
+using GaussAuth.Application.Sessions;
+using GaussAuth.Application.Sessions.Ports;
+using GaussAuth.Infrastructure.Sessions;
+using Microsoft.Extensions.Hosting;
 using GaussAuth.Infrastructure.Identity;
 using GaussAuth.Infrastructure.Persistence;
 using GaussAuth.Infrastructure.Security;
@@ -21,7 +25,8 @@ public static class InfrastructureServiceCollectionExtensions
 {
     public static IServiceCollection AddInfrastructure(
         this IServiceCollection services,
-        IConfiguration configuration)
+        IConfiguration configuration,
+        IHostEnvironment? environment = null)
     {
         var connection = configuration.GetConnectionString("AuthenticationDatabase");
         if (string.IsNullOrWhiteSpace(connection))
@@ -59,6 +64,27 @@ public static class InfrastructureServiceCollectionExtensions
             })
             .AddEntityFrameworkStores<AuthenticationDbContext>()
             .AddSignInManager();
+
+        SessionPolicy sessionPolicy;
+        try
+        {
+            sessionPolicy = new SessionPolicy(
+                TimeSpan.FromMinutes(configuration.GetValue("Sessions:SessionLifetimeMinutes", 480)),
+                TimeSpan.FromMinutes(configuration.GetValue("Sessions:AccessTokenLifetimeMinutes", 15)));
+        }
+        catch (ArgumentException)
+        {
+            throw new InvalidOperationException("Session lifetime configuration is missing or invalid.");
+        }
+        services.AddSingleton(sessionPolicy);
+
+        var signingKey = AccessCredentialSigningKey.Load(configuration, environment);
+        var issuer = configuration["Sessions:Issuer"] is { Length: > 0 } configuredIssuer ? configuredIssuer : "gaussauth";
+        services.AddSingleton(signingKey);
+        services.AddSingleton<IAccessCredentialKeySet>(signingKey);
+        services.AddSingleton<IAccessCredentialIssuer>(new SignedAccessCredentialIssuer(signingKey, issuer));
+        services.AddSingleton<IAccessCredentialValidator>(new SignedAccessCredentialValidator(signingKey, issuer));
+        services.AddScoped<ISessionRepository, SessionRepository>();
 
         services.AddScoped<IUserRepository, UserRepository>();
         services.AddScoped<IApplicationRepository, ApplicationRepository>();

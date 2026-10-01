@@ -7,7 +7,7 @@ public sealed class LoginOperationResult
     public bool IsSuccess { get; private init; }
     internal LoginFailureReason? Reason { get; private init; }
 
-    public static LoginOperationResult Success(Guid userId, Guid applicationId) =>
+    internal static LoginOperationResult Success(Guid userId, Guid applicationId) =>
         new() { IsSuccess = true, UserId = userId, ApplicationId = applicationId };
 
     internal static LoginOperationResult Failure(LoginFailureReason reason, Guid? userId = null, Guid? applicationId = null) =>

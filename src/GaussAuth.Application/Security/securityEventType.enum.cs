@@ -4,5 +4,13 @@ public enum SecurityEventType
 {
     LoginSucceeded,
     LoginFailed,
-    AccountLockedOut
+    AccountLockedOut,
+    SessionCreated,
+    AccessRenewed,
+    SessionRevoked,
+    LogoutCompleted,
+    AccessRejectedExpired,
+    AccessRejectedRevoked,
+    AccessRejectedInvalidState,
+    AccessRejectedApplicationMismatch
 }
