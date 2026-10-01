@@ -1,3 +1,5 @@
+using GaussAuth.Application.Users.Ports;
+using GaussAuth.Infrastructure.Identity;
 using GaussAuth.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.Configuration;
@@ -38,6 +40,9 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddIdentityCore<IdentityUser<Guid>>(options =>
                 options.Stores.SchemaVersion = IdentitySchemaVersions.Version2)
             .AddEntityFrameworkStores<AuthenticationDbContext>();
+
+        services.AddScoped<IUserRepository, UserRepository>();
+        services.AddScoped<ICredentialProvisioningService, IdentityCredentialProvisioningService>();
 
         return services;
     }
