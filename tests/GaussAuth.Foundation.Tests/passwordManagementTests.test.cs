@@ -11,6 +11,10 @@ using System.Text.Json;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.Hosting;
+using Microsoft.AspNetCore.Identity;
+using Microsoft.Extensions.DependencyInjection.Extensions;
+using GaussAuth.Application.Security;
+using GaussAuth.Application.Security.Ports;
 
 namespace GaussAuth.Foundation.Tests;
 
@@ -112,6 +116,91 @@ public sealed class PasswordManagementTests
     }
 
     [TestMethod]
+    public async Task Reset_password_uses_a_one_time_credential_clears_lockout_revokes_sessions_and_records_safe_events()
+    {
+        var path = Path.Combine(Path.GetTempPath(), ".recovery", $"{Guid.NewGuid():N}.jsonl");
+        Environment.SetEnvironmentVariable("PasswordRecovery__DeliveryFile", path);
+        var recorder = new RecordingSecurityEventRecorder();
+        try
+        {
+            using var factory = await FactoryAsync(recorder); using var client = factory.CreateClient();
+            var login = await CreateLoginAsync(client);
+            using var recovery = await client.PostAsJsonAsync("/auth/password/recovery", new { email = login.Email });
+            Assert.AreEqual(HttpStatusCode.Accepted, recovery.StatusCode);
+            var credential = JsonDocument.Parse((await File.ReadAllLinesAsync(path)).Single()).RootElement.GetProperty("ResetCredential").GetString()!;
+            using (var scope = factory.Services.CreateScope())
+            {
+                var manager = scope.ServiceProvider.GetRequiredService<UserManager<IdentityUser<Guid>>>();
+                var identityUser = await manager.FindByIdAsync(login.UserId.ToString());
+                await manager.SetLockoutEndDateAsync(identityUser!, DateTimeOffset.UtcNow.AddMinutes(5));
+            }
+
+            using var reset = await client.PostAsJsonAsync("/auth/password/reset", new { email = login.Email, recoveryCredential = credential, newPassword = "Reset!2026" });
+            Assert.AreEqual(HttpStatusCode.NoContent, reset.StatusCode);
+            using var reused = await client.PostAsJsonAsync("/auth/password/reset", new { email = login.Email, recoveryCredential = credential, newPassword = "Reset!2026" });
+            using var invalid = await client.PostAsJsonAsync("/auth/password/reset", new { email = login.Email, recoveryCredential = "invalid", newPassword = "Reset!2026" });
+            Assert.AreEqual(HttpStatusCode.BadRequest, reused.StatusCode);
+            Assert.AreEqual(JsonDocument.Parse(await reused.Content.ReadAsStringAsync()).RootElement.GetProperty("title").GetString(), JsonDocument.Parse(await invalid.Content.ReadAsStringAsync()).RootElement.GetProperty("title").GetString());
+
+            client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", login.AccessToken);
+            using var oldSession = await client.PostAsJsonAsync("/auth/session/validate", new { applicationCode = login.ApplicationCode });
+            Assert.AreEqual(HttpStatusCode.Unauthorized, oldSession.StatusCode);
+            client.DefaultRequestHeaders.Authorization = null;
+            using var oldLogin = await client.PostAsJsonAsync("/auth/login", new { applicationCode = login.ApplicationCode, email = login.Email, password = InitialPassword });
+            using var newLogin = await client.PostAsJsonAsync("/auth/login", new { applicationCode = login.ApplicationCode, email = login.Email, password = "Reset!2026" });
+            Assert.AreEqual(HttpStatusCode.Unauthorized, oldLogin.StatusCode);
+            Assert.AreEqual(HttpStatusCode.OK, newLogin.StatusCode);
+
+            CollectionAssert.IsSubsetOf(new[] { SecurityEventType.PasswordRecoveryRequested, SecurityEventType.PasswordReset, SecurityEventType.PasswordResetFailed, SecurityEventType.SessionRevoked }, recorder.Events.Select(item => item.Type).ToList());
+            Assert.IsFalse(recorder.Events.Any(item => item.ToString()!.Contains(credential, StringComparison.Ordinal) || item.ToString()!.Contains("Reset!2026", StringComparison.Ordinal)));
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("PasswordRecovery__DeliveryFile", null);
+            if (File.Exists(path)) File.Delete(path);
+        }
+    }
+
+    [TestMethod]
+    public async Task Reset_endpoint_is_rate_limited_and_invalid_input_remains_safe()
+    {
+        Environment.SetEnvironmentVariable("RateLimiting__PasswordReset__PermitLimit", "1");
+        try
+        {
+            using var factory = await FactoryAsync(); using var client = factory.CreateClient();
+            using var first = await client.PostAsJsonAsync("/auth/password/reset", new { email = "unknown@example.test", recoveryCredential = "invalid", newPassword = "Reset!2026" });
+            using var second = await client.PostAsJsonAsync("/auth/password/reset", new { email = "unknown@example.test", recoveryCredential = "invalid", newPassword = "Reset!2026" });
+            Assert.AreEqual(HttpStatusCode.BadRequest, first.StatusCode);
+            Assert.AreEqual((HttpStatusCode)429, second.StatusCode);
+        }
+        finally { Environment.SetEnvironmentVariable("RateLimiting__PasswordReset__PermitLimit", null); }
+    }
+
+    [TestMethod]
+    public async Task Reset_does_not_reactivate_an_inactive_user_or_change_memberships()
+    {
+        var path = Path.Combine(Path.GetTempPath(), ".recovery", $"{Guid.NewGuid():N}.jsonl");
+        Environment.SetEnvironmentVariable("PasswordRecovery__DeliveryFile", path);
+        try
+        {
+            using var factory = await FactoryAsync(); using var client = factory.CreateClient();
+            var login = await CreateLoginAsync(client);
+            using var recovery = await client.PostAsJsonAsync("/auth/password/recovery", new { email = login.Email });
+            var credential = JsonDocument.Parse((await File.ReadAllLinesAsync(path)).Single()).RootElement.GetProperty("ResetCredential").GetString()!;
+            using var deactivated = await client.PostAsync($"/users/{login.UserId}/deactivate", null);
+            using var reset = await client.PostAsJsonAsync("/auth/password/reset", new { email = login.Email, recoveryCredential = credential, newPassword = "Reset!2026" });
+            using var memberships = await client.GetAsync($"/users/{login.UserId}/memberships");
+            Assert.AreEqual(HttpStatusCode.BadRequest, reset.StatusCode);
+            Assert.AreEqual(1, JsonDocument.Parse(await memberships.Content.ReadAsStringAsync()).RootElement.GetProperty("items").GetArrayLength());
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("PasswordRecovery__DeliveryFile", null);
+            if (File.Exists(path)) File.Delete(path);
+        }
+    }
+
+    [TestMethod]
     public async Task Development_delivery_writes_only_to_configured_ignored_recovery_file()
     {
         var path = Path.Combine(Path.GetTempPath(), ".recovery", $"{Guid.NewGuid():N}.jsonl");
@@ -147,9 +236,14 @@ public sealed class PasswordManagementTests
         public IFileProvider ContentRootFileProvider { get; set; } = new NullFileProvider();
     }
 
-    private static async Task<WebApplicationFactory<Program>> FactoryAsync()
+    private static async Task<WebApplicationFactory<Program>> FactoryAsync(RecordingSecurityEventRecorder? recorder = null)
     {
-        var factory = new WebApplicationFactory<Program>();
+        var factory = new WebApplicationFactory<Program>().WithWebHostBuilder(builder => builder.ConfigureServices(services =>
+        {
+            if (recorder is null) return;
+            services.RemoveAll<ISecurityEventRecorder>();
+            services.AddSingleton<ISecurityEventRecorder>(recorder);
+        }));
         using var scope = factory.Services.CreateScope();
         await scope.ServiceProvider.GetRequiredService<AuthenticationDbContext>().Database.MigrateAsync();
         return factory;
@@ -177,4 +271,14 @@ public sealed class PasswordManagementTests
     }
 
     private sealed record LoginResult(Guid UserId, string ApplicationCode, string Email, string AccessToken);
+
+    private sealed class RecordingSecurityEventRecorder : ISecurityEventRecorder
+    {
+        public List<(SecurityEventType Type, Guid? UserId, Guid? ApplicationId, Guid? SessionId)> Events { get; } = [];
+        public Task RecordAsync(SecurityEventType type, Guid? userId, Guid? applicationId, Guid? sessionId, CancellationToken cancellationToken)
+        {
+            Events.Add((type, userId, applicationId, sessionId));
+            return Task.CompletedTask;
+        }
+    }
 }

@@ -13,6 +13,7 @@ public static class PasswordsEndpoints
     {
         app.MapPost("/auth/password/change", ChangeAsync);
         app.MapPost("/auth/password/recovery", RecoverAsync).RequireRateLimiting("password-recovery");
+        app.MapPost("/auth/password/reset", ResetAsync).RequireRateLimiting("password-reset");
         return app;
     }
 
@@ -39,6 +40,15 @@ public static class PasswordsEndpoints
         if (HasValidationErrors(request, out var errors)) return TypedResults.ValidationProblem(errors);
         await service.RequestRecoveryAsync(request.Email, cancellationToken);
         return TypedResults.Accepted((string?)null, new { message = RecoveryMessage });
+    }
+
+    private static async Task<IResult> ResetAsync(ResetPasswordRequest request, PasswordManagementService service, CancellationToken cancellationToken)
+    {
+        if (HasValidationErrors(request, out var errors)) return TypedResults.ValidationProblem(errors);
+        var result = await service.ResetAsync(request.Email, request.RecoveryCredential, request.NewPassword, cancellationToken);
+        return result.IsSuccess
+            ? TypedResults.NoContent()
+            : TypedResults.Problem(statusCode: StatusCodes.Status400BadRequest, title: "Password reset failed.");
     }
 
     private static IResult InvalidCredential(HttpContext context)

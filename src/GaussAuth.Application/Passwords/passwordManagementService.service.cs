@@ -56,4 +56,28 @@ public sealed class PasswordManagementService(
             logger.LogWarning("Password recovery delivery failed for user {UserId}.", user.Id);
         }
     }
+
+    public async Task<PasswordResetResult> ResetAsync(string email, string recoveryCredential, string newPassword, CancellationToken cancellationToken)
+    {
+        var normalizedEmail = credentialProvisioning.NormalizeEmail(email.Trim());
+        var user = await users.GetByNormalizedEmailAsync(normalizedEmail, cancellationToken);
+        if (user is null || !user.IsActive)
+            return await ResetFailedAsync(user?.Id, cancellationToken);
+
+        var outcome = await credentials.ResetPasswordAsync(user.Id, recoveryCredential, newPassword, cancellationToken);
+        if (outcome != PasswordResetOutcome.Succeeded)
+            return await ResetFailedAsync(user.Id, cancellationToken);
+
+        await sessionRevoker.RevokeAllForUserAsync(user.Id, cancellationToken);
+        logger.LogInformation("Password reset completed for user {UserId}.", user.Id);
+        await securityEvents.RecordAsync(SecurityEventType.PasswordReset, user.Id, null, null, cancellationToken);
+        return PasswordResetResult.Success();
+    }
+
+    private async Task<PasswordResetResult> ResetFailedAsync(Guid? userId, CancellationToken cancellationToken)
+    {
+        logger.LogInformation("Password reset failed for user {UserId}.", userId);
+        await securityEvents.RecordAsync(SecurityEventType.PasswordResetFailed, userId, null, null, cancellationToken);
+        return PasswordResetResult.Failure();
+    }
 }

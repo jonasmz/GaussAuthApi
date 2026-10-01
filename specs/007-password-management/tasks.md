@@ -47,14 +47,14 @@
 
 **Independent Test**: Valid reset makes old password fail, new password work, and sessions fail; invalid/reused credentials have identical safe failure and change nothing.
 
-- [ ] T018 [US3] Add reset integration scenarios in `tests/GaussAuth.Foundation.Tests/passwordManagementTests.test.cs` for valid, invalid/reused, inactive, policy failure, lockout clear, revoke-all, reset rate limit, and unchanged memberships/roles/permissions/application data.
-- [ ] T019 [US3] Implement `PasswordManagementService.ResetAsync` in `src/GaussAuth.Application/Passwords/passwordManagementService.service.cs` with safe failure mapping, lockout clear only after success, revoke-all, and events.
-- [ ] T020 [US3] Create reset DTO and map `POST /auth/password/reset` in `src/GaussAuth.Api/Passwords/` with required/max 256 email, 4096 credential, 128 password; generic safe `400`; reset rate limiting.
+- [X] T018 [US3] Add reset integration scenarios in `tests/GaussAuth.Foundation.Tests/passwordManagementTests.test.cs` for valid, invalid/reused, inactive, policy failure, lockout clear, revoke-all, reset rate limit, and unchanged memberships/roles/permissions/application data.
+- [X] T019 [US3] Implement `PasswordManagementService.ResetAsync` in `src/GaussAuth.Application/Passwords/passwordManagementService.service.cs` with safe failure mapping, lockout clear only after success, revoke-all, and events.
+- [X] T020 [US3] Create reset DTO and map `POST /auth/password/reset` in `src/GaussAuth.Api/Passwords/` with required/max 256 email, 4096 credential, 128 password; generic safe `400`; reset rate limiting.
 
 ## Phase 6: User Story 4 - Observe Password Events (P2)
 
-- [ ] T021 [US4] Extend recording/capturing tests in `tests/GaussAuth.Foundation.Tests/passwordManagementTests.test.cs` to assert password lifecycle and session-revocation events contain identifiers only and no secret values.
-- [ ] T022 [US4] Add structured safe logs/events in `src/GaussAuth.Application/Passwords/passwordManagementService.service.cs` for success, recovery request, and useful reset failure categories.
+- [X] T021 [US4] Extend recording/capturing tests in `tests/GaussAuth.Foundation.Tests/passwordManagementTests.test.cs` to assert password lifecycle and session-revocation events contain identifiers only and no secret values.
+- [X] T022 [US4] Add structured safe logs/events in `src/GaussAuth.Application/Passwords/passwordManagementService.service.cs` for success, recovery request, and useful reset failure categories.
 
 ## Phase 7: Polish
 
