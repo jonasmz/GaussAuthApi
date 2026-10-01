@@ -8,6 +8,12 @@
 
 **Input**: User description: "Create feature `008-authorization-contract` for the reusable generic Authentication and Authorization API."
 
+## Clarifications
+
+### Session 2026-10-01
+
+- Q: What mechanism authenticates each consuming API when it requests current authorization context? → A: Each Application has its own independent service credential. Auth validates that the presented credential belongs specifically to the stated ApplicationId or ApplicationCode. The credential is external to source control and code, rotatable without changing the contract, never logged or returned, and used only between a consuming API and Auth authoritative endpoints. It is distinct from and never replaces a user access credential. No mutual certificates, OAuth client credentials, or other service-authentication mechanism is introduced.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Establish Current Authorization Context (Priority: P1)
@@ -23,6 +29,7 @@ A consuming business API receives a user's access credential and obtains a curre
 1. **Given** a valid, current credential for an active user in an active application with an active membership, **When** the consumer resolves authorization context for that application, **Then** it receives the authenticated UserId, ApplicationId, SessionId, relevant expiration, active roles, and effective permissions.
 2. **Given** a malformed, expired, revoked, or otherwise invalid credential, **When** context is resolved, **Then** access is rejected with a safe result that does not disclose session, persistence, or signing details.
 3. **Given** a context resolution succeeds, **When** its public representation is inspected, **Then** it contains no email, profile data, password data, security stamp, cryptographic material, or persistence entity.
+4. **Given** a consumer presents its independent service credential with the requested application identity, **When** the credential belongs to that application, **Then** context resolution may proceed; a credential for any other application is rejected without revealing credential details.
 
 ---
 
@@ -78,6 +85,7 @@ A consuming API integrates using documented stable identifiers and authorization
 - A permission made inactive, removed from a role, or removed through membership changes is absent on the next authorization-context resolution; no permission cache delays that result.
 - A context request for an unknown or inactive user, application, membership, session, or authorization relationship produces a safe rejection and reveals no internal state.
 - A failed or unavailable context resolution never grants access based solely on an unverified or stale credential.
+- A service credential is never accepted for a different application and is never returned, logged, or used as a user credential.
 
 ## Requirements *(mandatory)*
 
@@ -98,7 +106,10 @@ A consuming API integrates using documented stable identifiers and authorization
 - **FR-013**: The documented contract MUST define the stable meanings of UserId, ApplicationId, SessionId, issue/expiration data, roles, and permissions; future additions MUST not alter those established meanings.
 - **FR-014**: Consumer documentation MUST explain credential receipt, consumer application identification, validation and context resolution, permission checks, expiration and revocation behavior, untrusted pre-validation data, and the prohibition on Auth database access.
 - **FR-015**: The contract MUST not introduce a cache that weakens the existing authorization-freshness or revocation policy.
-- **FR-016**: System MUST define a minimal mechanism that permits Auth to distinguish an authorized consuming API requesting authoritative authorization context from an arbitrary caller. [NEEDS CLARIFICATION: Which consumer authentication approach is approved: a per-application shared secret, mutual TLS, or another explicitly provided mechanism?]
+- **FR-016**: System MUST authenticate each consumer that requests authoritative authorization context with an independent service credential bound to exactly one ApplicationId or ApplicationCode, and MUST reject a credential presented for any other application.
+- **FR-017**: A service credential MUST be unique to one application, externally stored, absent from source code and repositories, rotatable without changing the public contract, and treated as a service credential rather than as a user access credential.
+- **FR-018**: Service credentials MUST be used only between consuming APIs and Auth authoritative endpoints, MUST NOT replace or reuse user access credentials, and MUST NOT appear in logs, errors, responses, or public contracts.
+- **FR-019**: This feature MUST NOT introduce mutual TLS, OAuth client credentials, or another service-to-service authentication mechanism beyond the independent per-application service credential.
 
 ### Key Entities *(include if feature involves data)*
 
@@ -123,6 +134,7 @@ A consuming API integrates using documented stable identifiers and authorization
 
 - The existing access strategy remains in force: credentials carry only identity and expiration, while session validity and authorization data are checked authoritatively when current access is needed.
 - Consumers are configured with their expected stable ApplicationId and reject a context for any other application.
+- Each application is provisioned with one independently managed service credential used only to authenticate its authoritative context requests; credential provisioning and rotation preserve the established public contract.
 - A small explicit context contract may evolve additively; no version-negotiation system is needed now.
 - Consumers own business endpoint rules and use permissions as generic capabilities; role names are optional coarse-grained information.
 - No distributed authorization cache, OAuth/OIDC service, business-domain model, or profile projection is introduced by this feature.
