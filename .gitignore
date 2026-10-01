@@ -1,6 +1,7 @@
 .env
 .env.*
 !.env.example
+.recovery/
 **/bin/
 **/obj/
 **/TestResults/

@@ -18,6 +18,10 @@ public static class ApiServiceCollectionExtensions
         var signingKeysWindow = TimeSpan.FromSeconds(configuration.GetValue("RateLimiting:SigningKeys:WindowSeconds", 60));
         var sessionCredentialsPermitLimit = configuration.GetValue("RateLimiting:SessionCredentials:PermitLimit", 600);
         var sessionCredentialsWindow = TimeSpan.FromSeconds(configuration.GetValue("RateLimiting:SessionCredentials:WindowSeconds", 60));
+        var passwordRecoveryPermitLimit = configuration.GetValue("RateLimiting:PasswordRecovery:PermitLimit", 5);
+        var passwordRecoveryWindow = TimeSpan.FromSeconds(configuration.GetValue("RateLimiting:PasswordRecovery:WindowSeconds", 60));
+        var passwordResetPermitLimit = configuration.GetValue("RateLimiting:PasswordReset:PermitLimit", 5);
+        var passwordResetWindow = TimeSpan.FromSeconds(configuration.GetValue("RateLimiting:PasswordReset:WindowSeconds", 60));
 
         services.AddRateLimiter(options =>
         {
@@ -57,6 +61,13 @@ public static class ApiServiceCollectionExtensions
             options.AddPolicy("session-credentials", httpContext => RateLimitPartition.GetFixedWindowLimiter(
                 partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
                 factory: _ => new FixedWindowRateLimiterOptions { PermitLimit = sessionCredentialsPermitLimit, Window = sessionCredentialsWindow, QueueLimit = 0 }));
+
+            options.AddPolicy("password-recovery", httpContext => RateLimitPartition.GetFixedWindowLimiter(
+                partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+                factory: _ => new FixedWindowRateLimiterOptions { PermitLimit = passwordRecoveryPermitLimit, Window = passwordRecoveryWindow, QueueLimit = 0 }));
+            options.AddPolicy("password-reset", httpContext => RateLimitPartition.GetFixedWindowLimiter(
+                partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+                factory: _ => new FixedWindowRateLimiterOptions { PermitLimit = passwordResetPermitLimit, Window = passwordResetWindow, QueueLimit = 0 }));
         });
 
         return services;

@@ -20,7 +20,7 @@ public sealed class SessionService(
     SessionPolicy policy,
     TimeProvider timeProvider,
     ISecurityEventRecorder securityEvents,
-    ILogger<SessionService> logger)
+    ILogger<SessionService> logger) : ISessionRevoker
 {
     public async Task<SessionOperationResult> CreateAsync(LoginOperationResult authentication, CancellationToken ct)
     {
@@ -67,6 +67,12 @@ public sealed class SessionService(
         return SessionOperationResult.Success(session.Id, session.UserId, session.ApplicationId, renewed, expiresAt, session.ExpiresAt);
     }
 
+    public async Task<SessionOperationResult> GetAuthenticatedContextAsync(string credential, CancellationToken ct)
+    {
+        var checkedSession = await CheckCredentialAsync(credential, ct);
+        return checkedSession.Result ?? SuccessFor(checkedSession.Session!, checkedSession.Claims!);
+    }
+
     public async Task<SessionOperationResult> RevokeAsync(Guid sessionId, CancellationToken ct)
     {
         var session = await sessions.GetByIdAsync(sessionId, ct);
@@ -79,6 +85,23 @@ public sealed class SessionService(
         }
 
         return SessionOperationResult.Success(sessionId, session?.UserId ?? Guid.Empty, session?.ApplicationId ?? Guid.Empty, null, null, session?.ExpiresAt);
+    }
+
+    public async Task<int> RevokeAllForUserAsync(Guid userId, CancellationToken ct)
+    {
+        var activeSessions = (await sessions.ListByUserIdAsync(userId, ct)).Where(session => session.RevokedAt is null).ToArray();
+        if (activeSessions.Length == 0) return 0;
+
+        var now = timeProvider.GetUtcNow();
+        foreach (var session in activeSessions) session.Revoke(now);
+        await sessions.SaveChangesAsync(ct);
+        foreach (var session in activeSessions)
+        {
+            logger.LogInformation("Session {SessionId} revoked because credentials changed for user {UserId} in application {ApplicationId}.", session.Id, session.UserId, session.ApplicationId);
+            await securityEvents.RecordAsync(SecurityEventType.SessionRevoked, session.UserId, session.ApplicationId, session.Id, ct);
+        }
+
+        return activeSessions.Length;
     }
 
     public async Task<SessionOperationResult> LogoutAsync(string credential, CancellationToken ct)

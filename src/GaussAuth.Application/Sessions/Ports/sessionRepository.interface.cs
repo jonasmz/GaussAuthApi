@@ -6,5 +6,6 @@ public interface ISessionRepository
 {
     Task AddAsync(Session session, CancellationToken cancellationToken);
     Task<Session?> GetByIdAsync(Guid id, CancellationToken cancellationToken);
+    Task<IReadOnlyList<Session>> ListByUserIdAsync(Guid userId, CancellationToken cancellationToken);
     Task SaveChangesAsync(CancellationToken cancellationToken);
 }

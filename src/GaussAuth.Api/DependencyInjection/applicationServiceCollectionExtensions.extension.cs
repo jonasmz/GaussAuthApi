@@ -10,6 +10,8 @@ using GaussAuth.Application.Permissions;
 using GaussAuth.Application.Authorization;
 using GaussAuth.Application.Login;
 using GaussAuth.Application.Sessions;
+using GaussAuth.Application.Sessions.Ports;
+using GaussAuth.Application.Passwords;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace GaussAuth.Api.DependencyInjection;
@@ -33,6 +35,8 @@ public static class ApplicationServiceCollectionExtensions
         services.AddScoped<LoginService>();
         services.TryAddSingleton(TimeProvider.System);
         services.AddScoped<SessionService>();
+        services.AddScoped<ISessionRevoker>(provider => provider.GetRequiredService<SessionService>());
+        services.AddScoped<PasswordManagementService>();
         return services;
     }
 }
