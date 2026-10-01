@@ -8,6 +8,14 @@
 
 **Input**: User description: "Consolidate the security, auditability, and operational hardening of the reusable Authentication and Authorization API."
 
+## Clarifications
+
+### Session 2026-10-01
+
+- Q: What policy applies when security-event persistence fails during a sensitive operation? → A: Use an explicit centralized event-category policy. Critical security or administration changes are incomplete if their event cannot persist reliably and, where technically practical, the state change and event commit in the same transaction. Non-critical operational events do not block the primary operation, but produce an observable operational error through existing logging and are never silently ignored. No queue, broker, or distributed infrastructure is introduced for this policy.
+- Q: What access model must audit queries support? → A: Support both scopes. An explicitly authorized application audit capability sees only its own application's events; a separate explicit global Auth administrative capability may review multiple applications and global events. Application scope never grants cross-application visibility, and global capability is not inferred from application roles, permissions, membership, or role names. Scope is enforced before data access.
+- Q: Must consumer credentials migrate now to one-way verifiable representations while retaining current-plus-retiring rotation? → A: Yes. Store only established .NET one-way verifiable representations of each application's independent active and temporary retiring consumer secret. Both representations remain verifiable without recovering the original secret. Plaintext may be delivered only at creation or rotation if the flow requires it and cannot be recovered afterwards; it never appears in logs, audit events, exceptions, or later responses. The migration preserves current-plus-retiring consumer authentication and rotation behavior without custom cryptography.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Review Security Activity (Priority: P1)
@@ -24,6 +32,7 @@ An authorized security reviewer can inspect a minimal, trustworthy history of re
 2. **Given** an authorized reviewer filters events by a bounded time range and supported identifiers, **When** results are requested, **Then** they are newest first, paginated, and deterministic.
 3. **Given** an application-scoped reviewer requests audit information, **When** events belong to another application, **Then** those events are not disclosed.
 4. **Given** normal API users perform create, update, or lifecycle operations, **When** they try to alter or remove a historical audit event, **Then** no such normal workflow is available.
+5. **Given** a reviewer has only the application audit capability, **When** it filters events, **Then** the authorized application scope is enforced before data is accessed; only the separate global Auth administrative capability can review multiple applications and global events.
 
 ---
 
@@ -63,7 +72,8 @@ An API operator can deploy and operate the service with clear rules for secrets,
 - An event cannot be attributed to a user, application, or session; it remains queryable as a global Auth-level event and does not invent an application owner.
 - A rejected action occurs before a user or application is reliably identified; the event records only the known safe identifiers and rejection category.
 - A filter, page size, metadata value, credential, token, or request body exceeds its documented limit; the request is rejected before unnecessary work or storage.
-- An audit write cannot be completed while a security-sensitive state change is being processed; handling follows the explicitly selected reliability policy and is observable without leaking sensitive data.
+- An audit write cannot be completed while a critical security or administration state change is being processed; the change is incomplete unless the event can persist reliably, and the failure remains observable without leaking sensitive data.
+- An audit write cannot be completed for a non-critical operational event; the primary operation may complete, but the recording failure is observable through existing logging and is never silently ignored.
 - No file-upload capability exists in the completed features; this feature must not introduce one.
 
 ## Requirements *(mandatory)*
@@ -75,15 +85,15 @@ An API operator can deploy and operate the service with clear rules for secrets,
 - **FR-003**: SecurityEvent metadata MUST be optional, explicitly allow-listed, bounded, and limited to safe investigation context; arbitrary request objects and arbitrary user-controlled JSON MUST not be recorded.
 - **FR-004**: SecurityEvent records and application logs MUST never contain plaintext passwords, password hashes, reset credentials, bearer/access/refresh tokens, session secrets, consumer secrets, private keys, security stamps, connection strings, database credentials, or complete Authorization/Cookie headers.
 - **FR-005**: SecurityEvent history MUST be append-only in normal workflows; normal API operations MUST not edit, overwrite, or delete historical events.
-- **FR-006**: SecurityEvent creation MUST be persisted reliably and use an explicit, observable policy when recording fails. [NEEDS CLARIFICATION: For security-sensitive state changes, should an audit persistence failure fail the associated operation, permit it while emitting an operational failure, or use a defined category-based policy?]
+- **FR-006**: SecurityEvent creation MUST use one explicit centralized event-category reliability policy. For critical security or administration state changes, including user/application/membership lifecycle changes, role or permission assignment/removal, administrative session revocation, consumer credential/secret changes, secret rotation, and any change to privileges or access capability, the operation MUST be incomplete if its event cannot persist reliably; where technically practical, the state change and event MUST persist in the same transaction. For non-critical operational events, including successful/rejected login, expired-session use, invalid credential access, and password-recovery requests, recording failure MUST not block the primary operation but MUST produce an observable operational error through existing logging and MUST never be silently ignored. The classification MUST be explicit and centralized; no queue, broker, or distributed infrastructure is introduced for this policy.
 - **FR-007**: The system MUST provide a protected minimal audit-query capability with filters for bounded time range, event type, UserId, ApplicationId, SessionId, and outcome where applicable.
 - **FR-008**: Audit-query results MUST use deterministic newest-first ordering, bounded pagination, and an explicit maximum page size.
-- **FR-009**: Audit-query authorization MUST use existing generic permission capabilities, preserve application isolation, and never infer access from a same-named role. [NEEDS CLARIFICATION: Must the feature support application-scoped audit access only, an explicitly authorized global Auth review capability, or both?]
+- **FR-009**: Audit-query authorization MUST support two distinct explicit scopes: an application audit capability that can query only events associated with its own ApplicationId, and a global Auth administrative capability that can query events across applications and global Auth-level events. Application-scoped access MUST never disclose another application's events. The global capability MUST be independent from normal application-scoped roles, permissions, memberships, and role names. Authorized scope MUST be enforced before data access.
 - **FR-010**: Events with no natural consuming-application ownership MUST be represented as global Auth-level events and MUST not be exposed through application-scoped queries unless an explicitly authorized global capability applies.
 - **FR-011**: The system MUST define a configurable retention-policy concept, document that purge is administrative and separate from normal workflows, and avoid choosing an arbitrary compliance period.
 - **FR-012**: The security review MUST verify and preserve endpoint-specific configurable rate limits for login, password recovery, password reset, and consumer/context validation, together with account-level login lockout.
 - **FR-013**: The security review MUST verify that login and recovery outcomes resist unnecessary account enumeration and that expected security rejections reveal no internal reason.
-- **FR-014**: Consumer authentication MUST retain one distinct credential per application, safe verification, safe rotation, external secret configuration, uniform failure behavior, and strict application binding. [NEEDS CLARIFICATION: Should this feature migrate consumer-secret configuration from reversible plaintext values to a one-way verifiable representation now, while retaining the existing current-plus-retiring rotation behavior?]
+- **FR-014**: Consumer authentication MUST retain one independent credential per application, uniform safe failure behavior, strict application binding, and current-plus-retiring rotation. Auth MUST store only established .NET one-way verifiable representations of the active and temporary retiring secrets; both MUST be verifiable without recovering the original secret. Plaintext secret material MAY be delivered only at creation or rotation when required by that flow, MUST not be recoverable afterwards, and MUST never appear in logs, SecurityEvents, exceptions, or subsequent responses. The migration MUST preserve existing consumer authentication and rotation behavior and MUST not introduce custom cryptography.
 - **FR-015**: The system MUST verify that session expiration, revocation, logout, user/application/membership deactivation, and authorization freshness retain their established secure behavior.
 - **FR-016**: The system MUST verify that application-scoped roles, permissions, assignments, sessions, consumer authentication, authorization context, and audit queries cannot leak data or authority across applications.
 - **FR-017**: Public error responses, audit query responses, authorization-context responses, credentials, and logs MUST apply data minimization and exclude implementation internals and unnecessary profile data.
@@ -101,6 +111,7 @@ An API operator can deploy and operate the service with clear rules for secrets,
 - **SecurityEvent Outcome**: Stable result category that distinguishes success, expected rejection, and recording/operational failure without exposing sensitive causes.
 - **Audit Query**: A protected, bounded request for SecurityEvents constrained by authorized visibility, filters, ordering, and pagination.
 - **Retention Policy**: Configurable administrative rule governing how long SecurityEvents remain available; it is separate from normal event creation and does not permit ordinary event edits.
+- **Consumer Secret Representation**: One-way verifiable representation of an application's active or temporary retiring consumer secret; the original secret is unrecoverable after its creation or rotation delivery.
 
 ## Success Criteria *(mandatory)*
 
@@ -121,7 +132,7 @@ An API operator can deploy and operate the service with clear rules for secrets,
 - Event metadata defaults to absent unless an allow-listed, bounded value is necessary for an investigation.
 - Remote network or client data is not collected in SecurityEvents unless a later requirement explicitly establishes its utility, privacy treatment, and limits.
 - Retention duration is externally configurable and its scheduled administrative purge behavior may be planned without choosing an arbitrary production default.
-- Current-plus-retiring consumer-secret rotation remains the baseline until the clarification on one-way verification is resolved.
+- Consumer-secret rotation retains an active and temporary retiring representation, while plaintext delivery is limited to creation or rotation flows and is unrecoverable afterwards.
 - The API remains a pure backend service; browser-oriented controls without concrete API value are excluded.
 - No file upload exists in the reviewed feature set, so no upload capability is added.
 - The feature depends on the completed features 001 through 008 and the project constitution.
