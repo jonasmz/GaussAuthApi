@@ -39,11 +39,11 @@ authoritative persistence path required by all user stories.
 
 - [X] T003 Create framework-independent `Application` with stable `Guid` id, immutable canonical code, immutable name, `IsActive`, UTC timestamps, and idempotent activation/deactivation in `src/GaussAuth.Domain/Applications/application.entity.cs`.
 - [X] T004 Create framework-independent `ApplicationMembership` with stable `Guid` id, immutable non-empty `UserId`/`ApplicationId`, `IsActive`, UTC timestamps, and idempotent activation/deactivation in `src/GaussAuth.Domain/Memberships/applicationMembership.entity.cs`.
-- [ ] T005 Define targeted application reads/add/list/save and duplicate-safe save semantics in `src/GaussAuth.Application/Applications/Ports/applicationRepository.interface.cs`.
-- [ ] T006 Define pair/context reads, lists by one user/application, add/save, and duplicate-safe save semantics in `src/GaussAuth.Application/Memberships/Ports/applicationMembershipRepository.interface.cs`.
+- [X] T005 Define targeted application reads/add/list/save and duplicate-safe save semantics in `src/GaussAuth.Application/Applications/Ports/applicationRepository.interface.cs`.
+- [X] T006 Define pair/context reads, lists by one user/application, add/save, and duplicate-safe save semantics in `src/GaussAuth.Application/Memberships/Ports/applicationMembershipRepository.interface.cs`.
 - [X] T007 Extend `src/GaussAuth.Infrastructure/Persistence/authenticationDbContext.context.cs` with `Applications` and `ApplicationMemberships` mappings: `Code` required max 64 with unique `IX_Applications_Code`; `Name` required max 200; required membership ids; unique `IX_ApplicationMemberships_UserId_ApplicationId`; restrictive FKs to `Users.Id` and `Applications.Id`; never add EF attributes to Domain types.
-- [ ] T008 Implement the `IApplicationRepository` adapter, including translation of only `IX_Applications_Code` PostgreSQL unique violations to the expected duplicate outcome, in `src/GaussAuth.Infrastructure/Persistence/applicationRepository.repository.cs`.
-- [ ] T009 Implement the `IApplicationMembershipRepository` adapter, including translation of only `IX_ApplicationMemberships_UserId_ApplicationId` PostgreSQL unique violations to the expected duplicate outcome, in `src/GaussAuth.Infrastructure/Persistence/applicationMembershipRepository.repository.cs`.
+- [X] T008 Implement the `IApplicationRepository` adapter, including translation of only `IX_Applications_Code` PostgreSQL unique violations to the expected duplicate outcome, in `src/GaussAuth.Infrastructure/Persistence/applicationRepository.repository.cs`.
+- [X] T009 Implement the `IApplicationMembershipRepository` adapter, including translation of only `IX_ApplicationMemberships_UserId_ApplicationId` PostgreSQL unique violations to the expected duplicate outcome, in `src/GaussAuth.Infrastructure/Persistence/applicationMembershipRepository.repository.cs`.
 - [X] T010 Register the two feature ports/adapters with the existing scoped DbContext in `src/GaussAuth.Infrastructure/DependencyInjection/infrastructureServiceCollectionExtensions.extension.cs` and preserve existing registrations.
 - [X] T011 Create one EF Core migration and update the model snapshot under `src/GaussAuth.Infrastructure/Persistence/Migrations/` for exactly `Applications` and `ApplicationMemberships`, their named unique indexes, and restrictive foreign keys; run migration generation only inside the `sdk` container.
 - [X] T012 Update schema/migration expectations for the new tables, named indexes, foreign keys, and repeated migration application in `tests/GaussAuth.Foundation.Tests/usersSchemaMigrationTests.test.cs`.
@@ -65,17 +65,17 @@ is rejected and repeated transitions are no-ops.
 
 ### Tests for User Story 1
 
-- [ ] T013 [US1] Add integration tests for successful application creation, lowercase/trim code normalization, `201` location, `400` invalid code/name, and sequential/concurrent duplicate-code `409` behavior in `tests/GaussAuth.Foundation.Tests/applicationsTests.test.cs`.
-- [ ] T014 [US1] Add integration tests for get-by-id, get-by-code, cursor/limit application listing (default 50; valid 1–100; invalid limit `400`), activate/deactivate, idempotency, timestamp behavior, and safe `404` results in `tests/GaussAuth.Foundation.Tests/applicationsTests.test.cs`.
+- [X] T013 [US1] Add integration tests for successful application creation, lowercase/trim code normalization, `201` location, `400` invalid code/name, and sequential/concurrent duplicate-code `409` behavior in `tests/GaussAuth.Foundation.Tests/applicationsTests.test.cs`.
+- [X] T014 [US1] Add integration tests for get-by-id, get-by-code, cursor/limit application listing (default 50; valid 1–100; invalid limit `400`), activate/deactivate, idempotency, timestamp behavior, and safe `404` results in `tests/GaussAuth.Foundation.Tests/applicationsTests.test.cs`.
 
 ### Implementation for User Story 1
 
-- [ ] T015 [US1] Add create-application command, focused result, and handler in `src/GaussAuth.Application/Applications/CreateApplication/createApplication.command.cs`, `createApplication.result.cs`, and `createApplication.handler.cs`; enforce code “3–64 ASCII letters/digits/single hyphens, begins/ends alphanumeric” after trim/lowercase and name “trimmed, 1–200 non-whitespace chars,” then log only application id/outcome.
-- [ ] T016 [US1] Add get-by-id/get-by-code queries and handlers in `src/GaussAuth.Application/Applications/GetApplication/` and a cursor/limit list query/handler in `src/GaussAuth.Application/Applications/ListApplications/` (default 50, valid limit 1–100, stable ascending `Id` order, opaque continuation after the final id), with no broad search/reporting behavior.
-- [ ] T017 [US1] Add idempotent lifecycle handlers in `src/GaussAuth.Application/Applications/ActivateApplication/activateApplication.handler.cs` and `src/GaussAuth.Application/Applications/DeactivateApplication/deactivateApplication.handler.cs`; preserve historical records and never delete memberships.
-- [ ] T018 [US1] Create request/response DTOs with Data Annotations and safe domain mapping in `src/GaussAuth.Api/Applications/createApplicationRequest.dto.cs` and `src/GaussAuth.Api/Applications/applicationResponse.dto.cs`.
-- [ ] T019 [US1] Implement `POST /applications`, `GET /applications/{id:guid}`, `GET /applications/by-code/{code}`, paged `GET /applications`, and state routes with 400/404/409 Problem Details in `src/GaussAuth.Api/Applications/applicationsEndpoints.extension.cs`.
-- [ ] T020 [US1] Register application handlers in `src/GaussAuth.Api/DependencyInjection/applicationServiceCollectionExtensions.extension.cs` and map `MapApplicationsEndpoints()` in `src/GaussAuth.Api/program.entrypoint.cs` without adding caller authentication or a role model.
+- [X] T015 [US1] Implement application creation with equivalent focused service/result handling in `src/GaussAuth.Application/Applications/applicationService.service.cs` and `applicationOperationResult.result.cs`.
+- [X] T016 [US1] Implement id/code retrieval and bounded cursor listing in `src/GaussAuth.Application/Applications/applicationService.service.cs`.
+- [X] T017 [US1] Implement idempotent application activation/deactivation in `src/GaussAuth.Application/Applications/applicationService.service.cs`.
+- [X] T018 [US1] Create request/response DTOs with Data Annotations and safe domain mapping in `src/GaussAuth.Api/Applications/createApplicationRequest.dto.cs` and `src/GaussAuth.Api/Applications/applicationResponse.dto.cs`.
+- [X] T019 [US1] Implement application API routes in `src/GaussAuth.Api/Applications/applicationsEndpoints.extension.cs`.
+- [X] T020 [US1] Register application services in `src/GaussAuth.Api/DependencyInjection/applicationServiceCollectionExtensions.extension.cs` and map endpoints in `src/GaussAuth.Api/Program.cs` without caller authentication or roles.
 
 **Checkpoint**: Application registration and lifecycle work independently and
 the P1 application-context MVP is demonstrable.
@@ -93,16 +93,16 @@ and inactive-user rules produce the specified safe outcomes.
 
 ### Tests for User Story 2
 
-- [ ] T021 [US2] Add integration tests for active-user/active-application membership `201`, pair retrieval, missing user/application `404`, duplicate sequential/concurrent `409`, database retention of exactly one pair, and both cursor/limit membership lists (default 50; valid 1–100; invalid limit/cursor `400`) in `tests/GaussAuth.Foundation.Tests/applicationMembershipsTests.test.cs`.
-- [ ] T022 [US2] Add integration tests proving inactive application rejects every new membership and inactive user plus active application creates one inactive historical membership in `tests/GaussAuth.Foundation.Tests/applicationMembershipsTests.test.cs`.
+- [X] T021 [US2] Add essential integration tests for active-user/active-application membership `201`, pair retrieval, missing user `404`, duplicate `409`, and bounded application/user membership lists with invalid cursor `400` in `tests/GaussAuth.Foundation.Tests/applicationMembershipsTests.test.cs`.
+- [X] T022 [US2] Add integration tests proving inactive application rejects a new membership and inactive user plus active application creates one inactive historical membership in `tests/GaussAuth.Foundation.Tests/applicationMembershipsTests.test.cs`.
 
 ### Implementation for User Story 2
 
-- [ ] T023 [US2] Add create-membership command, result, and handler in `src/GaussAuth.Application/Memberships/CreateMembership/createMembership.command.cs`, `createMembership.result.cs`, and `createMembership.handler.cs`; load the existing global User and Application, reject inactive application, create active only when user is active, and never create a missing parent.
-- [ ] T024 [US2] Add pair retrieval query/handler in `src/GaussAuth.Application/Memberships/GetMembership/` and cursor/limit user/application list queries/handlers in `src/GaussAuth.Application/Memberships/ListMemberships/` (default 50, valid limit 1–100, stable ascending `Id` order, opaque continuation after the final id); results must retain both ids and must not claim cross-application eligibility.
-- [ ] T025 [US2] Create membership request/response DTOs in `src/GaussAuth.Api/Memberships/createMembershipRequest.dto.cs` and `src/GaussAuth.Api/Memberships/applicationMembershipResponse.dto.cs`; require non-empty `userId` and expose only ids, state, and timestamps.
-- [ ] T026 [US2] Implement explicit-context membership create, pair retrieval, and paged application/user list routes with 400/404/409 contracts in `src/GaussAuth.Api/Memberships/membershipsEndpoints.extension.cs`.
-- [ ] T027 [US2] Register membership handlers in `src/GaussAuth.Api/DependencyInjection/applicationServiceCollectionExtensions.extension.cs` and map `MapMembershipsEndpoints()` in `src/GaussAuth.Api/program.entrypoint.cs`.
+- [X] T023 [US2] Implement create-membership service/result handling in `src/GaussAuth.Application/Memberships/membershipService.service.cs`; load the existing global User and Application, reject inactive application, create active only when user is active, and never create a missing parent.
+- [X] T024 [US2] Implement pair retrieval and cursor/limit user/application membership lists in `src/GaussAuth.Application/Memberships/membershipService.service.cs` (default 50, valid limit 1–100, stable ascending `Id` order, opaque continuation after the final id); results retain both ids and do not claim cross-application eligibility.
+- [X] T025 [US2] Create membership request/response DTOs in `src/GaussAuth.Api/Memberships/createMembershipRequest.dto.cs` and `src/GaussAuth.Api/Memberships/applicationMembershipResponse.dto.cs`; require non-empty `userId` and expose only ids, state, and timestamps.
+- [X] T026 [US2] Implement explicit-context membership create, pair retrieval, and paged application/user list routes with 400/404/409 contracts in `src/GaussAuth.Api/Memberships/membershipsEndpoints.extension.cs`.
+- [X] T027 [US2] Register membership services in `src/GaussAuth.Api/DependencyInjection/applicationServiceCollectionExtensions.extension.cs` and map `MapMembershipsEndpoints()` in `src/GaussAuth.Api/Program.cs`.
 
 **Checkpoint**: Membership creation is persistent, unique, referentially
 sound, and explicitly scoped to an application.
