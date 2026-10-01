@@ -25,8 +25,8 @@ must remain coherent.
 **Purpose**: Confirm the established feature-002 baseline before making
 additive changes.
 
-- [ ] T001 Review `specs/003-applications-memberships/spec.md`, `plan.md`, `data-model.md`, and `contracts/applications-memberships-api.md` and record no deviations from the clarified lifecycle and isolation rules.
-- [ ] T002 Inspect `src/GaussAuth.Infrastructure/Persistence/authenticationDbContext.context.cs`, `src/GaussAuth.Api/program.entrypoint.cs`, `src/GaussAuth.Api/DependencyInjection/applicationServiceCollectionExtensions.extension.cs`, and `src/GaussAuth.Infrastructure/DependencyInjection/infrastructureServiceCollectionExtensions.extension.cs` to preserve existing registration and mapping conventions.
+- [X] T001 Review `specs/003-applications-memberships/spec.md`, `plan.md`, `data-model.md`, and `contracts/applications-memberships-api.md` and record no deviations from the clarified lifecycle and isolation rules.
+- [X] T002 Inspect `src/GaussAuth.Infrastructure/Persistence/authenticationDbContext.context.cs`, `src/GaussAuth.Api/program.entrypoint.cs`, `src/GaussAuth.Api/DependencyInjection/applicationServiceCollectionExtensions.extension.cs`, and `src/GaussAuth.Infrastructure/DependencyInjection/infrastructureServiceCollectionExtensions.extension.cs` to preserve existing registration and mapping conventions.
 
 ---
 
@@ -37,16 +37,16 @@ authoritative persistence path required by all user stories.
 
 **⚠️ CRITICAL**: Complete this phase before endpoint/user-story work.
 
-- [ ] T003 Create framework-independent `Application` with stable `Guid` id, immutable canonical code, immutable name, `IsActive`, UTC timestamps, and idempotent activation/deactivation in `src/GaussAuth.Domain/Applications/application.entity.cs`.
-- [ ] T004 Create framework-independent `ApplicationMembership` with stable `Guid` id, immutable non-empty `UserId`/`ApplicationId`, `IsActive`, UTC timestamps, and idempotent activation/deactivation in `src/GaussAuth.Domain/Memberships/applicationMembership.entity.cs`.
+- [X] T003 Create framework-independent `Application` with stable `Guid` id, immutable canonical code, immutable name, `IsActive`, UTC timestamps, and idempotent activation/deactivation in `src/GaussAuth.Domain/Applications/application.entity.cs`.
+- [X] T004 Create framework-independent `ApplicationMembership` with stable `Guid` id, immutable non-empty `UserId`/`ApplicationId`, `IsActive`, UTC timestamps, and idempotent activation/deactivation in `src/GaussAuth.Domain/Memberships/applicationMembership.entity.cs`.
 - [ ] T005 Define targeted application reads/add/list/save and duplicate-safe save semantics in `src/GaussAuth.Application/Applications/Ports/applicationRepository.interface.cs`.
 - [ ] T006 Define pair/context reads, lists by one user/application, add/save, and duplicate-safe save semantics in `src/GaussAuth.Application/Memberships/Ports/applicationMembershipRepository.interface.cs`.
-- [ ] T007 Extend `src/GaussAuth.Infrastructure/Persistence/authenticationDbContext.context.cs` with `Applications` and `ApplicationMemberships` mappings: `Code` required max 64 with unique `IX_Applications_Code`; `Name` required max 200; required membership ids; unique `IX_ApplicationMemberships_UserId_ApplicationId`; restrictive FKs to `Users.Id` and `Applications.Id`; never add EF attributes to Domain types.
+- [X] T007 Extend `src/GaussAuth.Infrastructure/Persistence/authenticationDbContext.context.cs` with `Applications` and `ApplicationMemberships` mappings: `Code` required max 64 with unique `IX_Applications_Code`; `Name` required max 200; required membership ids; unique `IX_ApplicationMemberships_UserId_ApplicationId`; restrictive FKs to `Users.Id` and `Applications.Id`; never add EF attributes to Domain types.
 - [ ] T008 Implement the `IApplicationRepository` adapter, including translation of only `IX_Applications_Code` PostgreSQL unique violations to the expected duplicate outcome, in `src/GaussAuth.Infrastructure/Persistence/applicationRepository.repository.cs`.
 - [ ] T009 Implement the `IApplicationMembershipRepository` adapter, including translation of only `IX_ApplicationMemberships_UserId_ApplicationId` PostgreSQL unique violations to the expected duplicate outcome, in `src/GaussAuth.Infrastructure/Persistence/applicationMembershipRepository.repository.cs`.
-- [ ] T010 Register the two feature ports/adapters with the existing scoped DbContext in `src/GaussAuth.Infrastructure/DependencyInjection/infrastructureServiceCollectionExtensions.extension.cs` and preserve existing registrations.
-- [ ] T011 Create one EF Core migration and update the model snapshot under `src/GaussAuth.Infrastructure/Persistence/Migrations/` for exactly `Applications` and `ApplicationMemberships`, their named unique indexes, and restrictive foreign keys; run migration generation only inside the `sdk` container.
-- [ ] T012 Update schema/migration expectations for the new tables, named indexes, foreign keys, and repeated migration application in `tests/GaussAuth.Foundation.Tests/usersSchemaMigrationTests.test.cs`.
+- [X] T010 Register the two feature ports/adapters with the existing scoped DbContext in `src/GaussAuth.Infrastructure/DependencyInjection/infrastructureServiceCollectionExtensions.extension.cs` and preserve existing registrations.
+- [X] T011 Create one EF Core migration and update the model snapshot under `src/GaussAuth.Infrastructure/Persistence/Migrations/` for exactly `Applications` and `ApplicationMemberships`, their named unique indexes, and restrictive foreign keys; run migration generation only inside the `sdk` container.
+- [X] T012 Update schema/migration expectations for the new tables, named indexes, foreign keys, and repeated migration application in `tests/GaussAuth.Foundation.Tests/usersSchemaMigrationTests.test.cs`.
 
 **Checkpoint**: Domain remains framework-independent, PostgreSQL is the
 authoritative uniqueness/referential-integrity layer, and the migration applies
