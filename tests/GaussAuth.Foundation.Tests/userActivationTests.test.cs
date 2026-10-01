@@ -15,10 +15,10 @@ public sealed class UserActivationTests
     public async Task Deactivating_an_active_user_changes_state_and_preserves_the_record()
     {
         using var factory = await CreateMigratedFactoryAsync();
-        using var client = factory.CreateClient();
+        using var clientAdmin = await factory.CreateAdminClientAsync(); var client = clientAdmin.Client;
 
         var email = UniqueEmail("deactivate");
-        using var createResponse = await client.PostAsJsonAsync("/users", ValidCreateRequest(email));
+        using var createResponse = await client.PostAsJsonAsync("/admin/users", ValidCreateRequest(email));
         var location = createResponse.Headers.Location!;
 
         using var response = await client.PostAsync(location.ToString() + "/deactivate", content: null);
@@ -38,10 +38,10 @@ public sealed class UserActivationTests
     public async Task Deactivating_an_already_inactive_user_is_idempotent_and_unchanged()
     {
         using var factory = await CreateMigratedFactoryAsync();
-        using var client = factory.CreateClient();
+        using var clientAdmin = await factory.CreateAdminClientAsync(); var client = clientAdmin.Client;
 
         var email = UniqueEmail("deactivate-twice");
-        using var createResponse = await client.PostAsJsonAsync("/users", ValidCreateRequest(email));
+        using var createResponse = await client.PostAsJsonAsync("/admin/users", ValidCreateRequest(email));
         var location = createResponse.Headers.Location!;
 
         using var first = await client.PostAsync(location.ToString() + "/deactivate", content: null);
@@ -63,10 +63,10 @@ public sealed class UserActivationTests
     public async Task Reactivating_an_inactive_user_returns_to_active_state()
     {
         using var factory = await CreateMigratedFactoryAsync();
-        using var client = factory.CreateClient();
+        using var clientAdmin = await factory.CreateAdminClientAsync(); var client = clientAdmin.Client;
 
         var email = UniqueEmail("reactivate");
-        using var createResponse = await client.PostAsJsonAsync("/users", ValidCreateRequest(email));
+        using var createResponse = await client.PostAsJsonAsync("/admin/users", ValidCreateRequest(email));
         var location = createResponse.Headers.Location!;
 
         using var deactivate = await client.PostAsync(location.ToString() + "/deactivate", content: null);
@@ -83,10 +83,10 @@ public sealed class UserActivationTests
     public async Task Reactivating_an_already_active_user_is_idempotent_and_unchanged()
     {
         using var factory = await CreateMigratedFactoryAsync();
-        using var client = factory.CreateClient();
+        using var clientAdmin = await factory.CreateAdminClientAsync(); var client = clientAdmin.Client;
 
         var email = UniqueEmail("activate-twice");
-        using var createResponse = await client.PostAsJsonAsync("/users", ValidCreateRequest(email));
+        using var createResponse = await client.PostAsJsonAsync("/admin/users", ValidCreateRequest(email));
         var location = createResponse.Headers.Location!;
 
         using var first = await client.PostAsync(location.ToString() + "/activate", content: null);
@@ -105,12 +105,12 @@ public sealed class UserActivationTests
     public async Task Unknown_identifier_on_either_route_returns_not_found()
     {
         using var factory = await CreateMigratedFactoryAsync();
-        using var client = factory.CreateClient();
+        using var clientAdmin = await factory.CreateAdminClientAsync(); var client = clientAdmin.Client;
 
         var unknownId = Guid.NewGuid();
 
-        using var activateResponse = await client.PostAsync($"/users/{unknownId}/activate", content: null);
-        using var deactivateResponse = await client.PostAsync($"/users/{unknownId}/deactivate", content: null);
+        using var activateResponse = await client.PostAsync($"/admin/users/{unknownId}/activate", content: null);
+        using var deactivateResponse = await client.PostAsync($"/admin/users/{unknownId}/deactivate", content: null);
 
         Assert.AreEqual(HttpStatusCode.NotFound, activateResponse.StatusCode);
         Assert.AreEqual(HttpStatusCode.NotFound, deactivateResponse.StatusCode);
@@ -118,7 +118,7 @@ public sealed class UserActivationTests
 
     private static async Task<WebApplicationFactory<Program>> CreateMigratedFactoryAsync()
     {
-        var factory = new WebApplicationFactory<Program>();
+        var factory = new WebApplicationFactory<Program>().WithGlobalAdministrators();
         using var scope = factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AuthenticationDbContext>();
         await db.Database.MigrateAsync();

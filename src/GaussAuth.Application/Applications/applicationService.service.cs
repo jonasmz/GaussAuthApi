@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using GaussAuth.Application.Administration.Bootstrap;
 using GaussAuth.Application.Applications.Ports;
 using GaussAuth.Application.Security;
 using GaussAuth.Application.Security.Ports;
@@ -7,7 +8,7 @@ using Microsoft.Extensions.Logging;
 
 namespace GaussAuth.Application.Applications;
 
-public sealed class ApplicationService(IApplicationRepository repository, ISecurityEventRecorder securityEvents, ILogger<ApplicationService> logger)
+public sealed class ApplicationService(IApplicationRepository repository, AdministrativePermissionBootstrap bootstrap, ISecurityEventRecorder securityEvents, ILogger<ApplicationService> logger)
 {
     private static readonly Regex CodePattern = new("^[a-z0-9]+(?:-[a-z0-9]+)*$", RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
@@ -19,7 +20,9 @@ public sealed class ApplicationService(IApplicationRepository repository, ISecur
         if (await repository.GetByCodeAsync(normalizedCode, ct) is not null) return ApplicationOperationResult.Duplicate();
         var application = DomainApplication.Create(Guid.NewGuid(), normalizedCode, normalizedName, DateTimeOffset.UtcNow);
         await repository.AddAsync(application, ct);
+        await bootstrap.EnsureAsync(application.Id, ct);
         if (!await repository.TrySaveChangesAsync(ct)) return ApplicationOperationResult.Duplicate();
+        await securityEvents.RecordAsync(SecurityEventType.ApplicationRegistered, null, application.Id, null, "application", application.Id, ct);
         logger.LogInformation("Application {ApplicationId} created.", application.Id);
         return ApplicationOperationResult.Success(application);
     }

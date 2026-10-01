@@ -11,5 +11,6 @@ public sealed class PermissionOperationResult
     public static PermissionOperationResult ApplicationNotFound() => new() { Failure = "application-not-found" };
     public static PermissionOperationResult InactiveApplication() => new() { Failure = "inactive-application" };
     public static PermissionOperationResult PermissionNotFound() => new() { Failure = "permission-not-found" };
+    public static PermissionOperationResult PlatformPermission() => new() { Failure = "platform-permission" };
     public static PermissionOperationResult Duplicate() => new() { Failure = "duplicate" };
 }

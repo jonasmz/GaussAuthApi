@@ -5,9 +5,11 @@ using System.Text.Json;
 using GaussAuth.Application.Administration.Ports;
 using GaussAuth.Application.Applications;
 using GaussAuth.Application.Authorization;
+using GaussAuth.Application.Login;
 using GaussAuth.Application.Memberships;
 using GaussAuth.Application.Permissions.Ports;
 using GaussAuth.Application.Roles;
+using GaussAuth.Application.Sessions;
 using GaussAuth.Application.Users.CreateUser;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
@@ -36,6 +38,22 @@ internal static class AdministrativeTestHost
             services.RemoveAll<IGlobalAdministratorPolicy>();
             services.AddSingleton<IGlobalAdministratorPolicy>(policy);
         }));
+    }
+
+    /// <summary>Process-wide policy used by the setup helpers of tests that only need one global administrator client.</summary>
+    public static TestGlobalAdministratorPolicy SharedPolicy { get; } = new();
+
+    /// <summary><see cref="WithGlobalAdministrators(WebApplicationFactory{Program}, TestGlobalAdministratorPolicy)"/> with the shared policy.</summary>
+    public static WebApplicationFactory<Program> WithGlobalAdministrators(this WebApplicationFactory<Program> factory) =>
+        factory.WithGlobalAdministrators(SharedPolicy);
+
+    /// <summary>Creates a global administrator (using the shared policy) on a migrated host and returns a client that sends its credential on <c>/admin</c> routes.</summary>
+    public static async Task<AdministratorClient> CreateAdminClientAsync(this WebApplicationFactory<Program> factory)
+    {
+        using var signedIn = await factory.CreateGlobalAdministratorAsync(SharedPolicy);
+        // The returned client sends the administrator credential only on /admin routes (see AdministratorBearerHandler).
+        var client = factory.CreateDefaultClient(new AdministratorBearerHandler(signedIn.AccessToken));
+        return signedIn with { Client = client };
     }
 
     /// <summary>Creates a user, Application, and active membership through application services, signs in, and registers the user as global administrator.</summary>
@@ -80,17 +98,20 @@ internal static class AdministrativeTestHost
         if (result.Membership is null) throw new InvalidOperationException("Test membership could not be created.");
     }
 
-    /// <summary>Signs a user in through the public login flow and returns a client carrying the bearer credential.</summary>
+    /// <summary>
+    /// Signs a user in through the login and session services (the same flow the login endpoint runs, without the
+    /// login rate limit) and returns a client carrying the bearer credential.
+    /// </summary>
     public static async Task<AdministratorClient> SignInAsync(this WebApplicationFactory<Program> factory, string email, Guid applicationId, string applicationCode)
     {
+        using var scope = factory.Services.CreateScope();
+        var authenticated = await scope.ServiceProvider.GetRequiredService<LoginService>().AuthenticateAsync(applicationCode, email, Password, CancellationToken.None);
+        if (!authenticated.IsSuccess) throw new InvalidOperationException("Test sign-in failed.");
+        var session = await scope.ServiceProvider.GetRequiredService<SessionService>().CreateAsync(authenticated, CancellationToken.None);
+        if (!session.IsSuccess) throw new InvalidOperationException("Test sign-in failed.");
         var client = factory.CreateClient();
-        using var response = await client.PostAsJsonAsync("/auth/login", new { applicationCode, email, password = Password });
-        if (response.StatusCode != HttpStatusCode.OK) throw new InvalidOperationException("Test sign-in failed.");
-        var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement;
-        var token = body.GetProperty("accessToken").GetString()!;
-        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
-        return new AdministratorClient(client, body.GetProperty("userId").GetGuid(), applicationId, applicationCode, email,
-            body.GetProperty("sessionId").GetGuid(), token);
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", session.AccessCredential!);
+        return new AdministratorClient(client, session.UserId!.Value, applicationId, applicationCode, email, session.SessionId!.Value, session.AccessCredential!);
     }
 
     private static async Task<AdministratorClient> CreateSignedInUserAsync(WebApplicationFactory<Program> factory, Guid? applicationId,

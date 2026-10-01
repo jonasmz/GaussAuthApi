@@ -81,14 +81,14 @@ public sealed class AuthorizationContractTests
         {
             [$"AuthorizationConsumers:{applicationCode}:CurrentSecret"] = serviceSecret
         });
-        using var client = factory.CreateClient();
+        using var clientAdmin = await factory.CreateAdminClientAsync(); var client = clientAdmin.Client;
         var user = await CreateUserAsync(client);
         var applicationId = await CreateApplicationAsync(client, applicationCode);
         await CreateMembershipAsync(client, applicationId, user.Id);
         var roleId = await CreateRoleAsync(client, applicationId, "operator");
         var permissionId = await CreatePermissionAsync(client, applicationId, "orders.create");
-        await AssignAsync(client, $"/applications/{applicationId}/roles/{roleId}/permissions/{permissionId}");
-        await AssignAsync(client, $"/applications/{applicationId}/users/{user.Id}/roles/{roleId}");
+        await AssignAsync(client, $"/admin/applications/{applicationId}/roles/{roleId}/permissions/{permissionId}");
+        await AssignAsync(client, $"/admin/applications/{applicationId}/users/{user.Id}/roles/{roleId}");
         var login = await LoginAsync(client, applicationCode, user.Email);
 
         using var response = await ResolveAsync(client, login.AccessToken, applicationCode, serviceSecret);
@@ -116,7 +116,7 @@ public sealed class AuthorizationContractTests
             [$"AuthorizationConsumers:{applicationA}:CurrentSecret"] = secretA,
             [$"AuthorizationConsumers:{applicationB}:CurrentSecret"] = secretB
         });
-        using var client = factory.CreateClient();
+        using var clientAdmin = await factory.CreateAdminClientAsync(); var client = clientAdmin.Client;
         var user = await CreateUserAsync(client);
         var applicationAId = await CreateApplicationAsync(client, applicationA);
         var applicationBId = await CreateApplicationAsync(client, applicationB);
@@ -124,12 +124,12 @@ public sealed class AuthorizationContractTests
         await CreateMembershipAsync(client, applicationBId, user.Id);
         var roleA = await CreateRoleAsync(client, applicationAId, "orders-role");
         var permissionA = await CreatePermissionAsync(client, applicationAId, "orders.read");
-        await AssignAsync(client, $"/applications/{applicationAId}/roles/{roleA}/permissions/{permissionA}");
-        await AssignAsync(client, $"/applications/{applicationAId}/users/{user.Id}/roles/{roleA}");
+        await AssignAsync(client, $"/admin/applications/{applicationAId}/roles/{roleA}/permissions/{permissionA}");
+        await AssignAsync(client, $"/admin/applications/{applicationAId}/users/{user.Id}/roles/{roleA}");
         var roleB = await CreateRoleAsync(client, applicationBId, "billing-role");
         var permissionB = await CreatePermissionAsync(client, applicationBId, "billing.read");
-        await AssignAsync(client, $"/applications/{applicationBId}/roles/{roleB}/permissions/{permissionB}");
-        await AssignAsync(client, $"/applications/{applicationBId}/users/{user.Id}/roles/{roleB}");
+        await AssignAsync(client, $"/admin/applications/{applicationBId}/roles/{roleB}/permissions/{permissionB}");
+        await AssignAsync(client, $"/admin/applications/{applicationBId}/users/{user.Id}/roles/{roleB}");
         var login = await LoginAsync(client, applicationA, user.Email);
 
         using (var current = await ResolveAsync(client, login.AccessToken, applicationA, secretA))
@@ -152,7 +152,7 @@ public sealed class AuthorizationContractTests
             await AssertUnauthorizedAsync(rejected);
         }
 
-        using (var deactivated = await client.PostAsync($"/users/{user.Id}/deactivate", null))
+        using (var deactivated = await client.PostAsync($"/admin/users/{user.Id}/deactivate", null))
         {
             Assert.AreEqual(HttpStatusCode.OK, deactivated.StatusCode);
         }
@@ -160,11 +160,11 @@ public sealed class AuthorizationContractTests
         {
             await AssertUnauthorizedAsync(inactive);
         }
-        using (var activated = await client.PostAsync($"/users/{user.Id}/activate", null))
+        using (var activated = await client.PostAsync($"/admin/users/{user.Id}/activate", null))
         {
             Assert.AreEqual(HttpStatusCode.OK, activated.StatusCode);
         }
-        using (var membershipDeactivated = await client.PostAsync($"/applications/{applicationAId}/memberships/{user.Id}/deactivate", null))
+        using (var membershipDeactivated = await client.PostAsync($"/admin/applications/{applicationAId}/memberships/{user.Id}/deactivate", null))
         {
             Assert.AreEqual(HttpStatusCode.OK, membershipDeactivated.StatusCode);
         }
@@ -172,11 +172,11 @@ public sealed class AuthorizationContractTests
         {
             await AssertUnauthorizedAsync(inactiveMembership);
         }
-        using (var membershipActivated = await client.PostAsync($"/applications/{applicationAId}/memberships/{user.Id}/activate", null))
+        using (var membershipActivated = await client.PostAsync($"/admin/applications/{applicationAId}/memberships/{user.Id}/activate", null))
         {
             Assert.AreEqual(HttpStatusCode.OK, membershipActivated.StatusCode);
         }
-        using (var applicationDeactivated = await client.PostAsync($"/applications/{applicationAId}/deactivate", null))
+        using (var applicationDeactivated = await client.PostAsync($"/admin/applications/{applicationAId}/deactivate", null))
         {
             Assert.AreEqual(HttpStatusCode.OK, applicationDeactivated.StatusCode);
         }
@@ -184,7 +184,7 @@ public sealed class AuthorizationContractTests
         {
             await AssertUnauthorizedAsync(inactiveApplication);
         }
-        using (var applicationActivated = await client.PostAsync($"/applications/{applicationAId}/activate", null))
+        using (var applicationActivated = await client.PostAsync($"/admin/applications/{applicationAId}/activate", null))
         {
             Assert.AreEqual(HttpStatusCode.OK, applicationActivated.StatusCode);
         }
@@ -208,7 +208,7 @@ public sealed class AuthorizationContractTests
             ["RateLimiting:AuthorizationContext:PermitLimit"] = "1",
             ["RateLimiting:AuthorizationContext:WindowSeconds"] = "60"
         });
-        using var client = factory.CreateClient();
+        using var clientAdmin = await factory.CreateAdminClientAsync(); var client = clientAdmin.Client;
         using var first = await ResolveAsync(client, "invalid-user-credential", applicationCode, serviceSecret);
         using var second = await ResolveAsync(client, "invalid-user-credential", applicationCode, serviceSecret);
         await AssertUnauthorizedAsync(first);
@@ -225,7 +225,7 @@ public sealed class AuthorizationContractTests
         {
             [$"AuthorizationConsumers:{applicationCode}:CurrentSecret"] = serviceSecret
         }, time);
-        using var client = factory.CreateClient();
+        using var clientAdmin = await factory.CreateAdminClientAsync(); var client = clientAdmin.Client;
         var user = await CreateUserAsync(client);
         var applicationId = await CreateApplicationAsync(client, applicationCode);
         await CreateMembershipAsync(client, applicationId, user.Id);
@@ -245,38 +245,38 @@ public sealed class AuthorizationContractTests
         {
             [$"AuthorizationConsumers:{applicationCode}:CurrentSecret"] = serviceSecret
         });
-        using var client = factory.CreateClient();
+        using var clientAdmin = await factory.CreateAdminClientAsync(); var client = clientAdmin.Client;
         var user = await CreateUserAsync(client);
         var applicationId = await CreateApplicationAsync(client, applicationCode);
         await CreateMembershipAsync(client, applicationId, user.Id);
         var firstRoleId = await CreateRoleAsync(client, applicationId, "dispatch-primary");
         var secondRoleId = await CreateRoleAsync(client, applicationId, "dispatch-secondary");
         var permissionId = await CreatePermissionAsync(client, applicationId, "dispatch.execute");
-        await AssignAsync(client, $"/applications/{applicationId}/roles/{firstRoleId}/permissions/{permissionId}");
-        await AssignAsync(client, $"/applications/{applicationId}/roles/{secondRoleId}/permissions/{permissionId}");
-        await AssignAsync(client, $"/applications/{applicationId}/users/{user.Id}/roles/{firstRoleId}");
-        await AssignAsync(client, $"/applications/{applicationId}/users/{user.Id}/roles/{secondRoleId}");
+        await AssignAsync(client, $"/admin/applications/{applicationId}/roles/{firstRoleId}/permissions/{permissionId}");
+        await AssignAsync(client, $"/admin/applications/{applicationId}/roles/{secondRoleId}/permissions/{permissionId}");
+        await AssignAsync(client, $"/admin/applications/{applicationId}/users/{user.Id}/roles/{firstRoleId}");
+        await AssignAsync(client, $"/admin/applications/{applicationId}/users/{user.Id}/roles/{secondRoleId}");
         var login = await LoginAsync(client, applicationCode, user.Email);
 
         await AssertConsumerPermissionAsync(client, login.AccessToken, applicationCode, serviceSecret, "dispatch.execute", true, 1);
         await AssertConsumerPermissionAsync(client, login.AccessToken, applicationCode, serviceSecret, "dispatch.denied", false, 1);
 
-        await AssertOkAsync(client.PostAsync($"/applications/{applicationId}/users/{user.Id}/roles/{firstRoleId}/remove", null));
+        await AssertOkAsync(client.PostAsync($"/admin/applications/{applicationId}/users/{user.Id}/roles/{firstRoleId}/remove", null));
         await AssertConsumerPermissionAsync(client, login.AccessToken, applicationCode, serviceSecret, "dispatch.execute", true, 1);
 
-        await AssertOkAsync(client.PostAsync($"/applications/{applicationId}/users/{user.Id}/roles/{secondRoleId}/remove", null));
+        await AssertOkAsync(client.PostAsync($"/admin/applications/{applicationId}/users/{user.Id}/roles/{secondRoleId}/remove", null));
         await AssertConsumerPermissionAsync(client, login.AccessToken, applicationCode, serviceSecret, "dispatch.execute", false, 0);
 
-        await AssignAsync(client, $"/applications/{applicationId}/users/{user.Id}/roles/{firstRoleId}");
-        await AssertOkAsync(client.PostAsync($"/applications/{applicationId}/roles/{firstRoleId}/permissions/{permissionId}/remove", null));
+        await AssignAsync(client, $"/admin/applications/{applicationId}/users/{user.Id}/roles/{firstRoleId}");
+        await AssertOkAsync(client.PostAsync($"/admin/applications/{applicationId}/roles/{firstRoleId}/permissions/{permissionId}/remove", null));
         await AssertConsumerPermissionAsync(client, login.AccessToken, applicationCode, serviceSecret, "dispatch.execute", false, 0);
 
-        await AssignAsync(client, $"/applications/{applicationId}/roles/{firstRoleId}/permissions/{permissionId}");
-        await AssertOkAsync(client.PostAsync($"/applications/{applicationId}/permissions/{permissionId}/deactivate", null));
+        await AssignAsync(client, $"/admin/applications/{applicationId}/roles/{firstRoleId}/permissions/{permissionId}");
+        await AssertOkAsync(client.PostAsync($"/admin/applications/{applicationId}/permissions/{permissionId}/deactivate", null));
         await AssertConsumerPermissionAsync(client, login.AccessToken, applicationCode, serviceSecret, "dispatch.execute", false, 0);
 
-        await AssertOkAsync(client.PostAsync($"/applications/{applicationId}/permissions/{permissionId}/activate", null));
-        await AssertOkAsync(client.PostAsync($"/applications/{applicationId}/roles/{firstRoleId}/deactivate", null));
+        await AssertOkAsync(client.PostAsync($"/admin/applications/{applicationId}/permissions/{permissionId}/activate", null));
+        await AssertOkAsync(client.PostAsync($"/admin/applications/{applicationId}/roles/{firstRoleId}/deactivate", null));
         await AssertConsumerPermissionAsync(client, login.AccessToken, applicationCode, serviceSecret, "dispatch.execute", false, 0);
     }
 
@@ -297,7 +297,7 @@ public sealed class AuthorizationContractTests
             Environment.SetEnvironmentVariable(key.Replace(":", "__"), configured);
         }
 
-        var factory = new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
+        var factory = new WebApplicationFactory<Program>().WithGlobalAdministrators().WithWebHostBuilder(builder =>
         {
             if (timeProvider is not null)
             {
@@ -316,34 +316,34 @@ public sealed class AuthorizationContractTests
     private static async Task<(Guid Id, string Email)> CreateUserAsync(HttpClient client)
     {
         var email = $"consumer-{Guid.NewGuid():N}@example.test";
-        using var response = await client.PostAsJsonAsync("/users", new { email, password = Password, firstName = "Consumer", lastName = "Test", displayName = "Consumer Test" });
+        using var response = await client.PostAsJsonAsync("/admin/users", new { email, password = Password, firstName = "Consumer", lastName = "Test", displayName = "Consumer Test" });
         Assert.AreEqual(HttpStatusCode.Created, response.StatusCode);
         return (JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement.GetProperty("id").GetGuid(), email);
     }
 
     private static async Task<Guid> CreateApplicationAsync(HttpClient client, string code)
     {
-        using var response = await client.PostAsJsonAsync("/applications", new { code, name = code });
+        using var response = await client.PostAsJsonAsync("/admin/applications", new { code, name = code });
         Assert.AreEqual(HttpStatusCode.Created, response.StatusCode);
         return JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement.GetProperty("id").GetGuid();
     }
 
     private static async Task CreateMembershipAsync(HttpClient client, Guid applicationId, Guid userId)
     {
-        using var response = await client.PostAsJsonAsync($"/applications/{applicationId}/memberships", new { userId });
+        using var response = await client.PostAsJsonAsync($"/admin/applications/{applicationId}/memberships", new { userId });
         Assert.AreEqual(HttpStatusCode.Created, response.StatusCode);
     }
 
     private static async Task<Guid> CreateRoleAsync(HttpClient client, Guid applicationId, string name)
     {
-        using var response = await client.PostAsJsonAsync($"/applications/{applicationId}/roles", new { name });
+        using var response = await client.PostAsJsonAsync($"/admin/applications/{applicationId}/roles", new { name });
         Assert.AreEqual(HttpStatusCode.Created, response.StatusCode);
         return JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement.GetProperty("id").GetGuid();
     }
 
     private static async Task<Guid> CreatePermissionAsync(HttpClient client, Guid applicationId, string code)
     {
-        using var response = await client.PostAsJsonAsync($"/applications/{applicationId}/permissions", new { code });
+        using var response = await client.PostAsJsonAsync($"/admin/applications/{applicationId}/permissions", new { code });
         Assert.AreEqual(HttpStatusCode.Created, response.StatusCode);
         return JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement.GetProperty("id").GetGuid();
     }

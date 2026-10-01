@@ -21,7 +21,7 @@ public sealed class SessionsAccessTests
     [TestMethod]
     public async Task Login_creates_session_with_minimal_signed_credential()
     {
-        using var factory = await FactoryAsync(); using var client = factory.CreateClient();
+        using var factory = await FactoryAsync(); using var clientAdmin = await factory.CreateAdminClientAsync(); var client = clientAdmin.Client;
         var login = await CreateLoginAsync(client);
         Assert.AreEqual("Bearer", login.TokenType);
         Assert.IsTrue(login.CacheNoStore);
@@ -41,7 +41,7 @@ public sealed class SessionsAccessTests
     [TestMethod]
     public async Task Validate_renew_and_signing_keys_follow_the_contract()
     {
-        using var factory = await FactoryAsync(); using var client = factory.CreateClient();
+        using var factory = await FactoryAsync(); using var clientAdmin = await factory.CreateAdminClientAsync(); var client = clientAdmin.Client;
         var login = await CreateLoginAsync(client);
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", login.AccessToken);
 
@@ -67,7 +67,7 @@ public sealed class SessionsAccessTests
     [TestMethod]
     public async Task Invalid_credentials_return_uniform_bearer_unauthorized()
     {
-        using var factory = await FactoryAsync(); using var client = factory.CreateClient();
+        using var factory = await FactoryAsync(); using var clientAdmin = await factory.CreateAdminClientAsync(); var client = clientAdmin.Client;
         var login = await CreateLoginAsync(client);
         var cases = new[] { "not-a-token", login.AccessToken[..^1] + (login.AccessToken[^1] == 'a' ? "b" : "a") };
         JsonElement? baseline = null;
@@ -90,7 +90,7 @@ public sealed class SessionsAccessTests
     [TestMethod]
     public async Task Logout_is_durable_idempotent_and_rejects_future_access()
     {
-        using var factory = await FactoryAsync(); using var client = factory.CreateClient();
+        using var factory = await FactoryAsync(); using var clientAdmin = await factory.CreateAdminClientAsync(); var client = clientAdmin.Client;
         var login = await CreateLoginAsync(client);
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", login.AccessToken);
 
@@ -111,7 +111,7 @@ public sealed class SessionsAccessTests
     [TestMethod]
     public async Task Sessions_are_independent_and_application_scoped()
     {
-        using var factory = await FactoryAsync(); using var client = factory.CreateClient();
+        using var factory = await FactoryAsync(); using var clientAdmin = await factory.CreateAdminClientAsync(); var client = clientAdmin.Client;
         var email = $"isolation-{Guid.NewGuid():N}@example.test";
         var userId = await CreateUserAsync(client, email);
         var appA = await CreateApplicationAsync(client); var appB = await CreateApplicationAsync(client);
@@ -137,14 +137,14 @@ public sealed class SessionsAccessTests
     [TestMethod]
     public async Task Eligibility_changes_block_existing_sessions_without_revoking_them()
     {
-        using var factory = await FactoryAsync(); using var client = factory.CreateClient();
+        using var factory = await FactoryAsync(); using var clientAdmin = await factory.CreateAdminClientAsync(); var client = clientAdmin.Client;
         var login = await CreateLoginAsync(client);
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", login.AccessToken);
         var transitions = new[]
         {
-            ($"/users/{login.UserId}/deactivate", $"/users/{login.UserId}/activate"),
-            ($"/applications/{login.ApplicationId}/deactivate", $"/applications/{login.ApplicationId}/activate"),
-            ($"/applications/{login.ApplicationId}/memberships/{login.UserId}/deactivate", $"/applications/{login.ApplicationId}/memberships/{login.UserId}/activate")
+            ($"/admin/users/{login.UserId}/deactivate", $"/admin/users/{login.UserId}/activate"),
+            ($"/admin/applications/{login.ApplicationId}/deactivate", $"/admin/applications/{login.ApplicationId}/activate"),
+            ($"/admin/applications/{login.ApplicationId}/memberships/{login.UserId}/deactivate", $"/admin/applications/{login.ApplicationId}/memberships/{login.UserId}/activate")
         };
 
         foreach (var (deactivatePath, activatePath) in transitions)
@@ -172,7 +172,7 @@ public sealed class SessionsAccessTests
     public async Task Session_lifecycle_events_are_safe_and_malformed_credentials_are_not_recorded()
     {
         var setup = await FactoryWithRecorderAsync();
-        using var factory = setup.Factory; using var client = factory.CreateClient();
+        using var factory = setup.Factory; using var clientAdmin = await factory.CreateAdminClientAsync(); var client = clientAdmin.Client;
         var login = await CreateLoginAsync(client);
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", login.AccessToken);
         using var renew = await client.PostAsync("/auth/session/renew", null);
@@ -218,20 +218,20 @@ public sealed class SessionsAccessTests
 
     private static async Task<Guid> CreateUserAsync(HttpClient client, string email)
     {
-        using var response = await client.PostAsJsonAsync("/users", new { email, password = Password, firstName = "A", lastName = "B", displayName = "AB" });
+        using var response = await client.PostAsJsonAsync("/admin/users", new { email, password = Password, firstName = "A", lastName = "B", displayName = "AB" });
         return JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement.GetProperty("id").GetGuid();
     }
 
     private static async Task<(Guid Id, string Code)> CreateApplicationAsync(HttpClient client)
     {
         var code = $"app-{Guid.NewGuid():N}";
-        using var response = await client.PostAsJsonAsync("/applications", new { code, name = "Application" });
+        using var response = await client.PostAsJsonAsync("/admin/applications", new { code, name = "Application" });
         return (JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement.GetProperty("id").GetGuid(), code);
     }
 
     private static async Task CreateMembershipAsync(HttpClient client, Guid userId, Guid applicationId)
     {
-        using var response = await client.PostAsJsonAsync($"/applications/{applicationId}/memberships", new { userId });
+        using var response = await client.PostAsJsonAsync($"/admin/applications/{applicationId}/memberships", new { userId });
         Assert.AreEqual(HttpStatusCode.Created, response.StatusCode);
     }
 
@@ -239,7 +239,7 @@ public sealed class SessionsAccessTests
     {
         foreach (var key in ManagedEnvironmentKeys) Environment.SetEnvironmentVariable(key, null);
         var time = new MutableTimeProvider();
-        var factory = new WebApplicationFactory<Program>().WithWebHostBuilder(builder => builder.ConfigureServices(services =>
+        var factory = new WebApplicationFactory<Program>().WithGlobalAdministrators().WithWebHostBuilder(builder => builder.ConfigureServices(services =>
         {
             services.RemoveAll<TimeProvider>();
             services.AddSingleton<TimeProvider>(time);
@@ -253,7 +253,7 @@ public sealed class SessionsAccessTests
     {
         foreach (var key in ManagedEnvironmentKeys) Environment.SetEnvironmentVariable(key, null);
         var recorder = new RecordingSecurityEventRecorder();
-        var factory = new WebApplicationFactory<Program>().WithWebHostBuilder(builder => builder.ConfigureServices(services =>
+        var factory = new WebApplicationFactory<Program>().WithGlobalAdministrators().WithWebHostBuilder(builder => builder.ConfigureServices(services =>
         {
             services.RemoveAll<ISecurityEventRecorder>();
             services.AddSingleton<ISecurityEventRecorder>(recorder);

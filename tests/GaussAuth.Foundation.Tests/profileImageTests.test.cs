@@ -251,7 +251,7 @@ public sealed class ProfileImageTests
     {
         using var env = new ImageEnvironment();
         using var factory = await env.CreateFactoryAsync();
-        using var client = factory.CreateClient();
+        using var clientAdmin = await factory.CreateAdminClientAsync(); var client = clientAdmin.Client;
         var user = await CreateLoginAsync(client);
         var other = await CreateLoginAsync(client);
 
@@ -294,7 +294,7 @@ public sealed class ProfileImageTests
     {
         using var env = new ImageEnvironment();
         using var factory = await env.CreateFactoryAsync();
-        using var client = factory.CreateClient();
+        using var clientAdmin = await factory.CreateAdminClientAsync(); var client = clientAdmin.Client;
         var user = await CreateLoginAsync(client);
         var victim = await CreateLoginAsync(client);
 
@@ -323,7 +323,7 @@ public sealed class ProfileImageTests
     {
         using var env = new ImageEnvironment();
         using var factory = await env.CreateFactoryAsync();
-        using var client = factory.CreateClient();
+        using var clientAdmin = await factory.CreateAdminClientAsync(); var client = clientAdmin.Client;
         var user = await CreateLoginAsync(client);
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", user.AccessToken);
 
@@ -350,7 +350,7 @@ public sealed class ProfileImageTests
     {
         using var env = new ImageEnvironment();
         using var factory = await env.CreateFactoryAsync();
-        using var client = factory.CreateClient();
+        using var clientAdmin = await factory.CreateAdminClientAsync(); var client = clientAdmin.Client;
         var user = await CreateLoginAsync(client);
         var good = await UploadAsync(client, user.AccessToken, Encode(ProfileImageFormat.Png, 8, 8));
         var goodReference = good.Body.GetProperty("avatarReference").GetString();
@@ -379,7 +379,7 @@ public sealed class ProfileImageTests
     {
         using var env = new ImageEnvironment();
         using var factory = await env.CreateFactoryAsync();
-        using var client = factory.CreateClient();
+        using var clientAdmin = await factory.CreateAdminClientAsync(); var client = clientAdmin.Client;
         var user = await CreateLoginAsync(client);
 
         var upload = await UploadAsync(client, user.AccessToken, Encode(ProfileImageFormat.Png, 10, 10), "x.html", "text/html");
@@ -420,7 +420,7 @@ public sealed class ProfileImageTests
     {
         using var env = new ImageEnvironment();
         using var factory = await env.CreateFactoryAsync();
-        using var client = factory.CreateClient();
+        using var clientAdmin = await factory.CreateAdminClientAsync(); var client = clientAdmin.Client;
         var user = await CreateLoginAsync(client);
 
         await UploadAsync(client, user.AccessToken, Encode(ProfileImageFormat.Png, 8, 8));
@@ -451,7 +451,7 @@ public sealed class ProfileImageTests
         var faults = new StorageFaults();
         var logs = new CapturingLoggerProvider();
         using var factory = await env.CreateFactoryAsync(services => InjectStorage(services, faults), logs);
-        using var client = factory.CreateClient();
+        using var clientAdmin = await factory.CreateAdminClientAsync(); var client = clientAdmin.Client;
         var user = await CreateLoginAsync(client);
 
         var first = await UploadAsync(client, user.AccessToken, Encode(ProfileImageFormat.Png, 8, 8), "secret-name.png");
@@ -476,7 +476,7 @@ public sealed class ProfileImageTests
         var faults = new StorageFaults();
         var logs = new CapturingLoggerProvider();
         using var factory = await env.CreateFactoryAsync(services => InjectStorage(services, faults), logs);
-        using var client = factory.CreateClient();
+        using var clientAdmin = await factory.CreateAdminClientAsync(); var client = clientAdmin.Client;
         var user = await CreateLoginAsync(client);
         var good = await UploadAsync(client, user.AccessToken, Encode(ProfileImageFormat.Png, 8, 8));
         var goodReference = good.Body.GetProperty("avatarReference").GetString()!;
@@ -500,7 +500,7 @@ public sealed class ProfileImageTests
         using var env = new ImageEnvironment();
         var faults = new StorageFaults();
         using var factory = await env.CreateFactoryAsync(services => InjectStorage(services, faults));
-        using var client = factory.CreateClient();
+        using var clientAdmin = await factory.CreateAdminClientAsync(); var client = clientAdmin.Client;
         var user = await CreateLoginAsync(client);
 
         faults.FailPromote = true;
@@ -517,7 +517,7 @@ public sealed class ProfileImageTests
     {
         using var env = new ImageEnvironment();
         using var factory = await env.CreateFactoryAsync();
-        using var client = factory.CreateClient();
+        using var clientAdmin = await factory.CreateAdminClientAsync(); var client = clientAdmin.Client;
         var user = await CreateLoginAsync(client);
 
         var results = await Task.WhenAll(Enumerable.Range(0, 6).Select(index =>
@@ -534,7 +534,7 @@ public sealed class ProfileImageTests
     {
         using var env = new ImageEnvironment();
         using var factory = await env.CreateFactoryAsync();
-        using var client = factory.CreateClient();
+        using var clientAdmin = await factory.CreateAdminClientAsync(); var client = clientAdmin.Client;
         var user = await CreateLoginAsync(client);
 
         var tooWide = await UploadAsync(client, user.AccessToken, Encode(ProfileImageFormat.Png, 4097, 1));
@@ -557,7 +557,7 @@ public sealed class ProfileImageTests
     {
         using var env = new ImageEnvironment();
         using var factory = await env.CreateFactoryAsync();
-        using var client = factory.CreateClient();
+        using var clientAdmin = await factory.CreateAdminClientAsync(); var client = clientAdmin.Client;
         var user = await CreateLoginAsync(client);
         var upload = await UploadAsync(client, user.AccessToken, Encode(ProfileImageFormat.Png, 8, 8));
 
@@ -576,24 +576,24 @@ public sealed class ProfileImageTests
     {
         using var env = new ImageEnvironment();
         using var factory = await env.CreateFactoryAsync();
-        using var client = factory.CreateClient();
+        using var clientAdmin = await factory.CreateAdminClientAsync(); var client = clientAdmin.Client;
         var user = await CreateLoginAsync(client);
         var upload = await UploadAsync(client, user.AccessToken, Encode(ProfileImageFormat.Png, 8, 8));
         var reference = upload.Body.GetProperty("avatarReference").GetString()!;
 
-        using var attempt = await client.PutAsJsonAsync($"/users/{user.UserId}/profile", new
+        using var attempt = await client.PutAsJsonAsync($"/admin/users/{user.UserId}/profile", new
         {
             firstName = "New", lastName = "Name", displayName = "New Name", avatarReference = "0123456789abcdef0123456789abcdef.png"
         });
         Assert.AreEqual(HttpStatusCode.BadRequest, attempt.StatusCode);
         Assert.AreEqual(reference, await ReadReferenceAsync(client, user.UserId));
 
-        using var update = await client.PutAsJsonAsync($"/users/{user.UserId}/profile", new { firstName = "New", lastName = "Name", displayName = "New Name" });
+        using var update = await client.PutAsJsonAsync($"/admin/users/{user.UserId}/profile", new { firstName = "New", lastName = "Name", displayName = "New Name" });
         Assert.AreEqual(HttpStatusCode.OK, update.StatusCode);
         Assert.AreEqual(reference, await ReadReferenceAsync(client, user.UserId), "A profile update must not clear the avatar.");
         CollectionAssert.AreEqual(new[] { reference }, env.StoredFiles());
 
-        using var created = await client.PostAsJsonAsync("/users", new
+        using var created = await client.PostAsJsonAsync("/admin/users", new
         {
             email = $"noavatar-{Guid.NewGuid():N}@example.test", password = "Quickstart!2026", firstName = "A", lastName = "B", displayName = "AB",
             avatarReference = "0123456789abcdef0123456789abcdef.png"
@@ -660,6 +660,7 @@ public sealed class ProfileImageTests
         public Task<User?> GetByIdForUpdateAsync(Guid id, CancellationToken cancellationToken) => inner.GetByIdForUpdateAsync(id, cancellationToken);
 
         public Task<User?> GetByNormalizedEmailAsync(string normalizedEmail, CancellationToken cancellationToken) => inner.GetByNormalizedEmailAsync(normalizedEmail, cancellationToken);
+        public Task<IReadOnlyList<User>> ListAsync(bool? isActive, string? normalizedEmail, Guid? afterId, int limit, CancellationToken cancellationToken) => inner.ListAsync(isActive, normalizedEmail, afterId, limit, cancellationToken);
 
         public Task SaveChangesAsync(CancellationToken cancellationToken) =>
             faults.FailSave ? throw new InvalidOperationException("injected persistence failure") : inner.SaveChangesAsync(cancellationToken);
@@ -718,7 +719,7 @@ public sealed class ProfileImageTests
 
     private static async Task<string?> ReadReferenceAsync(HttpClient client, Guid userId)
     {
-        using var response = await client.GetAsync($"/users/{userId}");
+        using var response = await client.GetAsync($"/admin/users/{userId}");
         using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
         return document.RootElement.GetProperty("profile").GetProperty("avatarReference").GetString();
     }
@@ -727,13 +728,13 @@ public sealed class ProfileImageTests
     {
         const string password = "Quickstart!2026";
         var email = $"avatar-{Guid.NewGuid():N}@example.test";
-        using var created = await client.PostAsJsonAsync("/users", new { email, password, firstName = "A", lastName = "B", displayName = "AB" });
+        using var created = await client.PostAsJsonAsync("/admin/users", new { email, password, firstName = "A", lastName = "B", displayName = "AB" });
         Assert.AreEqual(HttpStatusCode.Created, created.StatusCode);
         var userId = JsonDocument.Parse(await created.Content.ReadAsStringAsync()).RootElement.GetProperty("id").GetGuid();
         var applicationCode = $"app-{Guid.NewGuid():N}";
-        using var application = await client.PostAsJsonAsync("/applications", new { code = applicationCode, name = "Application" });
+        using var application = await client.PostAsJsonAsync("/admin/applications", new { code = applicationCode, name = "Application" });
         var applicationId = JsonDocument.Parse(await application.Content.ReadAsStringAsync()).RootElement.GetProperty("id").GetGuid();
-        using var membership = await client.PostAsJsonAsync($"/applications/{applicationId}/memberships", new { userId });
+        using var membership = await client.PostAsJsonAsync($"/admin/applications/{applicationId}/memberships", new { userId });
         using var login = await client.PostAsJsonAsync("/auth/login", new { applicationCode, email, password });
         Assert.AreEqual(HttpStatusCode.OK, login.StatusCode);
         var token = JsonDocument.Parse(await login.Content.ReadAsStringAsync()).RootElement.GetProperty("accessToken").GetString()!;
@@ -754,7 +755,7 @@ public sealed class ProfileImageTests
 
         public async Task<WebApplicationFactory<Program>> CreateFactoryAsync(Action<IServiceCollection>? configure = null, ILoggerProvider? logs = null)
         {
-            var factory = new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
+            var factory = new WebApplicationFactory<Program>().WithGlobalAdministrators().WithWebHostBuilder(builder =>
             {
                 builder.ConfigureServices(services => configure?.Invoke(services));
                 if (logs is not null) builder.ConfigureServices(services => services.AddLogging(logging => logging.AddProvider(logs)));

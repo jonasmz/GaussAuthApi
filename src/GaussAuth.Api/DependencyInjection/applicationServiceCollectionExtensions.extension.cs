@@ -1,5 +1,7 @@
 using GaussAuth.Application.Administration.Authorization;
+using GaussAuth.Application.Administration.Bootstrap;
 using GaussAuth.Application.Administration.Ports;
+using GaussAuth.Application.Administration.Users.ListUsers;
 using GaussAuth.Application.Users.ActivateUser;
 using GaussAuth.Application.Users.CreateUser;
 using GaussAuth.Application.Users.DeactivateUser;
@@ -27,6 +29,7 @@ public static class ApplicationServiceCollectionExtensions
     {
         services.AddScoped<CreateUserHandler>();
         services.AddScoped<GetUserHandler>();
+        services.AddScoped<ListUsersHandler>();
         services.AddScoped<UpdateProfileHandler>();
         services.AddScoped<ActivateUserHandler>();
         services.AddScoped<DeactivateUserHandler>();
@@ -46,6 +49,7 @@ public static class ApplicationServiceCollectionExtensions
         services.AddScoped<SecurityEventQueryService>();
         services.AddScoped<ProfileAvatarService>();
         services.AddScoped<ProfileAvatarReadService>();
+        services.AddScoped<AdministrativePermissionBootstrap>();
         services.AddScoped<AdministrativeAuthorizer>();
         services.AddScoped<AdministrativeActorContext>();
         services.AddScoped<IAdministrativeActorContext>(provider => provider.GetRequiredService<AdministrativeActorContext>());

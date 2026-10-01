@@ -35,12 +35,13 @@ if (!app.Environment.IsDevelopment())
 }
 app.UseRateLimiter();
 app.MapGet("/health/live", () => Results.NoContent());
-app.MapUsersEndpoints();
-app.MapApplicationsEndpoints();
-app.MapMembershipsEndpoints();
-app.MapRolesEndpoints();
-app.MapPermissionsEndpoints();
-app.MapAuthorizationEndpoints();
+var admin = app.MapGroup("/admin").RequireRateLimiting("administration");
+admin.MapUsersEndpoints();
+admin.MapApplicationsEndpoints();
+admin.MapMembershipsEndpoints();
+admin.MapRolesEndpoints();
+admin.MapPermissionsEndpoints();
+admin.MapAuthorizationEndpoints();
 app.MapLoginEndpoints();
 app.MapSessionsEndpoints();
 app.MapPasswordsEndpoints();

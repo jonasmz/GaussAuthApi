@@ -15,10 +15,10 @@ public sealed class CreateUserTests
     public async Task Valid_request_creates_user_and_profile_without_exposing_credentials()
     {
         using var factory = await CreateMigratedFactoryAsync();
-        using var client = factory.CreateClient();
+        using var clientAdmin = await factory.CreateAdminClientAsync(); var client = clientAdmin.Client;
 
         var email = UniqueEmail("create");
-        using var response = await client.PostAsJsonAsync("/users", ValidRequest(email));
+        using var response = await client.PostAsJsonAsync("/admin/users", ValidRequest(email));
 
         Assert.AreEqual(HttpStatusCode.Created, response.StatusCode);
         Assert.IsNotNull(response.Headers.Location);
@@ -38,14 +38,14 @@ public sealed class CreateUserTests
     public async Task Duplicate_normalized_email_is_rejected()
     {
         using var factory = await CreateMigratedFactoryAsync();
-        using var client = factory.CreateClient();
+        using var clientAdmin = await factory.CreateAdminClientAsync(); var client = clientAdmin.Client;
 
         var email = UniqueEmail("dup");
-        using var first = await client.PostAsJsonAsync("/users", ValidRequest(email));
+        using var first = await client.PostAsJsonAsync("/admin/users", ValidRequest(email));
         Assert.AreEqual(HttpStatusCode.Created, first.StatusCode);
 
         var differentCasingAndWhitespace = $" {email.ToUpperInvariant()} ";
-        using var second = await client.PostAsJsonAsync("/users", ValidRequest(differentCasingAndWhitespace));
+        using var second = await client.PostAsJsonAsync("/admin/users", ValidRequest(differentCasingAndWhitespace));
 
         Assert.AreEqual(HttpStatusCode.Conflict, second.StatusCode);
     }
@@ -54,9 +54,9 @@ public sealed class CreateUserTests
     public async Task Malformed_email_is_rejected_with_field_level_validation_error()
     {
         using var factory = await CreateMigratedFactoryAsync();
-        using var client = factory.CreateClient();
+        using var clientAdmin = await factory.CreateAdminClientAsync(); var client = clientAdmin.Client;
 
-        using var response = await client.PostAsJsonAsync("/users", ValidRequest("not-an-email"));
+        using var response = await client.PostAsJsonAsync("/admin/users", ValidRequest("not-an-email"));
 
         Assert.AreEqual(HttpStatusCode.BadRequest, response.StatusCode);
         var body = await response.Content.ReadAsStringAsync();
@@ -67,15 +67,15 @@ public sealed class CreateUserTests
     public async Task Missing_required_field_is_rejected_without_partial_state()
     {
         using var factory = await CreateMigratedFactoryAsync();
-        using var client = factory.CreateClient();
+        using var clientAdmin = await factory.CreateAdminClientAsync(); var client = clientAdmin.Client;
 
         var email = UniqueEmail("missing-field");
         using var response = await client.PostAsJsonAsync(
-            "/users", ValidRequest(email, firstName: string.Empty));
+            "/admin/users", ValidRequest(email, firstName: string.Empty));
 
         Assert.AreEqual(HttpStatusCode.BadRequest, response.StatusCode);
 
-        using var retry = await client.PostAsJsonAsync("/users", ValidRequest(email));
+        using var retry = await client.PostAsJsonAsync("/admin/users", ValidRequest(email));
         Assert.AreEqual(HttpStatusCode.Created, retry.StatusCode);
     }
 
@@ -83,15 +83,15 @@ public sealed class CreateUserTests
     public async Task Password_failing_identity_policy_is_rejected_without_partial_state()
     {
         using var factory = await CreateMigratedFactoryAsync();
-        using var client = factory.CreateClient();
+        using var clientAdmin = await factory.CreateAdminClientAsync(); var client = clientAdmin.Client;
 
         var email = UniqueEmail("weak-password");
         using var response = await client.PostAsJsonAsync(
-            "/users", ValidRequest(email, password: "a"));
+            "/admin/users", ValidRequest(email, password: "a"));
 
         Assert.AreEqual(HttpStatusCode.BadRequest, response.StatusCode);
 
-        using var retry = await client.PostAsJsonAsync("/users", ValidRequest(email));
+        using var retry = await client.PostAsJsonAsync("/admin/users", ValidRequest(email));
         Assert.AreEqual(HttpStatusCode.Created, retry.StatusCode);
     }
 
@@ -99,12 +99,12 @@ public sealed class CreateUserTests
     public async Task Concurrent_requests_for_the_same_normalized_email_create_exactly_one_user()
     {
         using var factory = await CreateMigratedFactoryAsync();
-        using var clientA = factory.CreateClient();
-        using var clientB = factory.CreateClient();
+        using var clientAAdmin = await factory.CreateAdminClientAsync(); var clientA = clientAAdmin.Client;
+        using var clientBAdmin = await factory.CreateAdminClientAsync(); var clientB = clientBAdmin.Client;
 
         var email = UniqueEmail("race");
-        var requestA = clientA.PostAsJsonAsync("/users", ValidRequest(email));
-        var requestB = clientB.PostAsJsonAsync("/users", ValidRequest(email));
+        var requestA = clientA.PostAsJsonAsync("/admin/users", ValidRequest(email));
+        var requestB = clientB.PostAsJsonAsync("/admin/users", ValidRequest(email));
 
         var responses = await Task.WhenAll(requestA, requestB);
 
@@ -133,11 +133,11 @@ public sealed class CreateUserTests
             builder.UseSetting("RateLimiting:UserCreation:PermitLimit", "2");
             builder.UseSetting("RateLimiting:UserCreation:WindowSeconds", "60");
         });
-        using var client = factory.CreateClient();
+        using var clientAdmin = await factory.CreateAdminClientAsync(); var client = clientAdmin.Client;
 
-        using var first = await client.PostAsJsonAsync("/users", ValidRequest(UniqueEmail("rate-1")));
-        using var second = await client.PostAsJsonAsync("/users", ValidRequest(UniqueEmail("rate-2")));
-        using var third = await client.PostAsJsonAsync("/users", ValidRequest(UniqueEmail("rate-3")));
+        using var first = await client.PostAsJsonAsync("/admin/users", ValidRequest(UniqueEmail("rate-1")));
+        using var second = await client.PostAsJsonAsync("/admin/users", ValidRequest(UniqueEmail("rate-2")));
+        using var third = await client.PostAsJsonAsync("/admin/users", ValidRequest(UniqueEmail("rate-3")));
 
         Assert.AreEqual(HttpStatusCode.Created, first.StatusCode);
         Assert.AreEqual(HttpStatusCode.Created, second.StatusCode);
@@ -147,7 +147,7 @@ public sealed class CreateUserTests
 
     private static async Task<WebApplicationFactory<Program>> CreateMigratedFactoryAsync()
     {
-        var factory = new WebApplicationFactory<Program>();
+        var factory = new WebApplicationFactory<Program>().WithGlobalAdministrators();
         using var scope = factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AuthenticationDbContext>();
         await db.Database.MigrateAsync();

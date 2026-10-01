@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using GaussAuth.Application.Administration.Authorization;
 using GaussAuth.Application.Applications.Ports;
 using GaussAuth.Application.Permissions.Ports;
 using GaussAuth.Application.Security;
@@ -16,7 +17,7 @@ public sealed class PermissionService(IPermissionRepository permissions, IApplic
     {
         if (applicationId == Guid.Empty) return PermissionOperationResult.Invalid();
         var normalizedCode = code?.Trim().ToLowerInvariant() ?? string.Empty;
-        if (normalizedCode.Length is < 3 or > 128 || !CodePattern.IsMatch(normalizedCode) || description?.Length > 500) return PermissionOperationResult.Invalid();
+        if (normalizedCode.Length is < 3 or > 128 || !CodePattern.IsMatch(normalizedCode) || description?.Length > 500 || AdministrativePermissionCatalog.IsReservedPrefix(normalizedCode)) return PermissionOperationResult.Invalid();
         var application = await applications.GetByIdAsync(applicationId, ct); if (application is null) return PermissionOperationResult.ApplicationNotFound();
         if (!application.IsActive) return PermissionOperationResult.InactiveApplication();
         if (await permissions.GetByCodeAsync(applicationId, normalizedCode, ct) is not null) return PermissionOperationResult.Duplicate();
@@ -43,6 +44,7 @@ public sealed class PermissionService(IPermissionRepository permissions, IApplic
     {
         if (description?.Length > 500) return PermissionOperationResult.Invalid();
         var permission = await permissions.GetByIdAndApplicationAsync(permissionId, applicationId, ct); if (permission is null) return PermissionOperationResult.PermissionNotFound();
+        if (AdministrativePermissionCatalog.IsPlatformPermission(permission.Code)) return PermissionOperationResult.PlatformPermission();
         var previousDescription = permission.Description;
         permission.UpdateDescription(description, DateTimeOffset.UtcNow);
         await permissions.SaveChangesAsync(ct);
@@ -54,6 +56,7 @@ public sealed class PermissionService(IPermissionRepository permissions, IApplic
     public async Task<PermissionOperationResult> ActivateAsync(Guid applicationId, Guid permissionId, CancellationToken ct)
     {
         var permission = await permissions.GetByIdAndApplicationAsync(permissionId, applicationId, ct); if (permission is null) return PermissionOperationResult.PermissionNotFound();
+        if (AdministrativePermissionCatalog.IsPlatformPermission(permission.Code)) return PermissionOperationResult.PlatformPermission();
         var application = await applications.GetByIdAsync(applicationId, ct); if (application is null) return PermissionOperationResult.ApplicationNotFound();
         if (!application.IsActive) return PermissionOperationResult.InactiveApplication();
         var wasActive = permission.IsActive;
@@ -67,6 +70,7 @@ public sealed class PermissionService(IPermissionRepository permissions, IApplic
     public async Task<PermissionOperationResult> DeactivateAsync(Guid applicationId, Guid permissionId, CancellationToken ct)
     {
         var permission = await permissions.GetByIdAndApplicationAsync(permissionId, applicationId, ct); if (permission is null) return PermissionOperationResult.PermissionNotFound();
+        if (AdministrativePermissionCatalog.IsPlatformPermission(permission.Code)) return PermissionOperationResult.PlatformPermission();
         var wasActive = permission.IsActive;
         permission.Deactivate(DateTimeOffset.UtcNow);
         await permissions.SaveChangesAsync(ct);

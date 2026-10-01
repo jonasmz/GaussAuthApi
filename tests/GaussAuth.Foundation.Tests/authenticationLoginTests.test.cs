@@ -19,7 +19,7 @@ public sealed class AuthenticationLoginTests
     [TestMethod]
     public async Task Successful_login_returns_stable_identifiers()
     {
-        using var factory = await FactoryAsync(); using var client = factory.CreateClient();
+        using var factory = await FactoryAsync(); using var clientAdmin = await factory.CreateAdminClientAsync(); var client = clientAdmin.Client;
         var email = $"login-{Guid.NewGuid():N}@example.test";
         var userId = await CreateUserAsync(client, email);
         var (applicationId, applicationCode) = await CreateApplicationAsync(client);
@@ -36,7 +36,7 @@ public sealed class AuthenticationLoginTests
     [TestMethod]
     public async Task Login_normalizes_email_before_resolving_identity()
     {
-        using var factory = await FactoryAsync(); using var client = factory.CreateClient();
+        using var factory = await FactoryAsync(); using var clientAdmin = await factory.CreateAdminClientAsync(); var client = clientAdmin.Client;
         var email = $"login-{Guid.NewGuid():N}@example.test";
         var userId = await CreateUserAsync(client, email);
         var (applicationId, applicationCode) = await CreateApplicationAsync(client);
@@ -53,7 +53,7 @@ public sealed class AuthenticationLoginTests
     [TestMethod]
     public async Task Successful_login_response_contains_no_credential_content()
     {
-        using var factory = await FactoryAsync(); using var client = factory.CreateClient();
+        using var factory = await FactoryAsync(); using var clientAdmin = await factory.CreateAdminClientAsync(); var client = clientAdmin.Client;
         var email = $"login-{Guid.NewGuid():N}@example.test";
         var userId = await CreateUserAsync(client, email);
         var (applicationId, applicationCode) = await CreateApplicationAsync(client);
@@ -69,7 +69,7 @@ public sealed class AuthenticationLoginTests
     [TestMethod]
     public async Task Unknown_email_returns_uniform_failure()
     {
-        using var factory = await FactoryAsync(); using var client = factory.CreateClient();
+        using var factory = await FactoryAsync(); using var clientAdmin = await factory.CreateAdminClientAsync(); var client = clientAdmin.Client;
         var (_, applicationCode) = await CreateApplicationAsync(client);
 
         using var response = await client.PostAsJsonAsync("/auth/login", new { applicationCode, email = $"no-such-{Guid.NewGuid():N}@example.test", password = Password });
@@ -80,7 +80,7 @@ public sealed class AuthenticationLoginTests
     [TestMethod]
     public async Task Wrong_password_returns_failure_identical_to_unknown_email()
     {
-        using var factory = await FactoryAsync(); using var client = factory.CreateClient();
+        using var factory = await FactoryAsync(); using var clientAdmin = await factory.CreateAdminClientAsync(); var client = clientAdmin.Client;
         var email = $"login-{Guid.NewGuid():N}@example.test";
         var userId = await CreateUserAsync(client, email);
         var (applicationId, applicationCode) = await CreateApplicationAsync(client);
@@ -97,7 +97,7 @@ public sealed class AuthenticationLoginTests
     [TestMethod]
     public async Task Invalid_input_is_rejected_without_echoing_password()
     {
-        using var factory = await FactoryAsync(); using var client = factory.CreateClient();
+        using var factory = await FactoryAsync(); using var clientAdmin = await factory.CreateAdminClientAsync(); var client = clientAdmin.Client;
 
         using var missingEmail = await client.PostAsJsonAsync("/auth/login", new { applicationCode = "some-app", password = Password });
         Assert.AreEqual(HttpStatusCode.BadRequest, missingEmail.StatusCode);
@@ -119,19 +119,19 @@ public sealed class AuthenticationLoginTests
     [TestMethod]
     public async Task Inactive_user_is_rejected_and_remains_inactive()
     {
-        using var factory = await FactoryAsync(); using var client = factory.CreateClient();
+        using var factory = await FactoryAsync(); using var clientAdmin = await factory.CreateAdminClientAsync(); var client = clientAdmin.Client;
         var email = $"login-{Guid.NewGuid():N}@example.test";
         var userId = await CreateUserAsync(client, email);
         var (applicationId, applicationCode) = await CreateApplicationAsync(client);
         await CreateMembershipAsync(client, userId, applicationId);
 
-        using var deactivate = await client.PostAsync($"/users/{userId}/deactivate", null);
+        using var deactivate = await client.PostAsync($"/admin/users/{userId}/deactivate", null);
         Assert.AreEqual(HttpStatusCode.OK, deactivate.StatusCode);
 
         using var response = await client.PostAsJsonAsync("/auth/login", new { applicationCode, email, password = Password });
         Assert.AreEqual(HttpStatusCode.Unauthorized, response.StatusCode);
 
-        using var userAfter = await client.GetAsync($"/users/{userId}");
+        using var userAfter = await client.GetAsync($"/admin/users/{userId}");
         Assert.IsFalse(JsonDocument.Parse(await userAfter.Content.ReadAsStringAsync()).RootElement.GetProperty("isActive").GetBoolean());
     }
 
@@ -139,7 +139,7 @@ public sealed class AuthenticationLoginTests
     [TestMethod]
     public async Task Nonexistent_or_inactive_application_is_rejected_and_remains_inactive()
     {
-        using var factory = await FactoryAsync(); using var client = factory.CreateClient();
+        using var factory = await FactoryAsync(); using var clientAdmin = await factory.CreateAdminClientAsync(); var client = clientAdmin.Client;
 
         var unknownAppEmail = $"login-{Guid.NewGuid():N}@example.test";
         await CreateUserAsync(client, unknownAppEmail);
@@ -151,16 +151,16 @@ public sealed class AuthenticationLoginTests
         var (applicationId, applicationCode) = await CreateApplicationAsync(client);
         await CreateMembershipAsync(client, userId, applicationId);
 
-        using var deactivateApp = await client.PostAsync($"/applications/{applicationId}/deactivate", null);
+        using var deactivateApp = await client.PostAsync($"/admin/applications/{applicationId}/deactivate", null);
         Assert.AreEqual(HttpStatusCode.OK, deactivateApp.StatusCode);
 
         using var response = await client.PostAsJsonAsync("/auth/login", new { applicationCode, email, password = Password });
         Assert.AreEqual(HttpStatusCode.Unauthorized, response.StatusCode);
 
-        using var membershipAfter = await client.GetAsync($"/applications/{applicationId}/memberships/{userId}");
+        using var membershipAfter = await client.GetAsync($"/admin/applications/{applicationId}/memberships/{userId}");
         Assert.AreEqual(HttpStatusCode.OK, membershipAfter.StatusCode);
 
-        using var appAfter = await client.GetAsync($"/applications/{applicationId}");
+        using var appAfter = await client.GetAsync($"/admin/applications/{applicationId}");
         Assert.IsFalse(JsonDocument.Parse(await appAfter.Content.ReadAsStringAsync()).RootElement.GetProperty("isActive").GetBoolean());
     }
 
@@ -168,7 +168,7 @@ public sealed class AuthenticationLoginTests
     [TestMethod]
     public async Task Missing_or_inactive_membership_is_rejected_and_remains_inactive()
     {
-        using var factory = await FactoryAsync(); using var client = factory.CreateClient();
+        using var factory = await FactoryAsync(); using var clientAdmin = await factory.CreateAdminClientAsync(); var client = clientAdmin.Client;
 
         var missingMembershipEmail = $"login-{Guid.NewGuid():N}@example.test";
         await CreateUserAsync(client, missingMembershipEmail);
@@ -181,13 +181,13 @@ public sealed class AuthenticationLoginTests
         var (applicationId, applicationCode) = await CreateApplicationAsync(client);
         await CreateMembershipAsync(client, userId, applicationId);
 
-        using var deactivateMembership = await client.PostAsync($"/applications/{applicationId}/memberships/{userId}/deactivate", null);
+        using var deactivateMembership = await client.PostAsync($"/admin/applications/{applicationId}/memberships/{userId}/deactivate", null);
         Assert.AreEqual(HttpStatusCode.OK, deactivateMembership.StatusCode);
 
         using var response = await client.PostAsJsonAsync("/auth/login", new { applicationCode, email, password = Password });
         Assert.AreEqual(HttpStatusCode.Unauthorized, response.StatusCode);
 
-        using var membershipAfter = await client.GetAsync($"/applications/{applicationId}/memberships/{userId}");
+        using var membershipAfter = await client.GetAsync($"/admin/applications/{applicationId}/memberships/{userId}");
         Assert.IsFalse(JsonDocument.Parse(await membershipAfter.Content.ReadAsStringAsync()).RootElement.GetProperty("isActive").GetBoolean());
     }
 
@@ -195,7 +195,7 @@ public sealed class AuthenticationLoginTests
     [TestMethod]
     public async Task Membership_in_one_application_does_not_grant_login_to_another()
     {
-        using var factory = await FactoryAsync(); using var client = factory.CreateClient();
+        using var factory = await FactoryAsync(); using var clientAdmin = await factory.CreateAdminClientAsync(); var client = clientAdmin.Client;
         var email = $"login-{Guid.NewGuid():N}@example.test";
         var userId = await CreateUserAsync(client, email);
         var (applicationAId, applicationACode) = await CreateApplicationAsync(client);
@@ -218,7 +218,7 @@ public sealed class AuthenticationLoginTests
             ["Identity:Lockout:MaxFailedAccessAttempts"] = "3",
             ["RateLimiting:Login:PermitLimit"] = "50"
         });
-        using var client = factory.CreateClient();
+        using var clientAdmin = await factory.CreateAdminClientAsync(); var client = clientAdmin.Client;
         var email = $"login-{Guid.NewGuid():N}@example.test";
         var userId = await CreateUserAsync(client, email);
         var (applicationId, applicationCode) = await CreateApplicationAsync(client);
@@ -243,7 +243,7 @@ public sealed class AuthenticationLoginTests
             ["RateLimiting:Login:PermitLimit"] = "3",
             ["RateLimiting:Login:WindowSeconds"] = "60"
         });
-        using var client = factory.CreateClient();
+        using var clientAdmin = await factory.CreateAdminClientAsync(); var client = clientAdmin.Client;
         var email = $"login-{Guid.NewGuid():N}@example.test";
         var userId = await CreateUserAsync(client, email);
         var (applicationId, applicationCode) = await CreateApplicationAsync(client);
@@ -264,7 +264,7 @@ public sealed class AuthenticationLoginTests
     [TestMethod]
     public async Task All_uniform_failure_causes_produce_an_identical_response_shape()
     {
-        using var factory = await FactoryAsync(); using var client = factory.CreateClient();
+        using var factory = await FactoryAsync(); using var clientAdmin = await factory.CreateAdminClientAsync(); var client = clientAdmin.Client;
 
         var unknownEmail = await LoginAsync(client, await CreateApplicationAsync(client), $"no-such-{Guid.NewGuid():N}@example.test", Password);
 
@@ -278,14 +278,14 @@ public sealed class AuthenticationLoginTests
         var inactiveUserId = await CreateUserAsync(client, inactiveUserEmail);
         var inactiveUserApp = await CreateApplicationAsync(client);
         await CreateMembershipAsync(client, inactiveUserId, inactiveUserApp.Id);
-        await client.PostAsync($"/users/{inactiveUserId}/deactivate", null);
+        await client.PostAsync($"/admin/users/{inactiveUserId}/deactivate", null);
         var inactiveUser = await LoginAsync(client, inactiveUserApp, inactiveUserEmail, Password);
 
         var inactiveAppEmail = $"login-{Guid.NewGuid():N}@example.test";
         var inactiveAppUserId = await CreateUserAsync(client, inactiveAppEmail);
         var inactiveApp = await CreateApplicationAsync(client);
         await CreateMembershipAsync(client, inactiveAppUserId, inactiveApp.Id);
-        await client.PostAsync($"/applications/{inactiveApp.Id}/deactivate", null);
+        await client.PostAsync($"/admin/applications/{inactiveApp.Id}/deactivate", null);
         var inactiveApplication = await LoginAsync(client, inactiveApp, inactiveAppEmail, Password);
 
         var missingMembershipEmail = $"login-{Guid.NewGuid():N}@example.test";
@@ -298,7 +298,7 @@ public sealed class AuthenticationLoginTests
             ["Identity:Lockout:MaxFailedAccessAttempts"] = "1",
             ["RateLimiting:Login:PermitLimit"] = "50"
         });
-        using var lockoutClient = lockoutFactory.CreateClient();
+        using var lockoutClientAdmin = await lockoutFactory.CreateAdminClientAsync(); var lockoutClient = lockoutClientAdmin.Client;
         var lockoutEmail = $"login-{Guid.NewGuid():N}@example.test";
         var lockoutUserId = await CreateUserAsync(lockoutClient, lockoutEmail);
         var (lockoutAppId, lockoutAppCode) = await CreateApplicationAsync(lockoutClient);
@@ -319,7 +319,7 @@ public sealed class AuthenticationLoginTests
     public async Task Successful_login_records_login_succeeded_event()
     {
         var (factory, recorder) = await FactoryWithRecorderAsync();
-        using var _ = factory; using var client = factory.CreateClient();
+        using var _ = factory; using var clientAdmin = await factory.CreateAdminClientAsync(); var client = clientAdmin.Client;
         var email = $"login-{Guid.NewGuid():N}@example.test";
         var userId = await CreateUserAsync(client, email);
         var (applicationId, applicationCode) = await CreateApplicationAsync(client);
@@ -328,7 +328,7 @@ public sealed class AuthenticationLoginTests
         using var response = await client.PostAsJsonAsync("/auth/login", new { applicationCode, email, password = Password });
         Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
 
-        var successEvent = recorder.Events.Single(e => e.Type == SecurityEventType.LoginSucceeded);
+        var successEvent = recorder.Events.Single(e => e.Type == SecurityEventType.LoginSucceeded && e.UserId == userId);
         Assert.AreEqual(userId, successEvent.UserId);
         Assert.AreEqual(applicationId, successEvent.ApplicationId);
     }
@@ -342,7 +342,7 @@ public sealed class AuthenticationLoginTests
             ["Identity:Lockout:MaxFailedAccessAttempts"] = "2",
             ["RateLimiting:Login:PermitLimit"] = "50"
         });
-        using var _ = factory; using var client = factory.CreateClient();
+        using var _ = factory; using var clientAdmin = await factory.CreateAdminClientAsync(); var client = clientAdmin.Client;
         var email = $"login-{Guid.NewGuid():N}@example.test";
         var userId = await CreateUserAsync(client, email);
         var (applicationId, applicationCode) = await CreateApplicationAsync(client);
@@ -386,7 +386,7 @@ public sealed class AuthenticationLoginTests
         }
 
         var recorder = new RecordingSecurityEventRecorder();
-        var factory = new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
+        var factory = new WebApplicationFactory<Program>().WithGlobalAdministrators().WithWebHostBuilder(builder =>
             builder.ConfigureServices(services => services.AddSingleton<ISecurityEventRecorder>(recorder)));
 
         using var scope = factory.Services.CreateScope();
@@ -413,7 +413,7 @@ public sealed class AuthenticationLoginTests
 
     private static async Task<Guid> CreateUserAsync(HttpClient client, string email)
     {
-        using var response = await client.PostAsJsonAsync("/users", new { email, password = Password, firstName = "A", lastName = "B", displayName = "AB" });
+        using var response = await client.PostAsJsonAsync("/admin/users", new { email, password = Password, firstName = "A", lastName = "B", displayName = "AB" });
         Assert.AreEqual(HttpStatusCode.Created, response.StatusCode);
         return JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement.GetProperty("id").GetGuid();
     }
@@ -421,7 +421,7 @@ public sealed class AuthenticationLoginTests
     private static async Task<(Guid Id, string Code)> CreateApplicationAsync(HttpClient client)
     {
         var code = $"app-{Guid.NewGuid():N}";
-        using var response = await client.PostAsJsonAsync("/applications", new { code, name = "Application" });
+        using var response = await client.PostAsJsonAsync("/admin/applications", new { code, name = "Application" });
         Assert.AreEqual(HttpStatusCode.Created, response.StatusCode);
         var id = JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement.GetProperty("id").GetGuid();
         return (id, code);
@@ -429,7 +429,7 @@ public sealed class AuthenticationLoginTests
 
     private static async Task CreateMembershipAsync(HttpClient client, Guid userId, Guid applicationId)
     {
-        using var response = await client.PostAsJsonAsync($"/applications/{applicationId}/memberships", new { userId });
+        using var response = await client.PostAsJsonAsync($"/admin/applications/{applicationId}/memberships", new { userId });
         Assert.AreEqual(HttpStatusCode.Created, response.StatusCode);
     }
 
@@ -454,7 +454,7 @@ public sealed class AuthenticationLoginTests
             Environment.SetEnvironmentVariable(key, configOverrides?.GetValueOrDefault(key.Replace("__", ":")));
         }
 
-        var factory = new WebApplicationFactory<Program>();
+        var factory = new WebApplicationFactory<Program>().WithGlobalAdministrators();
         using var scope = factory.Services.CreateScope();
         await scope.ServiceProvider.GetRequiredService<AuthenticationDbContext>().Database.MigrateAsync();
         return factory;
