@@ -13,7 +13,7 @@
 
 ## Requirement Completeness
 
-- [ ] No [NEEDS CLARIFICATION] markers remain
+- [x] No [NEEDS CLARIFICATION] markers remain
 - [x] Requirements are testable and unambiguous except identified decisions
 - [x] Success criteria are measurable
 - [x] Success criteria are technology-agnostic
@@ -31,4 +31,4 @@
 
 ## Notes
 
-- Three privacy/security decisions require clarification before planning.
+- Clarified formats/limits, public opaque-reference retrieval, and embedded-metadata stripping.

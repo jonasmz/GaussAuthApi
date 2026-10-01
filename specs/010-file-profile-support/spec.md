@@ -8,6 +8,14 @@
 
 **Input**: User profile images can be safely uploaded, retrieved, replaced, and removed without becoming a generic file-management feature.
 
+## Clarifications
+
+### Session 2026-10-01
+
+- Q: What formats and limits are accepted for profile images? → A: JPEG, PNG, and WebP; maximum 5 MB and 4096×4096 pixels, with configurable limits.
+- Q: Who can retrieve a profile image? → A: Public retrieval through its opaque reference only; upload, replacement, and removal require authentication and profile ownership.
+- Q: What happens to embedded image metadata? → A: Strip EXIF and all unnecessary embedded metadata before final storage; safely reject any image that cannot be decoded, sanitized, and re-encoded into an allowed format.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Manage My Profile Image (Priority: P1)
@@ -29,7 +37,7 @@ An authenticated user uploads a profile image for their own global identity, rep
 
 ### User Story 2 - Safely Retrieve a Profile Image (Priority: P1)
 
-An authorized reader retrieves a current profile image without gaining arbitrary filesystem access or receiving untrusted file metadata.
+Any reader retrieves a current profile image through its opaque reference without gaining arbitrary filesystem access or receiving untrusted file metadata.
 
 **Why this priority**: An uploaded image is useful only when it can be served safely.
 
@@ -37,7 +45,7 @@ An authorized reader retrieves a current profile image without gaining arbitrary
 
 **Acceptance Scenarios**:
 
-1. **Given** a current avatar, **When** a caller with the selected read access requests it, **Then** the service returns only that image with a trusted content type and safe inline-serving behavior.
+1. **Given** a current avatar, **When** any caller requests its opaque reference, **Then** the service returns only that image with a trusted content type and safe inline-serving behavior.
 2. **Given** a missing, removed, or malformed reference, **When** it is requested, **Then** the service returns a safe not-found or authorization response without filesystem details.
 
 ---
@@ -70,18 +78,18 @@ The service rejects unsupported, malformed, spoofed, oversized, or unsafe image 
 
 - **FR-001**: The system MUST support upload, replacement, retrieval, and removal of exactly one global profile image per user; it MUST NOT introduce general documents, attachments, galleries, sharing, or application-specific assets.
 - **FR-002**: Self-service upload, replacement, and removal MUST use the trusted authenticated user identity and MUST NOT accept a caller-selected target user identity.
-- **FR-003**: The system MUST allow only [NEEDS CLARIFICATION: which raster formats and default maximum upload size/dimensions are accepted?] and MUST reject SVG and all non-allowlisted content.
+- **FR-003**: The system MUST allow only JPEG, PNG, and WebP images, with a default maximum size of 5 MB and dimensions of 4096×4096 pixels; these limits MUST be configurable. SVG and all non-allowlisted content MUST be rejected.
 - **FR-004**: The system MUST enforce configurable request-body, file-byte, and image-dimension/pixel limits before committing an avatar.
 - **FR-005**: The system MUST validate actual file signatures and image decodability; filename extension, multipart declaration, and client MIME type alone MUST never authorize a file type.
 - **FR-006**: The system MUST create a server-generated opaque logical reference and storage name. User-provided filenames, names, email, display name, MIME declarations, and paths MUST NOT determine physical storage paths or response headers.
 - **FR-007**: The global profile MUST retain only a logical avatar reference and necessary trusted metadata, never file bytes or environment-specific filesystem paths.
 - **FR-008**: Stored image bytes MUST remain in a configurable local, server-controlled, non-executable storage root. Domain objects MUST remain independent of filesystem, HTTP, streams, multipart types, and image-processing concerns.
 - **FR-009**: Image retrieval MUST use controlled known-avatar resolution, trusted media type, and safe response headers; it MUST prevent traversal and arbitrary local-file access.
-- **FR-010**: Profile-image retrieval is [NEEDS CLARIFICATION: publicly readable by opaque reference, authenticated for any valid user, or restricted to the owner?].
+- **FR-010**: Profile-image retrieval MUST be publicly readable only through its opaque reference. Upload, replacement, and removal MUST require authenticated ownership of the profile.
 - **FR-011**: Replacement MUST validate and persist the new image before it becomes current, clear/retire the prior image only when safe, and prevent normal successful operations from leaving orphan files.
 - **FR-012**: Removal MUST clear the avatar reference and remove only the corresponding file. Its no-current-avatar behavior MUST be idempotent or explicitly reported consistently.
 - **FR-013**: The system MUST use compensating cleanup for filesystem/database partial failures. Failed cleanup MUST be safely observable and MUST NOT expose physical paths to callers.
-- **FR-014**: Upload metadata is [NEEDS CLARIFICATION: served unchanged with embedded EXIF metadata preserved, or metadata must be stripped before storage?]. The selected behavior MUST be documented accurately.
+- **FR-014**: Before final storage, the system MUST remove EXIF and all embedded location, device, capture-date, and other metadata not required to render the image. It MUST use an established safe decode-and-reencode mechanism rather than custom binary manipulation, continue to enforce configured size/dimension limits, retain an allowed result format, and reject any image that cannot be safely processed.
 - **FR-015**: Meaningful avatar update, removal, and security-relevant rejection events MUST be auditable without image bytes, credentials, raw multipart content, or unnecessary filesystem details.
 - **FR-016**: Logs MUST be structured and limited to safe identifiers and operation results. External errors MUST not disclose physical paths, storage-root configuration, raw content, or internal exception types.
 - **FR-017**: Profile-file storage and profile metadata MUST be documented as coordinated backup/restore concerns. Development storage persistence must be deliberate and isolated to this project.
@@ -106,7 +114,7 @@ The service rejects unsupported, malformed, spoofed, oversized, or unsafe image 
 ## Assumptions
 
 - The existing global `UserProfile` avatar reference is the sole data-model extension unless a smaller safe metadata representation is demonstrably insufficient.
-- Images are stored unchanged after validation; resizing, transcoding, thumbnails, and generic media workflows are outside the feature.
+- Images are safely decoded, stripped of unnecessary embedded metadata, and re-encoded into an allowed format before storage; resizing, thumbnails, and generic media workflows remain outside the feature.
 - Local storage is used through focused application ports; no cloud or remote object storage is selected.
 - Existing session authentication, safe errors, rate limiting, and SecurityEvent policies remain authoritative.
 - The implementation will use a simple compensating cleanup strategy, not distributed transactions or workers.
