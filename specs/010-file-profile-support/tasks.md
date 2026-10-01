@@ -12,8 +12,8 @@
 
 **Purpose**: Establish safe project-scoped configuration and dependency review.
 
-- [ ] T001 Review ImageSharp license suitability, add the approved Infrastructure-only package, and document it in `src/GaussAuth.Infrastructure/GaussAuth.Infrastructure.csproj` and `specs/010-file-profile-support/research.md`.
-- [ ] T002 Add ignored private profile-image root configuration, project-scoped development volume/bind behavior, and safe examples in `.gitignore`, `.env.example`, and `compose.dev.yml` without versioning storage paths containing user content.
+- [X] T001 Review ImageSharp license suitability, add the approved Infrastructure-only package, and document it in `src/GaussAuth.Infrastructure/GaussAuth.Infrastructure.csproj` and `specs/010-file-profile-support/research.md`.
+- [X] T002 Add ignored private profile-image root configuration, project-scoped development volume/bind behavior, and safe examples in `.gitignore`, `.env.example`, and `compose.dev.yml` without versioning storage paths containing user content.
 
 ---
 
@@ -21,14 +21,14 @@
 
 **Purpose**: Establish the opaque avatar model, controlled storage, validation, and persistence boundary required by all stories.
 
-- [ ] T003 Extend `src/GaussAuth.Domain/Users/userProfile.entity.cs` with controlled set/clear avatar-reference transitions that accept only an opaque logical reference and never paths, file bytes, or HTTP/filesystem types.
-- [ ] T004 Add avatar application results, commands, limits, image asset records, and focused storage/processor/profile-lock ports in `src/GaussAuth.Application/Profiles/Avatars/` and `src/GaussAuth.Application/Profiles/Avatars/Ports/`.
-- [ ] T005 Add `ProfileImages` options in `src/GaussAuth.Infrastructure/ProfileImages/` enforcing default maximum input/output size 5 MB and maximum dimensions 4096×4096, both configurable; reject invalid configuration at startup.
-- [ ] T006 Implement ImageSharp image inspection/sanitization in `src/GaussAuth.Infrastructure/ProfileImages/` that accepts only JPEG/PNG/WebP based on actual content, decodes safely, enforces dimension/output limits, strips EXIF/IPTC/XMP metadata, and re-encodes only an allowed format.
-- [ ] T007 Implement local generated-name temporary/final storage and trusted opaque-reference parsing in `src/GaussAuth.Infrastructure/ProfileImages/`; resolve only beneath configured root and never use original filename, client MIME, PII, or untrusted paths.
-- [ ] T008 Add locked profile retrieval/reference persistence support and EF migration/model updates in `src/GaussAuth.Application/Users/Ports/`, `src/GaussAuth.Infrastructure/Persistence/`, and `src/GaussAuth.Infrastructure/Persistence/Migrations/` for serialized avatar updates without a generic StoredFile entity.
-- [ ] T009 Register ImageSharp adapter, local storage, profile locking, limits, and safe cleanup logging in `src/GaussAuth.Infrastructure/DependencyInjection/infrastructureServiceCollectionExtensions.extension.cs`.
-- [ ] T010 Add foundation tests in `tests/GaussAuth.Foundation.Tests/profileImageTests.test.cs` proving generated opaque references, no traversal/original-name use, accepted JPEG/PNG/WebP signatures, invalid image rejection, metadata stripping, configured byte/dimension limits, and Domain/Application dependency boundaries.
+- [X] T003 Extend `src/GaussAuth.Domain/Users/userProfile.entity.cs` with controlled set/clear avatar-reference transitions that accept only an opaque logical reference and never paths, file bytes, or HTTP/filesystem types.
+- [X] T004 Add avatar application results, commands, limits, image asset records, and focused storage/processor/profile-lock ports in `src/GaussAuth.Application/Profiles/Avatars/` and `src/GaussAuth.Application/Profiles/Avatars/Ports/`.
+- [X] T005 Add `ProfileImages` options in `src/GaussAuth.Infrastructure/ProfileImages/` enforcing default maximum input/output size 5 MB and maximum dimensions 4096×4096, both configurable; reject invalid configuration at startup.
+- [X] T006 Implement ImageSharp image inspection/sanitization in `src/GaussAuth.Infrastructure/ProfileImages/` that accepts only JPEG/PNG/WebP based on actual content, decodes safely, enforces dimension/output limits, strips EXIF/IPTC/XMP metadata, and re-encodes only an allowed format.
+- [X] T007 Implement local generated-name temporary/final storage and trusted opaque-reference parsing in `src/GaussAuth.Infrastructure/ProfileImages/`; resolve only beneath configured root and never use original filename, client MIME, PII, or untrusted paths.
+- [X] T008 Add locked profile retrieval/reference persistence support and EF migration/model updates in `src/GaussAuth.Application/Users/Ports/`, `src/GaussAuth.Infrastructure/Persistence/`, and `src/GaussAuth.Infrastructure/Persistence/Migrations/` for serialized avatar updates without a generic StoredFile entity. *(No schema change required: the existing nullable `UserProfiles.AvatarReference` column already holds the opaque reference, so no migration was generated; the locked read is `IUserRepository.GetByIdForUpdateAsync`.)*
+- [X] T009 Register ImageSharp adapter, local storage, profile locking, limits, and safe cleanup logging in `src/GaussAuth.Infrastructure/DependencyInjection/infrastructureServiceCollectionExtensions.extension.cs`.
+- [X] T010 Add foundation tests in `tests/GaussAuth.Foundation.Tests/profileImageTests.test.cs` proving generated opaque references, no traversal/original-name use, accepted JPEG/PNG/WebP signatures, invalid image rejection, metadata stripping, configured byte/dimension limits, and Domain/Application dependency boundaries.
 
 **Checkpoint**: Files can be safely inspected, sanitized, stored, resolved, and compensated without exposing a public route.
 

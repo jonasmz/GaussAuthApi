@@ -83,4 +83,16 @@ public sealed class User
         Profile.Update(firstName, lastName, displayName, phoneNumber, avatarReference, now);
         UpdatedAt = now;
     }
+
+    public void SetAvatarReference(string avatarReference, DateTimeOffset now)
+    {
+        Profile.SetAvatarReference(avatarReference, now);
+        UpdatedAt = now;
+    }
+
+    public void ClearAvatarReference(DateTimeOffset now)
+    {
+        Profile.ClearAvatarReference(now);
+        UpdatedAt = now;
+    }
 }

@@ -16,11 +16,15 @@ using GaussAuth.Infrastructure.Identity;
 using GaussAuth.Infrastructure.AuthorizationContext;
 using GaussAuth.Infrastructure.Passwords;
 using GaussAuth.Application.Passwords.Ports;
+using GaussAuth.Application.Profiles.Avatars;
+using GaussAuth.Application.Profiles.Avatars.Ports;
+using GaussAuth.Infrastructure.ProfileImages;
 using GaussAuth.Infrastructure.Persistence;
 using GaussAuth.Infrastructure.Security;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
 
@@ -110,6 +114,13 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddScoped<ISecurityEventQueryRepository, SecurityEventQueryRepository>();
         services.AddSingleton<IGlobalAuditReviewerPolicy, ConfiguredGlobalAuditReviewerPolicy>();
         services.AddScoped<ISecurityEventRecorder, PersistedSecurityEventRecorder>();
+
+        var profileImages = ProfileImagesOptions.Load(configuration, environment);
+        services.AddSingleton(profileImages);
+        services.AddSingleton(profileImages.Limits);
+        services.AddSingleton<IProfileImageProcessor>(new ImageSharpProfileImageProcessor(profileImages.Limits));
+        services.AddSingleton<IProfileImageStorage>(provider => new LocalProfileImageStorage(
+            profileImages, provider.GetRequiredService<ILogger<LocalProfileImageStorage>>()));
 
         return services;
     }

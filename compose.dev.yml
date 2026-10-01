@@ -30,6 +30,9 @@ services:
       ASPNETCORE_ENVIRONMENT: Development
       Sessions__Signing__PrivateKeyPem: ${SESSIONS_SIGNING_KEY_PEM:-}
       PasswordRecovery__DeliveryFile: ${PASSWORD_RECOVERY_DELIVERY_FILE:-}
+      ProfileImages__RootPath: ${PROFILE_IMAGES_ROOT:-${PROJECT_DIR}/.profile-images}
+      ProfileImages__MaxBytes: ${PROFILE_IMAGES_MAX_BYTES:-5242880}
+      ProfileImages__MaxDimension: ${PROFILE_IMAGES_MAX_DIMENSION:-4096}
     command: ["dotnet", "run", "--project", "src/GaussAuth.Api", "--urls", "http://0.0.0.0:8080"]
     networks:
       - foundation

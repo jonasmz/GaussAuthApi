@@ -18,6 +18,19 @@ public sealed class UserRepository(AuthenticationDbContext context) : IUserRepos
             .Include(user => user.Profile)
             .SingleOrDefaultAsync(user => user.Id == id, cancellationToken);
 
+    public Task<User?> GetByIdForUpdateAsync(Guid id, CancellationToken cancellationToken)
+    {
+        if (context.Database.CurrentTransaction is null)
+        {
+            throw new InvalidOperationException("A transaction is required to lock a user profile.");
+        }
+
+        return context.DomainUsers
+            .FromSqlInterpolated($"SELECT * FROM \"Users\" WHERE \"Id\" = {id} FOR UPDATE")
+            .Include(user => user.Profile)
+            .SingleOrDefaultAsync(cancellationToken);
+    }
+
     public Task<User?> GetByNormalizedEmailAsync(string normalizedEmail, CancellationToken cancellationToken) =>
         context.DomainUsers
             .Include(user => user.Profile)

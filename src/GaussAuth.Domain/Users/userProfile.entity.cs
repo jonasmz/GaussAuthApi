@@ -100,4 +100,39 @@ public sealed class UserProfile
         AvatarReference = avatarReference;
         UpdatedAt = now;
     }
+
+    public void SetAvatarReference(string avatarReference, DateTimeOffset now)
+    {
+        if (!IsValidOpaqueReference(avatarReference))
+        {
+            throw new ArgumentException("Avatar reference must be a simple opaque token.", nameof(avatarReference));
+        }
+
+        AvatarReference = avatarReference;
+        UpdatedAt = now;
+    }
+
+    public void ClearAvatarReference(DateTimeOffset now)
+    {
+        AvatarReference = null;
+        UpdatedAt = now;
+    }
+
+    private static bool IsValidOpaqueReference(string? value)
+    {
+        if (string.IsNullOrEmpty(value) || value.Length > 128 || value.Contains("..", StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        foreach (var character in value)
+        {
+            if (!(char.IsAsciiLetterOrDigit(character) || character is '.' or '-' or '_'))
+            {
+                return false;
+            }
+        }
+
+        return char.IsAsciiLetterOrDigit(value[0]);
+    }
 }

@@ -10,6 +10,12 @@ public interface IUserRepository
 
     Task<User?> GetByIdAsync(Guid id, CancellationToken cancellationToken);
 
+    /// <summary>
+    /// Loads the user with its profile while holding a row lock until the active transaction ends,
+    /// serializing concurrent profile avatar changes. Requires an active transaction.
+    /// </summary>
+    Task<User?> GetByIdForUpdateAsync(Guid id, CancellationToken cancellationToken);
+
     Task<User?> GetByNormalizedEmailAsync(string normalizedEmail, CancellationToken cancellationToken);
 
     Task SaveChangesAsync(CancellationToken cancellationToken);

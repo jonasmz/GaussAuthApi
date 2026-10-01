@@ -17,5 +17,7 @@
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.12" PrivateAssets="all" />
     <PackageReference Include="Microsoft.IdentityModel.JsonWebTokens" Version="8.23.0" />
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.3" />
+    <!-- License: Six Labors Split License (free for open source/Apache-2.0 use or qualifying small companies; commercial license otherwise). Approved by project owner for profile-image sanitization; Infrastructure only. -->
+    <PackageReference Include="SixLabors.ImageSharp" Version="4.1.2" />
   </ItemGroup>
 </Project>

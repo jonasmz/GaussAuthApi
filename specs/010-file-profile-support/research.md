@@ -6,6 +6,8 @@
 
 **Alternatives considered**: `System.Drawing.Common` is unsupported for this Linux deployment; SkiaSharp introduces native binaries; Magick.NET is heavier. ImageSharp licensing must be verified before adoption.
 
+**License review (T001)**: SixLabors.ImageSharp 4.1.2 is distributed under the Six Labors Split License: free under Apache-2.0 for open-source use and for qualifying small organizations, with a paid commercial license required otherwise. The project owner approved its use (2026-10-01) and is responsible for confirming the license tier applies to their deployment. The dependency is referenced only by `GaussAuth.Infrastructure`.
+
 ## Decision: opaque versioned reference on UserProfile
 
 **Rationale**: Keep the existing avatar reference as a generated UUID plus validated extension. It is enough for one avatar, avoids a speculative generic file entity, never exposes a path or PII, and changes on replacement for simple cache invalidation.
