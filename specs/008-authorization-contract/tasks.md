@@ -12,8 +12,8 @@
 
 **Purpose**: Verify contract inputs and external secret hygiene before implementation.
 
-- [ ] T001 Review `specs/008-authorization-contract/spec.md`, `plan.md`, `research.md`, `data-model.md`, `contracts/authorization-context-api.md`, and `quickstart.md` alongside existing Sessions and Authorization composition.
-- [ ] T002 Verify `.gitignore`, `.env.example`, and `compose.dev.yml` keep consumer service credentials external and provide no real Application secret in versioned configuration.
+- [X] T001 Review `specs/008-authorization-contract/spec.md`, `plan.md`, `research.md`, `data-model.md`, `contracts/authorization-context-api.md`, and `quickstart.md` alongside existing Sessions and Authorization composition.
+- [X] T002 Verify `.gitignore`, `.env.example`, and `compose.dev.yml` keep consumer service credentials external and provide no real Application secret in versioned configuration.
 
 ---
 
@@ -21,12 +21,12 @@
 
 **Purpose**: Establish shared current-authorization and service-credential boundaries. This phase blocks every story.
 
-- [ ] T003 Add safe authorization-context security-event values and recorder coverage in `src/GaussAuth.Application/Security/securityEventType.enum.cs` and `tests/GaussAuth.Foundation.Tests/authorizationContractTests.test.cs`.
-- [ ] T004 Define `IConsumerCredentialValidator`, safe validation result, and authorization-context result contracts in `src/GaussAuth.Application/AuthorizationContext/Ports/` and `src/GaussAuth.Application/AuthorizationContext/`; no service secret or Infrastructure type may cross the port.
-- [ ] T005 Extend `src/GaussAuth.Application/Authorization/Ports/userRoleRepository.interface.cs` and `src/GaussAuth.Infrastructure/Persistence/userRoleRepository.repository.cs` with current active-role resolution scoped to `(UserId, ApplicationId)`; role records MUST expose stable ID/name only and exclude inactive assignment, membership, role, user, or application.
-- [ ] T006 Implement `ConfiguredConsumerCredentialValidator` in `src/GaussAuth.Infrastructure/AuthorizationContext/` using external `AuthorizationConsumers` configuration with one distinct current secret and optional retiring secret per Application code; reject cross-application use and configured secret reuse, use platform constant-time comparison, and never log or return secrets.
-- [ ] T007 Register the consumer credential validator and authorization-context service in `src/GaussAuth.Infrastructure/DependencyInjection/infrastructureServiceCollectionExtensions.extension.cs` and `src/GaussAuth.Api/DependencyInjection/applicationServiceCollectionExtensions.extension.cs`.
-- [ ] T008 Add configurable `authorization-context` credential-bearing rate limiting in `src/GaussAuth.Api/DependencyInjection/apiServiceCollectionExtensions.extension.cs` with `RateLimiting:AuthorizationContext:PermitLimit` default 600 and `WindowSeconds` default 60.
+- [X] T003 Add safe authorization-context security-event values and recorder coverage in `src/GaussAuth.Application/Security/securityEventType.enum.cs` and `tests/GaussAuth.Foundation.Tests/authorizationContractTests.test.cs`.
+- [X] T004 Define `IConsumerCredentialValidator`, safe validation result, and authorization-context result contracts in `src/GaussAuth.Application/AuthorizationContext/Ports/` and `src/GaussAuth.Application/AuthorizationContext/`; no service secret or Infrastructure type may cross the port.
+- [X] T005 Extend `src/GaussAuth.Application/Authorization/Ports/userRoleRepository.interface.cs` and `src/GaussAuth.Infrastructure/Persistence/userRoleRepository.repository.cs` with current active-role resolution scoped to `(UserId, ApplicationId)`; role records MUST expose stable ID/name only and exclude inactive assignment, membership, role, user, or application.
+- [X] T006 Implement `ConfiguredConsumerCredentialValidator` in `src/GaussAuth.Infrastructure/AuthorizationContext/` using external `AuthorizationConsumers` configuration with one distinct current secret and optional retiring secret per Application code; reject cross-application use and configured secret reuse, use platform constant-time comparison, and never log or return secrets.
+- [X] T007 Register the consumer credential validator and authorization-context service in `src/GaussAuth.Infrastructure/DependencyInjection/infrastructureServiceCollectionExtensions.extension.cs` and `src/GaussAuth.Api/DependencyInjection/applicationServiceCollectionExtensions.extension.cs`.
+- [X] T008 Add configurable `authorization-context` credential-bearing rate limiting in `src/GaussAuth.Api/DependencyInjection/apiServiceCollectionExtensions.extension.cs` with `RateLimiting:AuthorizationContext:PermitLimit` default 600 and `WindowSeconds` default 60.
 
 **Checkpoint**: Consumer authentication, current role lookup, and safe contract results are available without exposing service credentials.
 

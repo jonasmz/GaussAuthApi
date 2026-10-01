@@ -16,5 +16,7 @@ public enum SecurityEventType
     PasswordChanged,
     PasswordRecoveryRequested,
     PasswordReset,
-    PasswordResetFailed
+    PasswordResetFailed,
+    AuthorizationContextResolved,
+    AuthorizationContextRejected
 }
