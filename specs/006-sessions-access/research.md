@@ -1,6 +1,6 @@
 # Research: Authenticated Sessions and Access Credentials
 
-All technical unknowns left open by the clarified specification are resolved here. No `NEEDS CLARIFICATION` item remains.
+All technical unknowns left open by the clarified specification are resolved here. No open clarification items remain.
 
 ## R1. Access credential format and signing algorithm
 
