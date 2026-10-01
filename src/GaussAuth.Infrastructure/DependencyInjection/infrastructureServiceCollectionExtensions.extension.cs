@@ -1,6 +1,9 @@
 using GaussAuth.Application.Users.Ports;
 using GaussAuth.Application.Applications.Ports;
 using GaussAuth.Application.Memberships.Ports;
+using GaussAuth.Application.Roles.Ports;
+using GaussAuth.Application.Permissions.Ports;
+using GaussAuth.Application.Authorization.Ports;
 using GaussAuth.Infrastructure.Identity;
 using GaussAuth.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Identity;
@@ -46,6 +49,10 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddScoped<IUserRepository, UserRepository>();
         services.AddScoped<IApplicationRepository, ApplicationRepository>();
         services.AddScoped<IApplicationMembershipRepository, ApplicationMembershipRepository>();
+        services.AddScoped<IRoleRepository, RoleRepository>();
+        services.AddScoped<IPermissionRepository, PermissionRepository>();
+        services.AddScoped<IRolePermissionRepository, RolePermissionRepository>();
+        services.AddScoped<IUserRoleRepository, UserRoleRepository>();
         services.AddScoped<ICredentialProvisioningService, IdentityCredentialProvisioningService>();
 
         return services;

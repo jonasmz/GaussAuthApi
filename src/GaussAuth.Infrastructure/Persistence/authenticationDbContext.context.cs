@@ -1,6 +1,9 @@
 using GaussAuth.Domain.Users;
 using DomainApplication = GaussAuth.Domain.Applications.Application;
 using GaussAuth.Domain.Memberships;
+using GaussAuth.Domain.Roles;
+using DomainPermission = GaussAuth.Domain.Permissions.Permission;
+using GaussAuth.Domain.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
@@ -15,6 +18,10 @@ public sealed class AuthenticationDbContext(DbContextOptions<AuthenticationDbCon
     public DbSet<UserProfile> UserProfiles => Set<UserProfile>();
     public DbSet<DomainApplication> Applications => Set<DomainApplication>();
     public DbSet<ApplicationMembership> ApplicationMemberships => Set<ApplicationMembership>();
+    public DbSet<Role> Roles => Set<Role>();
+    public DbSet<DomainPermission> Permissions => Set<DomainPermission>();
+    public DbSet<RolePermission> RolePermissions => Set<RolePermission>();
+    public DbSet<UserRole> UserRoles => Set<UserRole>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -61,9 +68,43 @@ public sealed class AuthenticationDbContext(DbContextOptions<AuthenticationDbCon
             membership.ToTable("ApplicationMemberships");
             membership.HasKey(x => x.Id);
             membership.Property(x => x.Id).ValueGeneratedNever();
-            membership.HasIndex(x => new { x.UserId, x.ApplicationId }).IsUnique().HasDatabaseName("IX_ApplicationMemberships_UserId_ApplicationId");
+            membership.HasAlternateKey(x => new { x.UserId, x.ApplicationId }).HasName("AK_ApplicationMemberships_UserId_ApplicationId");
             membership.HasOne<User>().WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Restrict);
             membership.HasOne<DomainApplication>().WithMany().HasForeignKey(x => x.ApplicationId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        builder.Entity<Role>(role =>
+        {
+            role.ToTable("Roles"); role.HasKey(x => x.Id); role.Property(x => x.Id).ValueGeneratedNever();
+            role.Property(x => x.Name).HasMaxLength(200).IsRequired(); role.Property(x => x.NormalizedName).HasMaxLength(200).IsRequired(); role.Property(x => x.Description).HasMaxLength(500);
+            role.HasIndex(x => new { x.ApplicationId, x.NormalizedName }).IsUnique().HasDatabaseName("IX_Roles_ApplicationId_NormalizedName");
+            role.HasAlternateKey(x => new { x.Id, x.ApplicationId }).HasName("AK_Roles_Id_ApplicationId");
+            role.HasOne<DomainApplication>().WithMany().HasForeignKey(x => x.ApplicationId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        builder.Entity<DomainPermission>(permission =>
+        {
+            permission.ToTable("Permissions"); permission.HasKey(x => x.Id); permission.Property(x => x.Id).ValueGeneratedNever();
+            permission.Property(x => x.Code).HasMaxLength(128).IsRequired(); permission.Property(x => x.Description).HasMaxLength(500);
+            permission.HasIndex(x => new { x.ApplicationId, x.Code }).IsUnique().HasDatabaseName("IX_Permissions_ApplicationId_Code");
+            permission.HasAlternateKey(x => new { x.Id, x.ApplicationId }).HasName("AK_Permissions_Id_ApplicationId");
+            permission.HasOne<DomainApplication>().WithMany().HasForeignKey(x => x.ApplicationId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        builder.Entity<RolePermission>(assignment =>
+        {
+            assignment.ToTable("RolePermissions"); assignment.HasKey(x => x.Id); assignment.Property(x => x.Id).ValueGeneratedNever();
+            assignment.HasIndex(x => new { x.RoleId, x.PermissionId }).IsUnique().HasDatabaseName("IX_RolePermissions_RoleId_PermissionId");
+            assignment.HasOne<Role>().WithMany().HasForeignKey(x => new { x.RoleId, x.ApplicationId }).HasPrincipalKey(x => new { x.Id, x.ApplicationId }).OnDelete(DeleteBehavior.Restrict);
+            assignment.HasOne<DomainPermission>().WithMany().HasForeignKey(x => new { x.PermissionId, x.ApplicationId }).HasPrincipalKey(x => new { x.Id, x.ApplicationId }).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        builder.Entity<UserRole>(assignment =>
+        {
+            assignment.ToTable("UserRoles"); assignment.HasKey(x => x.Id); assignment.Property(x => x.Id).ValueGeneratedNever();
+            assignment.HasIndex(x => new { x.UserId, x.RoleId, x.ApplicationId }).IsUnique().HasDatabaseName("IX_UserRoles_UserId_RoleId_ApplicationId");
+            assignment.HasOne<ApplicationMembership>().WithMany().HasForeignKey(x => new { x.UserId, x.ApplicationId }).HasPrincipalKey(x => new { x.UserId, x.ApplicationId }).OnDelete(DeleteBehavior.Restrict);
+            assignment.HasOne<Role>().WithMany().HasForeignKey(x => new { x.RoleId, x.ApplicationId }).HasPrincipalKey(x => new { x.Id, x.ApplicationId }).OnDelete(DeleteBehavior.Restrict);
         });
     }
 }

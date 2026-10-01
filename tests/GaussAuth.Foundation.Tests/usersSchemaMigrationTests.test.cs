@@ -17,7 +17,7 @@ public sealed class UsersSchemaMigrationTests
 
         await db.Database.MigrateAsync();
         await db.Database.MigrateAsync();
-        Assert.AreEqual(3, (await db.Database.GetAppliedMigrationsAsync()).Count());
+        Assert.AreEqual(4, (await db.Database.GetAppliedMigrationsAsync()).Count());
         Assert.IsEmpty(await db.Database.GetPendingMigrationsAsync());
 
         var connection = db.Database.GetDbConnection();
@@ -38,11 +38,12 @@ public sealed class UsersSchemaMigrationTests
         var expectedTables = new[]
         {
             "AspNetUsers", "AspNetUserClaims", "AspNetUserLogins", "AspNetUserTokens",
-            "__EFMigrationsHistory", "Users", "UserProfiles", "Applications", "ApplicationMemberships"
+            "__EFMigrationsHistory", "Users", "UserProfiles", "Applications", "ApplicationMemberships",
+            "Roles", "Permissions", "RolePermissions", "UserRoles"
         };
         CollectionAssert.AreEquivalent(expectedTables, tables.ToArray());
 
-        var forbiddenNamePatterns = new[] { "Role", "Permission", "Session" };
+        var forbiddenNamePatterns = new[] { "Session" };
         Assert.IsFalse(tables.Any(table =>
             forbiddenNamePatterns.Any(pattern => table.Contains(pattern, StringComparison.OrdinalIgnoreCase))));
 
@@ -72,7 +73,7 @@ public sealed class UsersSchemaMigrationTests
                     ON tc.constraint_name = ccu.constraint_name
                 WHERE tc.constraint_type = 'FOREIGN KEY'
                   AND tc.table_schema = 'public'
-                  AND tc.table_name IN ('Users', 'UserProfiles', 'ApplicationMemberships')
+                  AND tc.table_name IN ('Users', 'UserProfiles', 'ApplicationMemberships', 'Roles', 'Permissions', 'RolePermissions', 'UserRoles')
                 """;
             await using var reader = await fkCommand.ExecuteReaderAsync();
             while (await reader.ReadAsync())
@@ -85,5 +86,11 @@ public sealed class UsersSchemaMigrationTests
         Assert.IsTrue(foreignKeys.Contains(("UserProfiles", "Users")));
         Assert.IsTrue(foreignKeys.Contains(("ApplicationMemberships", "Users")));
         Assert.IsTrue(foreignKeys.Contains(("ApplicationMemberships", "Applications")));
+        Assert.IsTrue(foreignKeys.Contains(("Roles", "Applications")));
+        Assert.IsTrue(foreignKeys.Contains(("Permissions", "Applications")));
+        Assert.IsTrue(foreignKeys.Contains(("RolePermissions", "Roles")));
+        Assert.IsTrue(foreignKeys.Contains(("RolePermissions", "Permissions")));
+        Assert.IsTrue(foreignKeys.Contains(("UserRoles", "ApplicationMemberships")));
+        Assert.IsTrue(foreignKeys.Contains(("UserRoles", "Roles")));
     }
 }
