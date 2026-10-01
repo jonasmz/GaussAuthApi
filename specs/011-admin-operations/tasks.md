@@ -1,0 +1,174 @@
+# Tasks: Administrative Operations
+
+**Input**: Design documents from `/specs/011-admin-operations/`
+
+**Prerequisites**: plan.md, spec.md, research.md, data-model.md, contracts/admin-api.md, quickstart.md
+
+**Tests**: Essential authorization, isolation, lifecycle, session, secret, audit, and migration tests are required by the specification. Run all .NET commands in the Docker `sdk` container (`docker compose -f compose.dev.yml exec sdk dotnet ...`); do not run global Docker cleanup.
+
+**Organization**: Tasks are intentionally sequential. The constitution requires one contextual implementation path because authorization, routing, audit stamping, and existing tests overlap. No task is marked parallel. One top-level type per C# file with the `<name>.<type>.cs` convention.
+
+## Phase 1: Setup
+
+**Purpose**: Confirm a green baseline and add safe configuration examples.
+
+- [ ] T001 Run the full existing test suite (`docker compose -f compose.dev.yml exec sdk dotnet test`) and record that it passes before any change; stop and report if it does not.
+- [ ] T002 Add safe examples for `Administration__GlobalAdministratorUserIds__0`, `Administration__MaxBulkSessionRevocation` (default 1000, valid 1–10000), and `RateLimiting__Administration__PermitLimit`/`WindowSeconds` (defaults 120 / 60) to `.env.example` and `compose.dev.yml`, and replace any `SecurityAudit__GlobalReviewerUserId` mention with a note that it is no longer supported.
+
+---
+
+## Phase 2: Foundational
+
+**Purpose**: Global-administrator policy, permission catalog, actor-stamped auditing, authorizer, endpoint filter, rate limit, and test fixture required by every story.
+
+**⚠️ CRITICAL**: No user story work can begin until this phase is complete.
+
+- [ ] T003 Create `IGlobalAdministratorPolicy` (`bool IsGlobalAdministrator(Guid userId)`) in `src/GaussAuth.Application/Administration/Ports/globalAdministratorPolicy.interface.cs`, delete `src/GaussAuth.Application/Security/Ports/globalAuditReviewerPolicy.interface.cs`, and update `src/GaussAuth.Application/Security/securityEventQueryService.service.cs` to use the new port (audit permission constant stays `audit.events.read` until T052).
+- [ ] T004 Implement `ConfiguredGlobalAdministratorPolicy` in `src/GaussAuth.Infrastructure/Administration/configuredGlobalAdministratorPolicy.service.cs` reading the array `Administration:GlobalAdministratorUserIds`; every entry MUST be a non-empty GUID or startup throws `InvalidOperationException("Global administrator configuration is invalid.")`; an empty or absent list means no global authority; startup MUST also fail with a message naming the new key when the legacy `SecurityAudit:GlobalReviewerUserId` is present. Delete `src/GaussAuth.Infrastructure/Security/configuredGlobalAuditReviewerPolicy.service.cs` and update the registration in `src/GaussAuth.Infrastructure/DependencyInjection/infrastructureServiceCollectionExtensions.extension.cs`.
+- [ ] T005 Create `AdministrativePermissionCatalog` in `src/GaussAuth.Application/Administration/Authorization/administrativePermissionCatalog.service.cs` with the central constants: seeded codes `auth.memberships.read`, `auth.memberships.manage`, `auth.roles.read`, `auth.roles.manage`, `auth.permissions.read`, `auth.permissions.manage`, `auth.sessions.read`, `auth.sessions.revoke`, `auth.security.audit.read`; reserved-not-seeded codes `auth.users.read`, `auth.users.manage`, `auth.applications.read`, `auth.applications.manage`, `auth.consumer-secrets.rotate`; descriptions for seeded codes; `IsReservedPrefix(code)` (case-insensitive `auth.` prefix) and `IsPlatformPermission(code)` (any catalog code).
+- [ ] T006 Extend `src/GaussAuth.Domain/Security/securityEvent.entity.cs` and `src/GaussAuth.Application/Security/securityEventDraft.record.cs` with nullable `ActorUserId` (`Guid?`, never inferred); update `SecurityEvent.Create`, EF mapping in `src/GaussAuth.Infrastructure/Persistence/authenticationDbContext.context.cs` (index `IX_SecurityEvents_ActorUserId_OccurredAtUtc_Id` on `(ActorUserId, OccurredAtUtc, Id)`), and generate migration `addSecurityEventActor` in `src/GaussAuth.Infrastructure/Persistence/Migrations/` plus the model snapshot using the project's EF tooling in the `sdk` container.
+- [ ] T007 Add `IAdministrativeActorContext` (`Guid? ActorUserId { get; }`) in `src/GaussAuth.Application/Administration/Ports/administrativeActorContext.interface.cs` and its scoped implementation with `Set(Guid actorUserId)` in `src/GaussAuth.Application/Administration/Authorization/administrativeActorContext.service.cs`; update `src/GaussAuth.Infrastructure/Security/persistedSecurityEventRecorder.service.cs` to stamp `draft.ActorUserId ?? context.ActorUserId`; register both in `src/GaussAuth.Api/DependencyInjection/applicationServiceCollectionExtensions.extension.cs` and Infrastructure DI as appropriate.
+- [ ] T008 Add event types and catalog entries in `src/GaussAuth.Application/Security/securityEventType.enum.cs` and `src/GaussAuth.Application/Security/securityEventCatalog.service.cs`: `ApplicationRegistered`=`application.registered`, `UserCreated`=`user.created`, `RoleUpdated`=`role.updated`, `PermissionUpdated`=`permission.updated`, `ConsumerCredentialGenerated`=`consumer.credential.generated`, `ConsumerCredentialRotated`=`consumer.credential.rotated`, `ConsumerCredentialPreviousRetired`=`consumer.credential.previous-retired` (all Critical, outcome succeeded) and `AdministrativeAccessDenied`=`administration.access.denied` (Operational, outcome rejected).
+- [ ] T009 Implement `AdministrativeAuthorizer` in `src/GaussAuth.Application/Administration/Authorization/administrativeAuthorizer.service.cs` with `administrativeScope.enum.cs` (`Global`, `Application`) and `administrativeAuthorization.result.cs` (outcome `Authorized | Unauthenticated | Forbidden`, `ActorUserId`, `IsGlobal`): resolve the session via `SessionService.GetAuthenticatedContextAsync`; global administrator is authorized for any scope; application scope requires route `applicationId` equal to the session `ApplicationId` and the required code in `IUserRoleRepository.GetEffectivePermissionsAsync`; global scope requires the policy. Evaluate before any data access; for an authenticated denied caller record `AdministrativeAccessDenied` (operational; actor set; the required permission code in `Reason`; target `ApplicationId` when present; never a secret); do not record unauthenticated attempts.
+- [ ] T010 Create the endpoint filter in `src/GaussAuth.Api/Administration/administrativeAuthorizationFilter.filter.cs` and extensions `RequireGlobalAdministrator()` and `RequireApplicationAdministrator(string permission)` in `src/GaussAuth.Api/Administration/administrativeEndpointFilters.extension.cs` (application scope reads route value `applicationId`): read the bearer credential with the existing `bearerCredentialReader.extension.cs`, call the authorizer, return `401`/`403` `ProblemDetails` with safe titles only, set `IAdministrativeActorContext` on success, and send identical `403` for existing and non-existing Application ids.
+- [ ] T011 Add the `administration` rate-limit policy to `src/GaussAuth.Api/DependencyInjection/apiServiceCollectionExtensions.extension.cs` using `RateLimiting:Administration:PermitLimit` (default 120) and `WindowSeconds` (default 60), partitioned like the existing policies.
+- [ ] T012 Create the shared test fixture `tests/GaussAuth.Foundation.Tests/administrativeTestHost.fixture.cs`: a controllable test `IGlobalAdministratorPolicy` replaceable in `WebApplicationFactory<Program>`, helpers to create a user with password, Application, active membership, sign in through the existing login flow, and return an `HttpClient` with the bearer credential; helpers for a global-administrator client and for an Application administrator (role holding chosen `auth.*` permissions assigned through services).
+
+**Checkpoint**: The authorizer, filter, actor stamping, and fixture exist; no route is protected yet.
+
+---
+
+## Phase 3: User Story 1 - Permission-Protected, Scoped Administration (Priority: P1) 🎯 MVP
+
+**Goal**: Every management operation is served only under `/admin`, protected by the global-administrator list or application-scoped `auth.*` permissions seeded into each Application; legacy unauthenticated routes are gone.
+
+**Independent Test**: An Application A administrator manages Application A but not B; a business role named like an `auth.*` permission grants nothing; unauthenticated, expired, and revoked sessions are rejected; legacy routes return `404`.
+
+- [ ] T013 [US1] Implement `AdministrativePermissionBootstrap` in `src/GaussAuth.Application/Administration/Bootstrap/administrativePermissionBootstrap.service.cs`: for an Application id, add each seeded catalog permission that is missing (lookup with `IPermissionRepository.GetByCodeAsync`), created active with the catalog description, without saving and without creating roles or assignments; idempotent when called repeatedly.
+- [ ] T014 [US1] Update `ApplicationService.CreateAsync` in `src/GaussAuth.Application/Applications/applicationService.service.cs` to call the bootstrap before the single `TrySaveChangesAsync` (Application and seeded permissions persist atomically) and record `ApplicationRegistered` (UserId null, ApplicationId set) after a successful save; register the bootstrap in `src/GaussAuth.Api/DependencyInjection/applicationServiceCollectionExtensions.extension.cs`.
+- [ ] T015 [US1] Update `src/GaussAuth.Application/Permissions/permissionService.service.cs` and `permissionOperationResult.result.cs`: `CreateAsync` rejects any code with the reserved `auth.` prefix as invalid; `UpdateDescriptionAsync`, `ActivateAsync`, and `DeactivateAsync` reject platform permissions (`AdministrativePermissionCatalog.IsPlatformPermission`) with a new `platform-permission` failure mapped to `409` in the endpoint.
+- [ ] T016 [US1] Create migration `seedAdministrativePermissions` in `src/GaussAuth.Infrastructure/Persistence/Migrations/`: first raise a clear exception if any existing `Permissions."Code"` starts with `auth.`; then for every Application insert the nine seeded permissions (new `gen_random_uuid()` ids, active, descriptions from the catalog, current UTC timestamps) with `ON CONFLICT ("ApplicationId","Code") DO NOTHING`; `Down` removes only the seeded `auth.` permissions that have no `RolePermissions` rows.
+- [ ] T017 [US1] Re-map `src/GaussAuth.Api/Users/usersEndpoints.extension.cs` to accept the `/admin` group and expose `/users`, `/users/{userId:guid}`, `/users/{userId:guid}/profile`, `/users/{userId:guid}/activate`, `/users/{userId:guid}/deactivate` with `.RequireGlobalAdministrator()`; keep the existing handlers, request limits, and `user-creation` rate limit.
+- [ ] T018 [US1] Re-map `src/GaussAuth.Api/Applications/` endpoints to `/applications`, `/applications/{applicationId:guid}`, `/applications/by-code/{code}`, `/applications/{applicationId:guid}/activate`, `/deactivate` (route parameter renamed from `id` to `applicationId`) with `.RequireGlobalAdministrator()`; `ApplicationCode` stays immutable.
+- [ ] T019 [US1] Re-map `src/GaussAuth.Api/Memberships/` endpoints: Application-scoped `/applications/{applicationId:guid}/memberships` (list, get, create, activate, deactivate) with `RequireApplicationAdministrator` using `auth.memberships.read` for reads and `auth.memberships.manage` for writes; `/users/{userId:guid}/memberships` with `.RequireGlobalAdministrator()`.
+- [ ] T020 [US1] Re-map `src/GaussAuth.Api/Roles/rolesEndpoints.extension.cs` and `src/GaussAuth.Api/Permissions/` endpoints with `RequireApplicationAdministrator`: roles `auth.roles.read`/`auth.roles.manage`, permissions `auth.permissions.read`/`auth.permissions.manage` per `contracts/admin-api.md`; map the `platform-permission` failure to `409`.
+- [ ] T021 [US1] Re-map `src/GaussAuth.Api/Authorization/authorizationEndpoints.extension.cs`: user-role assign/remove `auth.roles.manage`, user-role list and effective-permissions `auth.roles.read`, role-permission assign/remove `auth.permissions.manage`, role-permission list `auth.permissions.read`.
+- [ ] T022 [US1] Update `src/GaussAuth.Api/Program.cs`: create `var admin = app.MapGroup("/admin").RequireRateLimiting("administration")`, map the re-mapped endpoint groups onto it, and remove the legacy ungrouped registrations; leave `/auth/*`, `/me/*`, `/profile-images/*`, `/health/*`, `/security-events` unchanged.
+- [ ] T023 [US1] Move `tests/GaussAuth.Foundation.Tests/applicationsTests.test.cs` and `applicationMembershipsTests.test.cs` to `/admin` routes using the administrator client from the fixture.
+- [ ] T024 [US1] Move `createUserTests.test.cs`, `userActivationTests.test.cs`, `userRetrievalTests.test.cs`, and `profileUpdateTests.test.cs` to `/admin/users...` using the fixture.
+- [ ] T025 [US1] Move `rolesPermissionsTests.test.cs` and `effectivePermissionsTests.test.cs` to `/admin/applications/...` using the fixture.
+- [ ] T026 [US1] Update the setup calls in `authenticationLoginTests.test.cs`, `sessionsAccessTests.test.cs`, and `passwordManagementTests.test.cs` to create users, Applications, and memberships through the fixture's administrator client or services.
+- [ ] T027 [US1] Update `authorizationContractTests.test.cs`, `profileImageTests.test.cs`, `securityAuditTests.test.cs`, and `startupTests.test.cs` the same way; in `startupTests.test.cs` replace any use of the legacy reviewer key with the new list key.
+- [ ] T028 [US1] Add `tests/GaussAuth.Foundation.Tests/administrationTests.test.cs` covering: unauthenticated/expired/revoked rejected `401`; Application A administrator succeeds in A and gets identical `403` for B (existing or not); global administrator succeeds on any Application and on global routes; Application administrator rejected on global routes; a business permission named `roles.manage` or role named `Administrator` grants nothing; global administrator authority absent from the 008 authorization context; legacy routes return `404`; `auth.`-prefixed permission creation rejected; platform permission deactivation rejected; startup fails with the legacy audit key and with an invalid list entry; empty list gives no global authority.
+- [ ] T029 [US1] Add `tests/GaussAuth.Foundation.Tests/administrationMigrationTests.test.cs` covering: new Application receives exactly the nine seeded permissions, active, with no roles or assignments; running the bootstrap/migration SQL twice creates no duplicates; the migration fails closed when a pre-existing `auth.`-prefixed permission exists.
+- [ ] T030 [US1] Run the full suite in the `sdk` container; fix regressions from the route move before continuing.
+
+**Checkpoint**: The administrative boundary protects every management route; the whole suite is green.
+
+---
+
+## Phase 4: User Story 2 - Manage Users and Applications (Priority: P1)
+
+**Goal**: A global administrator lists, inspects, and changes lifecycle state of users and Applications with safe responses and unchanged lifecycle consequences.
+
+**Independent Test**: Deactivate a user with a live session and membership; existing consequences apply; repeating is idempotent; list pagination is bounded; no sensitive fields appear.
+
+- [ ] T031 [US2] Add `ListAsync(bool? isActive, string? normalizedEmail, Guid? afterId, int limit, CancellationToken)` to `src/GaussAuth.Application/Users/Ports/userRepository.interface.cs` and implement it in `src/GaussAuth.Infrastructure/Persistence/userRepository.repository.cs` with parameterized filters, deterministic order by `Id`, and fetch of `limit` rows.
+- [ ] T032 [US2] Create `src/GaussAuth.Application/Administration/Users/ListUsers/listUsers.query.cs`, `listUsers.handler.cs`, and `listUsers.result.cs`: `limit` default 50, valid 1–100, `cursor` a GUID of at most 36 characters, `email` optional at most 320 characters normalized with the existing normalization used for login, invalid input yields an invalid result; next cursor is the last id when the page is full.
+- [ ] T033 [US2] Add `GET /admin/users` to `src/GaussAuth.Api/Users/usersEndpoints.extension.cs` with `isActive`, `email`, `cursor`, `limit`, and DTOs `adminUserSummaryResponse.dto.cs` (`id`, `email`, `isActive`, `createdAtUtc`) and `adminUserListResponse.dto.cs` in `src/GaussAuth.Api/Users/`.
+- [ ] T034 [US2] Audit the existing user response in `src/GaussAuth.Api/Users/userProfileResponse.dto.cs` and the user detail response so they contain no password hash, security stamp, reset material, or secret, and trim unnecessary personal data if any is found; record `UserCreated` in `src/GaussAuth.Application/Users/CreateUser/createUser.handler.cs` after successful creation (target `UserId`, no password or contact data).
+- [ ] T035 [US2] Make Application lifecycle idempotent in `src/GaussAuth.Application/Applications/applicationService.service.cs`: `ActivateAsync` and `DeactivateAsync` record the event only when the state actually changes and never create duplicates.
+- [ ] T036 [US2] Add tests to `administrationTests.test.cs`: user list pagination with `limit` and `nextCursor`, `limit=101` rejected, `isActive` and exact email filters, deterministic order; deactivating a user with a live session makes the session fail and login fail while memberships are preserved; repeated deactivate/activate returns `200` and records one event per real change; user and list responses contain none of `passwordHash`, `securityStamp`, reset fields; Application activate/deactivate idempotent; no delete route exists for users or Applications.
+
+**Checkpoint**: User and Application administration is complete and independently testable.
+
+---
+
+## Phase 5: User Story 3 - Manage Memberships, Roles, Permissions, and Assignments (Priority: P1)
+
+**Goal**: An Application administrator manages one Application's access model and inspects a user's effective authorization.
+
+**Independent Test**: Create a role and permission, assign them, assign the role to a member, inspect the authorization view and confirm it equals the 008 authorization context; every cross-application assignment is rejected.
+
+- [ ] T037 [US3] Record `RoleUpdated` in `src/GaussAuth.Application/Roles/roleService.service.cs` and `PermissionUpdated` in `src/GaussAuth.Application/Permissions/permissionService.service.cs` for description updates, fixing the existing `PermissionActivated` event emitted on description change; record only when the value actually changed.
+- [ ] T038 [US3] Create the authorization view in `src/GaussAuth.Application/Administration/AuthorizationView/getAuthorizationView.query.cs`, `getAuthorizationView.handler.cs`, and `authorizationView.result.cs`: given `applicationId` and `userId`, return application (`id`, `code`, `isActive`), user (`id`, `isActive`), membership (`isActive`) or null, active assigned roles (`id`, `name`), and effective permission codes using `IUserRoleRepository.GetEffectivePermissionsAsync` (same call as 004/008); not-found for a missing Application or user.
+- [ ] T039 [US3] Add `GET /admin/applications/{applicationId}/users/{userId}/authorization` in `src/GaussAuth.Api/Authorization/authorizationEndpoints.extension.cs` with `RequireApplicationAdministrator(auth.roles.read)` and the response DTO `authorizationViewResponse.dto.cs` exposing only the fields above.
+- [ ] T040 [US3] Add tests to `administrationTests.test.cs`: membership create/activate/deactivate by an Application administrator (inactive user or Application rejected, cross-application misuse rejected); role and permission create/list/update/activate/deactivate with application-scoped uniqueness; same-named role in another Application grants nothing; role assignment requires an active membership; role-permission assignment across Applications rejected and nothing changes; repeated activation returns `200` with one event; duplicate assignment returns `409`; two concurrent identical assignments leave exactly one record; authorization view equals the permissions returned by the 008 authorization context and omits inactive roles/permissions.
+
+**Checkpoint**: Application-scoped administration is complete.
+
+---
+
+## Phase 6: User Story 4 - Inspect and Revoke Sessions (Priority: P2)
+
+**Goal**: Safe session listing and bounded revocation by scope.
+
+**Independent Test**: List sessions, revoke one (unusable immediately), revoke a user's sessions within an Application leaving other Applications untouched, and exercise the bulk cap.
+
+- [ ] T041 [US4] Extend `src/GaussAuth.Application/Sessions/Ports/sessionRepository.interface.cs` and `src/GaussAuth.Infrastructure/Persistence/sessionRepository.repository.cs` with a filtered list (`userId?`, `applicationId?`, `state` of active/revoked/expired from `RevokedAt`/`ExpiresAt` with a supplied "now", newest first by `(CreatedAt, Id)` with a composite cursor, `limit` 1–100) and a bounded lookup of active sessions by `(userId?, applicationId?)` taking at most `max + 1` rows.
+- [ ] T042 [US4] Add `AdministrationOptions` in `src/GaussAuth.Application/Administration/administrationOptions.options.cs` with `MaxBulkSessionRevocation` (default 1000, valid 1–10000, invalid configuration fails at startup) loaded from `Administration:MaxBulkSessionRevocation` and registered in DI.
+- [ ] T043 [US4] Create `AdministrativeSessionService` in `src/GaussAuth.Application/Administration/Sessions/administrativeSessionService.service.cs` with result types: list (safe `SessionSummary` fields `id`, `userId`, `applicationId`, `createdAtUtc`, `expiresAtUtc`, `revokedAtUtc`, `state`), get within an Application (a session of another Application is not found), revoke one via `SessionService.RevokeAsync`, revoke user within Application, revoke all in Application, and revoke user everywhere via `RevokeAllForUserAsync`; bulk operations revoke at most `MaxBulkSessionRevocation` active sessions, return `revoked` and `hasMore`, write one `SessionRevoked` event per revoked session (actor stamped by context), and are idempotent.
+- [ ] T044 [US4] Add `src/GaussAuth.Api/Administration/administrativeSessionEndpoints.extension.cs` and DTOs: Application-scoped `GET .../sessions`, `GET .../sessions/{sessionId}`, `POST .../sessions/{sessionId}/revoke`, `POST .../users/{userId}/sessions/revoke`, `POST .../sessions/revoke` with `auth.sessions.read`/`auth.sessions.revoke`; global `GET /admin/users/{userId}/sessions` and `POST /admin/users/{userId}/sessions/revoke`; register in `Program.cs`. Responses never include credentials or secrets.
+- [ ] T045 [US4] Add tests to `administrationTests.test.cs`: list filtering and pagination with a state filter; an administrator with `auth.sessions.read` cannot list another Application's sessions (`403`); revoke one makes the credential fail on the next request; revoking a revoked or expired session returns `200`; revoke user-in-Application leaves the user's other-Application sessions active; revoke all in an Application; global user-wide revoke; cap behavior with `MaxBulkSessionRevocation = 2` returns `hasMore`; one actor-stamped `session.revoked` event per session; responses contain no credential fields.
+
+**Checkpoint**: Session administration complete.
+
+---
+
+## Phase 7: User Story 5 - Administer Consumer Secrets (Priority: P2)
+
+**Goal**: Global administrators generate and rotate per-Application consumer secrets with one-time plaintext and unchanged active+retiring behavior.
+
+**Independent Test**: Rotate Application A; the new value is shown once, the previous still works until retired; metadata never reveals values; Application B unaffected.
+
+- [ ] T046 [US5] Add Domain entity `ConsumerCredential` in `src/GaussAuth.Domain/Applications/consumerCredential.entity.cs`: `ApplicationId` (non-empty), `CurrentHash` (string, at most 512 characters, required), `RetiringHash` (string?, at most 512 characters, must differ from `CurrentHash`), `CreatedAtUtc`, `RotatedAtUtc?`, `RetiredAtUtc?`; transitions `Create`, `Rotate(newHash)` (previous current becomes retiring, any older retiring discarded), `RetirePrevious()` (no-op when none), and import of a configured current hash as the retiring hash on first rotation; no framework or secret-plaintext dependencies.
+- [ ] T047 [US5] Define the port `IConsumerCredentialStore` in `src/GaussAuth.Application/Administration/Ports/consumerCredentialStore.interface.cs` (generate, rotate, retire previous, get metadata for an Application id and code, each reporting whether a managed record or configured hashes exist) and the result type `ConsumerSecretIssuance` in `src/GaussAuth.Application/Administration/ConsumerCredentials/consumerSecretIssuance.result.cs` whose `ToString` redacts the secret so it cannot be logged accidentally.
+- [ ] T048 [US5] Create handlers in `src/GaussAuth.Application/Administration/ConsumerCredentials/` (`generateConsumerSecret`, `rotateConsumerSecret`, `retirePreviousConsumerSecret`, `getConsumerSecretMetadata` command/handler pairs): Application must exist (`404`), generate returns conflict when any credential (managed or configured) exists, rotate imports configured current hash as retiring when no managed record exists, retire clears only the retiring hash, metadata returns `exists`, `source` (`managed` or `configured`), `createdAtUtc`, `rotatedAtUtc`, `hasRetiring`; record `ConsumerCredentialGenerated`/`ConsumerCredentialRotated`/`ConsumerCredentialPreviousRetired` with `SubjectType = "consumer-credential"`, target `ApplicationId`, and no secret, hash, or prefix in any field.
+- [ ] T049 [US5] Add the EF mapping for table `ApplicationConsumerCredentials` (primary key `ApplicationId`, hashes limited to 512 characters, `xmin` concurrency token) in `src/GaussAuth.Infrastructure/Persistence/authenticationDbContext.context.cs` and generate migration `addApplicationConsumerCredentials` in `src/GaussAuth.Infrastructure/Persistence/Migrations/`.
+- [ ] T050 [US5] Implement `EfConsumerCredentialStore` in `src/GaussAuth.Infrastructure/AuthorizationContext/efConsumerCredentialStore.adapter.cs`: generate 32 random bytes with `RandomNumberGenerator` encoded as base64url, hash with the existing `PasswordHasher<string>` scheme keyed by the lowercase Application code, persist, and return plaintext only in the issuance result; a concurrency conflict returns a conflict result (`409`) without data loss.
+- [ ] T051 [US5] Replace the singleton `ConfiguredConsumerCredentialValidator` registration with a scoped validator in `src/GaussAuth.Infrastructure/AuthorizationContext/` that checks the store first (current and retiring hashes) and falls back to the configured hashes only when the Application has no managed record, keeping uniform failure behavior, length bounds, and application binding; update `infrastructureServiceCollectionExtensions.extension.cs` and any consumer of the singleton.
+- [ ] T052 [US5] Add `src/GaussAuth.Api/Administration/consumerSecretEndpoints.extension.cs` and DTOs: `POST /admin/applications/{applicationId}/consumer-secret` (`201`), `.../rotate` (`200`), `.../retire-previous` (`200`), `GET .../consumer-secret` (metadata), all with `.RequireGlobalAdministrator()`; the generate and rotate responses carry the plaintext `secret` once with `Cache-Control: no-store`; register in `Program.cs`.
+- [ ] T053 [US5] Add Domain tests for `ConsumerCredential` invariants to `tests/GaussAuth.Foundation.Tests/` and endpoint tests to `administrationTests.test.cs`: generate then authenticate a context request; rotate keeps the previous working; retire previous stops only the previous; metadata and every later response omit secret, prefix, length hint, and hash; Application administrator rejected; Application A operations never affect B; configured-hash fallback keeps working until the first rotation and is imported as retiring; concurrent rotations leave one consistent active/retiring state; no logger, event, or response sample contains the plaintext.
+
+**Checkpoint**: Consumer-secret administration complete.
+
+---
+
+## Phase 8: User Story 6 - Audited Administration and Audit Access (Priority: P2)
+
+**Goal**: Actor and target on every administrative event; application-scoped audit access under `auth.security.audit.read`; no reviewer loses or gains access.
+
+**Independent Test**: Perform one change per category, query as the Application reviewer and the global administrator, and verify actor, target, scope, and absence of secrets.
+
+- [ ] T054 [US6] Add `actorUserId` to the audit response in `src/GaussAuth.Api/Security/securityEventResponse.dto.cs` and its mapping in `src/GaussAuth.Api/Security/securityEventEndpoints.extension.cs`, and ensure `src/GaussAuth.Infrastructure/Persistence/securityEventQueryRepository.repository.cs` returns the new column.
+- [ ] T055 [US6] Switch the application-scoped audit permission in `src/GaussAuth.Application/Security/securityEventQueryService.service.cs` to `AdministrativePermissionCatalog` `auth.security.audit.read`, and create migration `moveAuditPermissionToAuthNamespace` in `src/GaussAuth.Infrastructure/Persistence/Migrations/`: for every Application that has `audit.events.read`, ensure `auth.security.audit.read` exists, copy each active `RolePermissions` row of the old permission to the new one (idempotent via the unique `(RoleId, PermissionId)` index), then deactivate the old permission while keeping its history.
+- [ ] T056 [US6] Add tests to `administrationTests.test.cs` and `administrationMigrationTests.test.cs`: one event with correct `ActorUserId` and target for user activation/deactivation, Application activation/deactivation, membership change, role and permission change, role and permission assignment, administrative session revocation, and each consumer-secret operation; actor comes from the session even when the target is the same user; a denied authenticated attempt writes `administration.access.denied` while an unauthenticated one writes none; Application reviewer sees only its Application's events and the global administrator sees all; no event, log, or response contains secrets; the audit-permission migration preserves a reviewer's access and is idempotent.
+
+**Checkpoint**: All stories complete.
+
+---
+
+## Phase 9: Polish & Cross-Cutting Concerns
+
+- [ ] T057 Extend `tests/GaussAuth.Foundation.Tests/architectureTests.test.cs` to assert the Domain has no dependency on ASP.NET Core, Identity, EF Core, or Infrastructure for the new `ConsumerCredential`, Application has no dependency on Api or Infrastructure for `Administration`, one top-level type per file, and no class named like a monolithic administrative service.
+- [ ] T058 Verify every new request DTO and endpoint enforces explicit bounds (string lengths, GUID identifiers, `limit` 1–100, cursors, body size) and that no administrative response or log message includes passwords, hashes, security stamps, tokens, session secrets, or consumer secrets; fix gaps.
+- [ ] T059 Update `specs/011-admin-operations/contracts/admin-api.md` and `data-model.md` to match the implemented routes, statuses, migration names (`addSecurityEventActor`, `seedAdministrativePermissions`, `addApplicationConsumerCredentials`, `moveAuditPermissionToAuthNamespace`), and configuration keys exactly as built, and add a short `specs/011-admin-operations/security-review.md` listing protected routes, permissions, reserved prefix, global-administrator model, accepted limitations (global administrator needs a membership to sign in; bulk revocation cap), and deferred decisions.
+- [ ] T060 Run the quickstart validation scenarios from `specs/011-admin-operations/quickstart.md` against the running development stack and fix any discrepancy between the quickstart, the contract, and the behavior.
+- [ ] T061 Run the full test suite in the `sdk` container (`docker compose -f compose.dev.yml exec sdk dotnet test`) and confirm all tests pass; confirm no administrative frontend, impersonation, workflow, or enterprise IAM placeholder was introduced.
+
+---
+
+## Dependencies & Execution Order
+
+- Phase 1 → Phase 2 → Phase 3 (US1) → Phase 4 (US2) → Phase 5 (US3) → Phase 6 (US4) → Phase 7 (US5) → Phase 8 (US6) → Phase 9.
+- Phase 2 blocks everything. US1 (route move and existing-test migration) must finish before later stories because they add routes onto the `/admin` group and use the fixture.
+- US2, US3, US4, and US5 depend only on Phases 2–3; US6 depends on US2–US5 for the events it verifies and on T003/T005 for the permission switch.
+- T055's permission switch and migration are applied together; T016 (seeding) must precede T055 so the new permission exists.
+- Execution is sequential by constitution; no parallel markers are used.
+
+## Implementation Strategy
+
+- **MVP**: Phases 1–3 (T001–T030) deliver the protected administrative boundary, seeded permissions, and the `/admin` route layout with a green suite. Stop and validate there before continuing.
+- **Increment 2**: US2 and US3 (T031–T040) complete users, applications, memberships, roles, permissions, and assignments.
+- **Increment 3**: US4 and US5 (T041–T053) add session and consumer-secret administration.
+- **Increment 4**: US6 and Polish (T054–T061) finish auditing, migration of the audit permission, documentation, and validation.
