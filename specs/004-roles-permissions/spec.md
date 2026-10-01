@@ -8,6 +8,14 @@
 
 **Input**: User description: "Create feature `004-roles-permissions` for the reusable generic Authentication and Authorization API."
 
+## Clarifications
+
+### Session 2026-10-01
+
+- Q: What exact format should permission codes accept and normalize? → A: Lowercase dot-separated alphanumeric segments, with hyphens allowed inside each segment.
+- Q: Should the visible name of a role be changeable after creation? → A: No; the role name is immutable after creation.
+- Q: What should happen when an identical historically removed assignment is requested again? → A: Reactivate the existing historical relationship when all current conditions are valid.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Define Authorization Within an Application (Priority: P1)
@@ -67,11 +75,12 @@ A consuming application or trusted administrator asks which permissions a user e
 ### Edge Cases
 
 - Equivalent role names that differ only in leading/trailing whitespace or letter case are treated as the same name within one application.
-- Permission codes are normalized consistently before uniqueness checks; an invalid, blank, or overly long code is rejected.
+- Permission codes are trimmed and normalized to lowercase before uniqueness checks; each code contains one or more dot-separated alphanumeric segments and may use hyphens inside a segment. An invalid, blank, or overly long code is rejected.
 - Deactivating a role, permission, membership, user, or application preserves relationships but prevents affected permissions from being effective.
 - A request for a missing application, user, role, permission, membership, or relationship returns a safe not-found outcome.
 - Concurrent attempts to create an equivalent role, permission, relationship, or assignment result in at most one stored active record.
 - Removing one role assignment or role-permission relationship never changes a relationship in another application.
+- A valid request matching an inactive historical RolePermission or UserRole reactivates that existing relationship instead of creating another record.
 
 ## Requirements *(mandatory)*
 
@@ -80,15 +89,15 @@ A consuming application or trusted administrator asks which permissions a user e
 - **FR-001**: The system MUST represent a Role with a stable identifier, application context, display name, normalized uniqueness value, optional description, active state, and historical timestamps.
 - **FR-002**: The system MUST allow roles to be created, retrieved, listed by application, activated, and deactivated; role names MUST be unique after normalization within an application and MAY repeat in different applications.
 - **FR-003**: The system MUST represent a Permission with a stable identifier, application context, stable machine-readable code, optional description, active state, and historical timestamps.
-- **FR-004**: The system MUST validate permission codes as required, bounded, machine-readable capability identifiers; permission codes MUST be unique within an application and MAY repeat in different applications.
-- **FR-005**: The system MUST preserve the stable role name and permission code on normal display-description changes; it MUST NOT change either implicitly.
+- **FR-004**: The system MUST validate permission codes as required, bounded, lowercase machine-readable capability identifiers composed of one or more dot-separated alphanumeric segments with optional internal hyphens; permission codes MUST be unique within an application and MAY repeat in different applications.
+- **FR-005**: The system MUST keep role names and permission codes immutable after creation; descriptions MAY be updated without changing either stable identifier.
 - **FR-006**: The system MUST reject creation of an active role or permission for an inactive or nonexistent application.
 - **FR-007**: The system MUST represent a RolePermission relationship with role, permission, active state, and historical timestamps; it MUST permit only one relationship for a role-permission pair.
 - **FR-008**: The system MUST allow a permission to be assigned only to an active role in the same application when the permission and application are active.
-- **FR-009**: The system MUST preserve removed RolePermission relationships historically while excluding inactive relationships, roles, and permissions from effective permissions.
+- **FR-009**: The system MUST preserve removed RolePermission relationships historically while excluding inactive relationships, roles, and permissions from effective permissions; a valid repeated assignment MUST reactivate the existing inactive relationship rather than create another record.
 - **FR-010**: The system MUST represent a UserRole relationship with user, role, application context, active state, and historical timestamps; it MUST permit only one user-role relationship in its application context.
 - **FR-011**: The system MUST assign a role only when the user, application, membership, and role exist, are active, and belong to the same explicit application context.
-- **FR-012**: The system MUST preserve removed UserRole assignments historically while excluding inactive assignments from effective permissions.
+- **FR-012**: The system MUST preserve removed UserRole assignments historically while excluding inactive assignments from effective permissions; a valid repeated assignment MUST reactivate the existing inactive relationship rather than create another record.
 - **FR-013**: The system MUST provide roles assigned to a user only for an explicitly identified application.
 - **FR-014**: The system MUST calculate effective permissions only for an explicitly identified user and application and only when every required user, application, membership, assignment, role, relationship, and permission state is active.
 - **FR-015**: The system MUST return each effective permission at most once, even if multiple active roles grant it.
@@ -120,8 +129,9 @@ A consuming application or trusted administrator asks which permissions a user e
 ## Assumptions
 
 - The existing global user, application, and application-membership concepts are available and remain authoritative for identity and application participation.
-- Role names are normalized by trimming surrounding whitespace and comparing case-insensitively; their display spelling is stable after creation for this feature.
-- Permission codes are normalized by trimming and case-normalizing; they use a bounded dot-separated capability format such as `resource.action` and remain stable after creation for this feature.
+- Role names are normalized by trimming surrounding whitespace and comparing case-insensitively; their display spelling is immutable after creation for this feature.
+- Permission codes are normalized by trimming and lowercasing; they use a bounded dot-separated capability format with alphanumeric segments and optional internal hyphens, such as `resource.action` or `reports.monthly-read`, and remain stable after creation for this feature.
 - Removing a RolePermission or UserRole is a non-destructive deactivation of that relationship, preserving history.
+- Repeating a valid assignment after its historical relationship was removed reactivates that same relationship; it never creates a second history record.
 - Reactivating an application membership does not create assignments; retained active assignments can contribute again only if all other effective-permission conditions are active.
 - Management operations are used by trusted callers until a later feature provides the final authentication and authorization mechanism.
