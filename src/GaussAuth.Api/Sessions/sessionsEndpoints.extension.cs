@@ -11,6 +11,7 @@ public static class SessionsEndpoints
     {
         app.MapPost("/auth/session/validate", ValidateAsync).RequireRateLimiting("session-credentials");
         app.MapPost("/auth/session/renew", RenewAsync).RequireRateLimiting("session-credentials");
+        app.MapPost("/auth/logout", LogoutAsync).RequireRateLimiting("session-credentials");
         app.MapGet("/auth/signing-keys", SigningKeys).RequireRateLimiting("signing-keys");
         return app;
     }
@@ -34,6 +35,14 @@ public static class SessionsEndpoints
         if (!result.IsSuccess) return InvalidCredential(context);
         context.Response.Headers.CacheControl = "no-store";
         return TypedResults.Ok(new AccessCredentialResponse(result.SessionId!.Value, "Bearer", result.AccessCredential!, result.AccessCredentialExpiresAt!.Value, result.SessionExpiresAt!.Value));
+    }
+
+    private static async Task<IResult> LogoutAsync(HttpContext context, SessionService sessions, CancellationToken ct)
+    {
+        var credential = context.Request.ReadBearerCredential();
+        if (credential is null) return InvalidCredential(context);
+        var result = await sessions.LogoutAsync(credential, ct);
+        return result.IsSuccess ? TypedResults.NoContent() : InvalidCredential(context);
     }
 
     private static IResult SigningKeys(HttpContext context, IAccessCredentialKeySet keySet)

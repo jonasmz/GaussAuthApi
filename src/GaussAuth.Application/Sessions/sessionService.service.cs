@@ -61,6 +61,26 @@ public sealed class SessionService(
         return SessionOperationResult.Success(session.Id, session.UserId, session.ApplicationId, renewed, expiresAt, session.ExpiresAt);
     }
 
+    public async Task<SessionOperationResult> RevokeAsync(Guid sessionId, CancellationToken ct)
+    {
+        var session = await sessions.GetByIdAsync(sessionId, ct);
+        if (session is not null && session.RevokedAt is null)
+        {
+            session.Revoke(timeProvider.GetUtcNow());
+            await sessions.SaveChangesAsync(ct);
+        }
+
+        return SessionOperationResult.Success(sessionId, session?.UserId ?? Guid.Empty, session?.ApplicationId ?? Guid.Empty, null, null, session?.ExpiresAt);
+    }
+
+    public async Task<SessionOperationResult> LogoutAsync(string credential, CancellationToken ct)
+    {
+        var claims = await validator.ValidateAsync(credential, ct);
+        return claims is null
+            ? SessionOperationResult.Failure(SessionRejectionReason.MalformedCredential)
+            : await RevokeAsync(claims.SessionId, ct);
+    }
+
     private async Task<(Session? Session, AccessCredentialClaims? Claims, SessionOperationResult? Result)> CheckCredentialAsync(string credential, CancellationToken ct)
     {
         var claims = await validator.ValidateAsync(credential, ct);

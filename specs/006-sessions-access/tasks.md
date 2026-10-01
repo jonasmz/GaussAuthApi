@@ -148,14 +148,14 @@ description: "Actionable implementation tasks for authenticated sessions and acc
 
 ### Tests for User Story 3
 
-- [ ] T054 [US3] Add domain unit tests in `tests/GaussAuth.Foundation.Tests/sessionDomainTests.test.cs`: `Revoke` sets `RevokedAt`; a second `Revoke` with a later time leaves the first `RevokedAt` unchanged; revoking an expired session reports `Revoked`.
-- [ ] T055 [US3] Add integration test in `tests/GaussAuth.Foundation.Tests/sessionsAccessTests.test.cs`: after `POST /auth/logout` (`204`), validate and renew with the same credential return `401` although it has not reached `exp`, and `RevokedAt` is set on the `Sessions` row when read through a fresh scope from a new `DbContext` (durability).
-- [ ] T056 [US3] Add integration test: logout is idempotent (a second logout returns `204`); logout with a signature-valid credential whose token has expired (clock advanced past `expiresAt`) returns `204` and revokes the still-active session; logout for a credential whose session row was removed returns `204`; logout with a forged, malformed, or missing credential returns the uniform `401`.
+- [X] T054 [US3] Add domain unit tests in `tests/GaussAuth.Foundation.Tests/sessionDomainTests.test.cs`: `Revoke` sets `RevokedAt`; a second `Revoke` with a later time leaves the first `RevokedAt` unchanged; revoking an expired session reports `Revoked`.
+- [X] T055 [US3] Add integration test in `tests/GaussAuth.Foundation.Tests/sessionsAccessTests.test.cs`: after `POST /auth/logout` (`204`), validate and renew with the same credential return `401` although it has not reached `exp`, and `RevokedAt` is set on the `Sessions` row when read through a fresh scope from a new `DbContext` (durability).
+- [X] T056 [US3] Add integration test: logout is idempotent (a second logout returns `204`); logout with a signature-valid credential whose token has expired (clock advanced past `expiresAt`) returns `204` and revokes the still-active session; logout for a credential whose session row was removed returns `204`; logout with a forged, malformed, or missing credential returns the uniform `401`.
 
 ### Implementation for User Story 3
 
-- [ ] T057 [US3] Add to `src/GaussAuth.Application/Sessions/sessionService.service.cs` a public `RevokeAsync(Guid sessionId, CancellationToken)` that revokes one specific session (FR-013): load the session; if it exists and `RevokedAt` is `null`, call `Revoke(now)` and `SaveChangesAsync`; return `Success` in every other case (session unknown, already revoked, or already expired) so the operation is idempotent and non-revealing; no bulk or per-user revocation is added. Then add `LogoutAsync(string credential, CancellationToken)`: call `IAccessCredentialValidator.ValidateAsync` and return `Failure(MalformedCredential)` when `null`; ignore token expiry; delegate to `RevokeAsync(claims.SessionId, ...)` and return its result.
-- [ ] T058 [US3] Add `POST /auth/logout` to `src/GaussAuth.Api/Sessions/sessionsEndpoints.extension.cs`: `204` on success, the uniform `401` (`WWW-Authenticate: Bearer`) otherwise; no request body; apply `.RequireRateLimiting("session-credentials")`. Run the full test suite in the `sdk` container.
+- [X] T057 [US3] Add to `src/GaussAuth.Application/Sessions/sessionService.service.cs` a public `RevokeAsync(Guid sessionId, CancellationToken)` that revokes one specific session (FR-013): load the session; if it exists and `RevokedAt` is `null`, call `Revoke(now)` and `SaveChangesAsync`; return `Success` in every other case (session unknown, already revoked, or already expired) so the operation is idempotent and non-revealing; no bulk or per-user revocation is added. Then add `LogoutAsync(string credential, CancellationToken)`: call `IAccessCredentialValidator.ValidateAsync` and return `Failure(MalformedCredential)` when `null`; ignore token expiry; delegate to `RevokeAsync(claims.SessionId, ...)` and return its result.
+- [X] T058 [US3] Add `POST /auth/logout` to `src/GaussAuth.Api/Sessions/sessionsEndpoints.extension.cs`: `204` on success, the uniform `401` (`WWW-Authenticate: Bearer`) otherwise; no request body; apply `.RequireRateLimiting("session-credentials")`. Run the full test suite in the `sdk` container.
 
 **Checkpoint**: Logout works, is durable, and is safe to repeat.
 
@@ -169,15 +169,15 @@ description: "Actionable implementation tasks for authenticated sessions and acc
 
 ### Tests for User Story 4
 
-- [ ] T059 [US4] Add integration test in `tests/GaussAuth.Foundation.Tests/sessionsAccessTests.test.cs`: three logins (two for application X, one for application Y) return three distinct `sessionId` values, each validates to its own session and application, and logging in again never replaces or revokes an earlier session.
-- [ ] T060 [US4] Add integration test: logging out one session, and separately revoking one specific session through `SessionService.RevokeAsync(sessionId)` resolved from `factory.Services`, each leave the user's other two sessions valid, and advancing the clock past a short-lived session's expiry (configure `Sessions__SessionLifetimeMinutes` and `Sessions__AccessTokenLifetimeMinutes` low for this factory) does not affect a session created later.
-- [ ] T061 [US4] Add integration test: a user with active memberships in applications A and B and a credential issued for A is rejected by `validate` when the request names application B's code, and accepted for A's code; both rejections are identical to any other `401`.
+- [X] T059 [US4] Add integration test in `tests/GaussAuth.Foundation.Tests/sessionsAccessTests.test.cs`: three logins (two for application X, one for application Y) return three distinct `sessionId` values, each validates to its own session and application, and logging in again never replaces or revokes an earlier session.
+- [X] T060 [US4] Add integration test: logging out one session, and separately revoking one specific session through `SessionService.RevokeAsync(sessionId)` resolved from `factory.Services`, each leave the user's other two sessions valid, and advancing the clock past a short-lived session's expiry (configure `Sessions__SessionLifetimeMinutes` and `Sessions__AccessTokenLifetimeMinutes` low for this factory) does not affect a session created later.
+- [X] T061 [US4] Add integration test: a user with active memberships in applications A and B and a credential issued for A is rejected by `validate` when the request names application B's code, and accepted for A's code; both rejections are identical to any other `401`.
 
 ### Implementation for User Story 4
 
 No production code is scheduled for this story: the composite membership key, the `aud`/session/caller-application comparisons in `ValidateAsync`, and the insert-only session creation already produced by Phases 2-4 satisfy it. If any test above fails, correct only the responsible `SessionService`, mapping, or endpoint code.
 
-- [ ] T062 [US4] Confirm no single-session restriction exists anywhere in `SessionService` or `SessionRepository` and no uniqueness constraint other than `PK_Sessions` and the foreign key was introduced on `Sessions`, by searching both for session-count limits and checking the generated migration; if any is found, remove it.
+- [X] T062 [US4] Confirm no single-session restriction exists anywhere in `SessionService` or `SessionRepository` and no uniqueness constraint other than `PK_Sessions` and the foreign key was introduced on `Sessions`, by searching both for session-count limits and checking the generated migration; if any is found, remove it.
 
 **Checkpoint**: Isolation and independence hold in every tested scenario.
 

@@ -81,6 +81,53 @@ public sealed class SessionsAccessTests
         }
     }
 
+    [TestMethod]
+    public async Task Logout_is_durable_idempotent_and_rejects_future_access()
+    {
+        using var factory = await FactoryAsync(); using var client = factory.CreateClient();
+        var login = await CreateLoginAsync(client);
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", login.AccessToken);
+
+        using var logout = await client.PostAsync("/auth/logout", null);
+        Assert.AreEqual(HttpStatusCode.NoContent, logout.StatusCode);
+        using var secondLogout = await client.PostAsync("/auth/logout", null);
+        Assert.AreEqual(HttpStatusCode.NoContent, secondLogout.StatusCode);
+        using var validate = await client.PostAsJsonAsync("/auth/session/validate", new { applicationCode = login.ApplicationCode });
+        using var renew = await client.PostAsync("/auth/session/renew", null);
+        Assert.AreEqual(HttpStatusCode.Unauthorized, validate.StatusCode);
+        Assert.AreEqual(HttpStatusCode.Unauthorized, renew.StatusCode);
+
+        using var scope = factory.Services.CreateScope();
+        var session = await scope.ServiceProvider.GetRequiredService<AuthenticationDbContext>().Sessions.SingleAsync(item => item.Id == login.SessionId);
+        Assert.IsNotNull(session.RevokedAt);
+    }
+
+    [TestMethod]
+    public async Task Sessions_are_independent_and_application_scoped()
+    {
+        using var factory = await FactoryAsync(); using var client = factory.CreateClient();
+        var email = $"isolation-{Guid.NewGuid():N}@example.test";
+        var userId = await CreateUserAsync(client, email);
+        var appA = await CreateApplicationAsync(client); var appB = await CreateApplicationAsync(client);
+        await CreateMembershipAsync(client, userId, appA.Id); await CreateMembershipAsync(client, userId, appB.Id);
+        var first = await LoginExistingAsync(client, appA.Code, email);
+        var second = await LoginExistingAsync(client, appA.Code, email);
+        var third = await LoginExistingAsync(client, appB.Code, email);
+        Assert.AreNotEqual(first.SessionId, second.SessionId); Assert.AreNotEqual(first.SessionId, third.SessionId);
+
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", first.AccessToken);
+        using var wrongApplication = await client.PostAsJsonAsync("/auth/session/validate", new { applicationCode = appB.Code });
+        Assert.AreEqual(HttpStatusCode.Unauthorized, wrongApplication.StatusCode);
+        using var logout = await client.PostAsync("/auth/logout", null);
+        Assert.AreEqual(HttpStatusCode.NoContent, logout.StatusCode);
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", second.AccessToken);
+        using var secondValidation = await client.PostAsJsonAsync("/auth/session/validate", new { applicationCode = appA.Code });
+        Assert.AreEqual(HttpStatusCode.OK, secondValidation.StatusCode);
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", third.AccessToken);
+        using var thirdValidation = await client.PostAsJsonAsync("/auth/session/validate", new { applicationCode = appB.Code });
+        Assert.AreEqual(HttpStatusCode.OK, thirdValidation.StatusCode);
+    }
+
     private static async Task<LoginResult> CreateLoginAsync(HttpClient client)
     {
         var email = $"sessions-{Guid.NewGuid():N}@example.test";
@@ -91,6 +138,14 @@ public sealed class SessionsAccessTests
         Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
         var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement;
         return new LoginResult(response.Headers.CacheControl?.NoStore == true, userId, applicationId, applicationCode, body.GetProperty("sessionId").GetGuid(), body.GetProperty("accessToken").GetString()!, body.GetProperty("tokenType").GetString()!);
+    }
+
+    private static async Task<LoginResult> LoginExistingAsync(HttpClient client, string applicationCode, string email)
+    {
+        using var response = await client.PostAsJsonAsync("/auth/login", new { applicationCode, email, password = Password });
+        Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
+        var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement;
+        return new LoginResult(response.Headers.CacheControl?.NoStore == true, body.GetProperty("userId").GetGuid(), body.GetProperty("applicationId").GetGuid(), applicationCode, body.GetProperty("sessionId").GetGuid(), body.GetProperty("accessToken").GetString()!, body.GetProperty("tokenType").GetString()!);
     }
 
     private static JsonElement DecodeJson(string base64Url)
