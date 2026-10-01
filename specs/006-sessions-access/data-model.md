@@ -60,6 +60,7 @@ There is no transition back to `Active`. Loss and regain of user/application/mem
 
 | Type | Kind | Purpose |
 |---|---|---|
+| `SessionService` | use-case service | Operations: `CreateAsync(LoginOperationResult)`, `ValidateAsync(credential, applicationCode)`, `RenewAsync(credential)`, `RevokeAsync(sessionId)` (one specific session; idempotent), `LogoutAsync(credential)` (revokes the credential's session through `RevokeAsync`). No bulk or per-user revocation. |
 | `SessionPolicy` | immutable record (`SessionLifetime`, `AccessCredentialLifetime`) | Validated configuration: both `> 0`, access lifetime `<= ` session lifetime. Constructed once at startup. |
 | `AccessCredentialClaims` | record (`SessionId`, `UserId`, `ApplicationId`, `IssuedAt`, `ExpiresAt`) | The only data a credential carries. |
 | `PublicSigningKey` | record (`KeyId`, `KeyType`, `Curve`, `Algorithm`, `Use`, `X`, `Y`) | Public verification key as plain data for `GET /auth/signing-keys`. |

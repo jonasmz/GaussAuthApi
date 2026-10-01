@@ -65,7 +65,7 @@ $CURL -X POST http://127.0.0.1:8080/users/<USER_ID>/activate
 # validate again -> 200 (session was not revoked)
 ```
 
-Repeat for the application and for the membership. Expected: `401` while inactive, `200` again after reactivation, with no change to the session record.
+Repeat with `POST /applications/<APP_ID>/deactivate` and `/activate`, and with `POST /applications/<APP_ID>/memberships/<USER_ID>/deactivate` and `/activate`. Expected: `401` while inactive, `200` again after reactivation, with no change to the session record.
 
 ## 8. Logout is durable
 

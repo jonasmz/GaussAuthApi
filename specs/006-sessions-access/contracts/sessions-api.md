@@ -7,9 +7,9 @@ This contract extends the existing login route and adds the session routes. It i
 | Method and route | Authentication | Purpose |
 |---|---|---|
 | `POST /auth/login` (extended) | none (rate limited, as in 005) | Authenticate, create a session, issue the first access credential |
-| `POST /auth/session/renew` | `Authorization: Bearer <credential>` | Issue a new short-lived credential for the same session |
-| `POST /auth/session/validate` | `Authorization: Bearer <credential>` | Authoritative check used by consuming APIs |
-| `POST /auth/logout` | `Authorization: Bearer <credential>` | Revoke the credential's session |
+| `POST /auth/session/renew` | `Authorization: Bearer <credential>` (rate limited, `session-credentials`) | Issue a new short-lived credential for the same session |
+| `POST /auth/session/validate` | `Authorization: Bearer <credential>` (rate limited, `session-credentials`) | Authoritative check used by consuming APIs |
+| `POST /auth/logout` | `Authorization: Bearer <credential>` (rate limited, `session-credentials`) | Revoke the credential's session |
 | `GET /auth/signing-keys` | none (rate limited) | Public verification keys for local signature checks |
 
 ## `POST /auth/login` (extension of 005)
@@ -48,7 +48,7 @@ Success `200`:
 }
 ```
 
-`expiresAt` is `min(now + access lifetime, sessionExpiresAt)`. Renewal never extends `sessionExpiresAt`. `Cache-Control: no-store`. Failure: `401` (uniform). An already expired credential cannot be renewed; the user logs in again.
+`expiresAt` is `min(now + access lifetime, sessionExpiresAt)`. Renewal never extends `sessionExpiresAt`. `Cache-Control: no-store`. Failures: `401` (uniform); `429` rate limit exceeded. An already expired credential cannot be renewed; the user logs in again.
 
 ## `POST /auth/session/validate`
 
@@ -71,7 +71,7 @@ Success `200`:
 }
 ```
 
-Failures: `400` invalid body (field problems only; never echoes the credential); `401` uniform rejection. Order: a missing or malformed `Authorization` header is `401`; an invalid body is `400`.
+Failures: `400` invalid body (field problems only; never echoes the credential); `401` uniform rejection; `429` rate limit exceeded. Order: a missing or malformed `Authorization` header (absent, not the `Bearer` scheme, empty, or longer than 4096 characters) is `401`; an invalid body is `400`.
 
 ### Authoritative check (shared by renew and validate)
 
@@ -86,6 +86,7 @@ No request body. Revokes the session of a signature-valid credential.
 | Credential valid, session active | `204`, session revoked durably |
 | Credential signature-valid but token expired, session unknown, already revoked, or already expired | `204` (idempotent, reveals nothing) |
 | Missing, malformed, or forged credential | `401` (uniform) |
+| Rate limit exceeded | `429` |
 
 After a `204` for an active session, that session's credentials fail the authoritative check immediately, including credentials not yet past `exp`.
 
@@ -135,5 +136,7 @@ A consuming API MUST:
 | `Sessions:Signing:PrivateKeyPemFile` | none | Path to a PEM file (alternative to the line above) |
 | `RateLimiting:SigningKeys:PermitLimit` | `60` | Requests per window per IP for `GET /auth/signing-keys` |
 | `RateLimiting:SigningKeys:WindowSeconds` | `60` | Window length |
+| `RateLimiting:SessionCredentials:PermitLimit` | `600` | Requests per window per IP for validate, renew, and logout (abuse backstop; sized for consuming-API traffic) |
+| `RateLimiting:SessionCredentials:WindowSeconds` | `60` | Window length |
 
 Startup fails (generic message, no values) when a lifetime is zero, negative, or inconsistent, or when no valid key is configured outside Development. In Development with no key, an ephemeral key is generated with a warning.

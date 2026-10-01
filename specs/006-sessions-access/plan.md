@@ -26,7 +26,7 @@ Turn a successful `005-authentication-login` result into a persisted, revocable,
 
 **Constraints**: Credential lifetime 15 minutes and session lifetime 8 hours (absolute, no sliding), both configurable and validated at startup (positive, credential <= session); credential `exp` never exceeds session expiry; only ES256 accepted; roles/permissions never in the credential; every credential rejection returns one uniform `401`; logout is durable and idempotent; credentials, keys, and the `Authorization` header are never logged; signing key externally supplied and never committed (ephemeral key only in Development); no OAuth 2.0/OIDC, refresh tokens, key rotation, distributed cache, or broker.
 
-**Scale/Scope**: One new Domain entity and enum, one new Application slice (`Sessions`: service, result, rejection reason, options, four ports, two small records), one repository and one migration, three Infrastructure token/key classes, one extension of login, one new API slice (four routes plus a bearer-header helper and DTOs), one rate-limit policy, an additive change (new `sessionId` parameter, new event types) to the security-event port and enum, plus proportionate tests. No password recovery, MFA, social login, administrative UI, or audit store.
+**Scale/Scope**: One new Domain entity and enum, one new Application slice (`Sessions`: service, result, rejection reason, options, four ports, two small records), one repository and one migration, three Infrastructure token/key classes, one extension of login, one new API slice (four routes plus a bearer-header helper and DTOs), two rate-limit policies, an additive change (new `sessionId` parameter, new event types) to the security-event port and enum, plus proportionate tests. No password recovery, MFA, social login, administrative UI, or audit store.
 
 ## Constitution Check
 
@@ -40,12 +40,12 @@ Turn a successful `005-authentication-login` result into a persisted, revocable,
 | Roles, permissions, and sessions | PASS | Session records user, application, creation, expiration, revocation; expired/revoked sessions never authorize; token format and revocation strategy resolved explicitly here (R1, R4, R13). |
 | Fixed technology and persistence | PASS | .NET 10, EF Core migration, PostgreSQL 17, Identity unchanged. One dependency added with a documented necessity review. No FKs from business apps; internal FK reuses the membership key. |
 | Container development rule | PASS | Reuses `postgres` and `sdk` compose services; all .NET commands (build, test, migrations) run in the `sdk` container; no global Docker cleanup. |
-| Security by design | PASS | ES256 only (algorithm allow-list), asymmetric so consumers cannot mint; uniform `401`; secrets from external config; generic startup failure with no key material; no credential in logs; `Cache-Control: no-store` on token responses; rate limit on the anonymous keys route; invalid signatures rejected before any database access. |
+| Security by design | PASS | ES256 only (algorithm allow-list), asymmetric so consumers cannot mint; uniform `401`; secrets from external config; generic startup failure with no key material; no credential in logs; `Cache-Control: no-store` on token responses; rate limits on the public keys route and on the credential-bearing session routes; invalid signatures rejected before any database access. |
 | Simplicity and dependency governance | PASS (with tracked item) | No refresh token, rotation, cache, broker, mediator, or OAuth/OIDC. One justified package (see Complexity Tracking). |
 | Proportionate testing and error contracts | PASS | Tests cover session expiry/revocation, isolation, eligibility, tampering, logout, log hygiene, persistence; expected failures map to `401`/`204`/`400`; unexpected ones go through `SafeExceptionHandler`. |
 | Specification-driven workflow | PASS | Derived from the clarified spec (Q1-Q5); all deferred items (R1-R15) are decided in `research.md` with no silent weakening. |
 
-**Gate result**: PASS before research and after Phase 1 design. One tracked item: the new dependency (below).
+**Gate result**: PASS before research and after Phase 1 design. Tracked items (see Complexity Tracking): the new dependency, and the new public routes with their rate-limit policies.
 
 ## Project Structure
 
@@ -117,7 +117,7 @@ src/
 │   │   └── signingKeySetResponse.dto.cs
 │   ├── DependencyInjection/
 │   │   ├── applicationServiceCollectionExtensions.extension.cs  # + SessionService, TimeProvider
-│   │   └── apiServiceCollectionExtensions.extension.cs          # + "signing-keys" policy
+│   │   └── apiServiceCollectionExtensions.extension.cs          # + "signing-keys" and "session-credentials" policies
 │   └── Program.cs                                    # + MapSessionsEndpoints, pass environment to AddInfrastructure
 compose.dev.yml                                       # + optional Sessions__Signing__PrivateKeyPem passthrough
 .env.example                                          # + optional SESSIONS_SIGNING_KEY_PEM placeholder (empty)
@@ -126,6 +126,8 @@ tests/GaussAuth.Foundation.Tests/
 ├── sessionsAccessTests.test.cs
 ├── mutableTimeProvider.provider.cs                   # test clock
 ├── architectureTests.test.cs                         # + IdentityModel forbidden prefixes
+├── migrationTests.test.cs                            # + Sessions table, foreign key, index
+├── startupTests.test.cs                              # + lifetime and signing-key configuration failures
 └── authenticationLoginTests.test.cs                  # recording recorder updated for new signature
 ```
 
@@ -137,7 +139,7 @@ Each spec requirement maps to a concrete design element; tests listed here are t
 
 | Requirement | Design element | Verified by |
 |---|---|---|
-| FR-001, FR-002, FR-004 | `SessionService.CreateAsync(LoginOperationResult)`; `Success` factory internal; eligibility re-check without password | Test: login creates session for correct user/app; ineligible entity between authentication and creation yields no session (service-level test with a stubbed repository state) |
+| FR-001, FR-002, FR-004 | `SessionService.CreateAsync(LoginOperationResult)`; `Success` factory internal; eligibility re-check without password | Test: login creates session for correct user/app; ineligible entity between authentication and creation yields no session (service-level test resolving the real services from the DI container) |
 | FR-003, FR-005, FR-006 | `Session` entity, `SessionPolicy`, `GetState` | Domain tests: expiry arithmetic, state table, revoke idempotence, invalid lifetime/identifiers rejected; startup test: zero/negative lifetime fails |
 | FR-007, FR-008, FR-009 | Issuer/claim set, `exp = min(...)` | Integration: claims limited to the six names; credential `exp <= sessionExpiresAt`, including near session end |
 | FR-010, FR-011, FR-012 | `SessionService.ValidateAsync`, uniform `401` | Integration: valid, tampered, wrong-algorithm, expired (fake clock), revoked, wrong-application all reject with identical response bodies |
@@ -146,7 +148,7 @@ Each spec requirement maps to a concrete design element; tests listed here are t
 | FR-017, FR-018 | Eligibility checks at create and at every authoritative check; no revoke on deactivation | Integration: inactive user/application/membership refuse login-session creation; existing session rejected while inactive and accepted after reactivation |
 | FR-019 | No roles/permissions in claims | Integration: decoded claim names are exactly `iss`, `sub`, `aud`, `sid`, `iat`, `exp` |
 | FR-020 | `renew` with authoritative check | Integration: renew succeeds with same `sid` and bounded `exp`; fails for expired or revoked |
-| FR-021, FR-023 | Uniform `401`; `signing-keys` rate-limit policy | Integration: expected failures never `500`; keys route returns `429` beyond limit |
+| FR-021, FR-023 | Uniform `401`; `signing-keys` and `session-credentials` rate-limit policies; `SafeExceptionHandler` for unexpected failures | Integration: expected failures never `500`; an infrastructure failure during validation returns the safe `500` and never grants access; keys and credential routes return `429` beyond their limits |
 | FR-022 | External key, ES256, `ECDsa` | Startup test: missing key outside Development fails generically; no key in logs/responses |
 | FR-024 | `ISecurityEventRecorder` with `sessionId`; structured logs | Integration: recording recorder sees `SessionCreated`, `SessionRevoked`, `LogoutCompleted`, `AccessRejected*`; captured logs contain no credential substring |
 | FR-025 | `Sessions` table, migration | Migration test: `Sessions` table, FK, and index exist after `MigrateAsync` |
@@ -158,4 +160,4 @@ Each spec requirement maps to a concrete design element; tests listed here are t
 | Item | Why needed | Simpler alternative rejected because |
 |---|---|---|
 | New package `Microsoft.IdentityModel.JsonWebTokens` (Infrastructure only) | The clarified decision requires a signed token verifiable locally by consumers; the .NET shared framework has no JWS/JWT implementation | A hand-rolled envelope is prohibited by the spec and risks algorithm-confusion and `alg=none` flaws; the middleware package (`JwtBearer`) adds a larger surface and a second validation path that would bypass the Application-layer session checks |
-| New anonymous route `GET /auth/signing-keys` with its own rate-limit policy | Local signature verification is impossible without a way to obtain the public key | Out-of-band key copying is undocumented and brittle; the route returns only public key material |
+| New anonymous route `GET /auth/signing-keys` and two new rate-limit policies (`signing-keys`, `session-credentials`) | Local signature verification is impossible without a way to obtain the public key; the constitution requires rate limiting on abuse-prone public and credential endpoints | Out-of-band key copying is undocumented and brittle; leaving credential routes unlimited would violate the security constraints. The credential-route default is generous so consuming APIs are unaffected |
