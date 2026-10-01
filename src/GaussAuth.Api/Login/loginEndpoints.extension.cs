@@ -8,7 +8,7 @@ public static class LoginEndpoints
 {
     public static IEndpointRouteBuilder MapLoginEndpoints(this IEndpointRouteBuilder app)
     {
-        app.MapPost("/auth/login", LoginAsync);
+        app.MapPost("/auth/login", LoginAsync).RequireRateLimiting("login");
         return app;
     }
 

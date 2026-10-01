@@ -93,10 +93,10 @@ No additional implementation tasks: the uniform-failure behavior under test here
 
 ### Tests for User Story 3
 
-- [ ] T022 [US3] Add integration test proving an inactive user is rejected with the uniform `401` failure and remains inactive (is not automatically reactivated) after the login attempt in `tests/GaussAuth.Foundation.Tests/authenticationLoginTests.test.cs`.
-- [ ] T023 [US3] Add integration test proving a nonexistent or inactive target application is rejected with the uniform `401` failure, that the membership record still exists, and that an inactive application remains inactive (is not automatically reactivated) after the login attempt in `tests/GaussAuth.Foundation.Tests/authenticationLoginTests.test.cs`.
-- [ ] T024 [US3] Add integration test proving a missing or inactive membership is rejected with the uniform `401` failure, and that an inactive membership remains inactive (is not automatically reactivated) after the login attempt in `tests/GaussAuth.Foundation.Tests/authenticationLoginTests.test.cs`.
-- [ ] T025 [US3] Add integration test proving a user with an active membership only in application A cannot log in to application B, and that membership state in one application never affects the outcome in another in `tests/GaussAuth.Foundation.Tests/authenticationLoginTests.test.cs`.
+- [X] T022 [US3] Add integration test proving an inactive user is rejected with the uniform `401` failure and remains inactive (is not automatically reactivated) after the login attempt in `tests/GaussAuth.Foundation.Tests/authenticationLoginTests.test.cs`.
+- [X] T023 [US3] Add integration test proving a nonexistent or inactive target application is rejected with the uniform `401` failure, that the membership record still exists, and that an inactive application remains inactive (is not automatically reactivated) after the login attempt in `tests/GaussAuth.Foundation.Tests/authenticationLoginTests.test.cs`.
+- [X] T024 [US3] Add integration test proving a missing or inactive membership is rejected with the uniform `401` failure, and that an inactive membership remains inactive (is not automatically reactivated) after the login attempt in `tests/GaussAuth.Foundation.Tests/authenticationLoginTests.test.cs`.
+- [X] T025 [US3] Add integration test proving a user with an active membership only in application A cannot log in to application B, and that membership state in one application never affects the outcome in another in `tests/GaussAuth.Foundation.Tests/authenticationLoginTests.test.cs`.
 
 ### Implementation for User Story 3
 
@@ -114,15 +114,15 @@ No additional implementation tasks: the state-boundary checks under test here (F
 
 ### Tests for User Story 4
 
-- [ ] T026 [US4] Add integration test proving repeated invalid-password attempts reach the configured lockout threshold and a subsequent correct-password attempt still returns the uniform `401` failure in `tests/GaussAuth.Foundation.Tests/authenticationLoginTests.test.cs`.
-- [ ] T027 [US4] Add integration test proving login requests exceeding the configured `login` rate limit within the configured window receive `429` with a `Retry-After` header before credential validation occurs in `tests/GaussAuth.Foundation.Tests/authenticationLoginTests.test.cs`.
-- [ ] T028 [US4] Add a consolidated test asserting that the `401` response bodies/status from every uniform-failure cause exercised so far (unknown email T019, wrong password T020, inactive user T022, inactive/missing application T023, missing/inactive membership T024, account lockout T026) are identical to one another, directly validating SC-002's "zero scenarios distinguishable" requirement in `tests/GaussAuth.Foundation.Tests/authenticationLoginTests.test.cs`.
+- [X] T026 [US4] Add integration test proving repeated invalid-password attempts reach the configured lockout threshold and a subsequent correct-password attempt still returns the uniform `401` failure in `tests/GaussAuth.Foundation.Tests/authenticationLoginTests.test.cs`.
+- [X] T027 [US4] Add integration test proving login requests exceeding the configured `login` rate limit within the configured window receive `429` with a `Retry-After` header before credential validation occurs in `tests/GaussAuth.Foundation.Tests/authenticationLoginTests.test.cs`.
+- [X] T028 [US4] Add a consolidated test asserting that the `401` response bodies/status from every uniform-failure cause exercised so far (unknown email T019, wrong password T020, inactive user T022, inactive/missing application T023, missing/inactive membership T024, account lockout T026) are identical to one another, directly validating SC-002's "zero scenarios distinguishable" requirement in `tests/GaussAuth.Foundation.Tests/authenticationLoginTests.test.cs`.
 
 ### Implementation for User Story 4
 
-- [ ] T029 [US4] Configure `IdentityOptions.Lockout.MaxFailedAccessAttempts` (from `Identity:Lockout:MaxFailedAccessAttempts`, default `5`), `Lockout.DefaultLockoutTimeSpan` (from `Identity:Lockout:DefaultLockoutMinutes`, default `5`), and `Lockout.AllowedForNewUsers = true` in the existing `AddIdentityCore<IdentityUser<Guid>>()` options callback in `src/GaussAuth.Infrastructure/DependencyInjection/infrastructureServiceCollectionExtensions.extension.cs`.
-- [ ] T030 [US4] Add a `"login"` fixed-window rate-limiting policy partitioned by `RemoteIpAddress`, configurable via `RateLimiting:Login:PermitLimit` (default `5`) and `RateLimiting:Login:WindowSeconds` (default `60`), returning `429` with `Retry-After`, mirroring the existing `"user-creation"` policy in `src/GaussAuth.Api/DependencyInjection/apiServiceCollectionExtensions.extension.cs`.
-- [ ] T031 [US4] Apply `.RequireRateLimiting("login")` to the `POST /auth/login` route in `src/GaussAuth.Api/Login/loginEndpoints.extension.cs`.
+- [X] T029 [US4] Configure `IdentityOptions.Lockout.MaxFailedAccessAttempts` (from `Identity:Lockout:MaxFailedAccessAttempts`, default `5`), `Lockout.DefaultLockoutTimeSpan` (from `Identity:Lockout:DefaultLockoutMinutes`, default `5`), and `Lockout.AllowedForNewUsers = true` in the existing `AddIdentityCore<IdentityUser<Guid>>()` options callback in `src/GaussAuth.Infrastructure/DependencyInjection/infrastructureServiceCollectionExtensions.extension.cs`.
+- [X] T030 [US4] Add a `"login"` fixed-window rate-limiting policy partitioned by `RemoteIpAddress`, configurable via `RateLimiting:Login:PermitLimit` (default `5`) and `RateLimiting:Login:WindowSeconds` (default `60`), returning `429` with `Retry-After`, mirroring the existing `"user-creation"` policy in `src/GaussAuth.Api/DependencyInjection/apiServiceCollectionExtensions.extension.cs`.
+- [X] T031 [US4] Apply `.RequireRateLimiting("login")` to the `POST /auth/login` route in `src/GaussAuth.Api/Login/loginEndpoints.extension.cs`.
 
 **Checkpoint**: Brute-force/credential-stuffing (lockout) and endpoint-level abuse (rate limiting) are both constrained as two independent, configurable protections, and uniformity across all failure causes is directly verified.
 

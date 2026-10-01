@@ -44,8 +44,17 @@ public static class InfrastructureServiceCollectionExtensions
 
         services.AddDbContext<AuthenticationDbContext>(options => options.UseNpgsql(connection));
         services.AddAuthentication();
+
+        var maxFailedAccessAttempts = configuration.GetValue("Identity:Lockout:MaxFailedAccessAttempts", 5);
+        var lockoutMinutes = configuration.GetValue("Identity:Lockout:DefaultLockoutMinutes", 5);
+
         services.AddIdentityCore<IdentityUser<Guid>>(options =>
-                options.Stores.SchemaVersion = IdentitySchemaVersions.Version2)
+            {
+                options.Stores.SchemaVersion = IdentitySchemaVersions.Version2;
+                options.Lockout.MaxFailedAccessAttempts = maxFailedAccessAttempts;
+                options.Lockout.DefaultLockoutTimeSpan = TimeSpan.FromMinutes(lockoutMinutes);
+                options.Lockout.AllowedForNewUsers = true;
+            })
             .AddEntityFrameworkStores<AuthenticationDbContext>()
             .AddSignInManager();
 
