@@ -13,7 +13,7 @@ Findings come from inspecting the current code (`src/`) and the 002–010 specs.
 - **Decision**:
   - Application-scoped operation: allowed when the caller is a global administrator, or when the caller's session Application equals the route `applicationId` **and** the caller's effective permissions in that Application contain the required `auth.*` code.
   - Global operation: allowed only for a global administrator.
-- **Decision (interpretation to confirm)**: A global administrator may perform application-scoped administrative operations on any explicitly named Application, because the clarified model has the global administrator assign the seeded permissions to roles. This authority is administrative only: it never appears in effective permissions or in the 008 authorization context and grants no business permission.
+- **Decision (now FR-004b in the spec)**: A global administrator may perform application-scoped administrative operations on any explicitly named Application, because the clarified model has the global administrator assign the seeded permissions to roles. This authority is administrative only: it never appears in effective permissions or in the 008 authorization context and grants no business permission.
 - **Rationale**: Without it an Application could never get its first administrator. It does not contradict "no implicit permission inside an Application", which concerns authorization for consuming business APIs.
 - **Alternatives**: Require the global administrator to also hold a role in each Application (rejected: contradicts the clarified "list only" model).
 
@@ -38,12 +38,14 @@ Findings come from inspecting the current code (`src/`) and the 002–010 specs.
 
 - **Decision**: Add nullable `ActorUserId` to `SecurityEvent` (and to `SecurityEventDraft`). A scoped `IAdministrativeActorContext` is set by the endpoint filter after authorization; `PersistedSecurityEventRecorder` stamps it on every event recorded during that request. Existing events keep `UserId` as the affected user and `ApplicationId`; `SubjectType`/`SubjectId` carry other targets (role, permission, session, credential).
 - **Rationale**: Actor comes from the authenticated session only and is never inferred from the target (spec requirement). Existing services keep their signatures. Self-service and system events leave `ActorUserId` null.
+- **Target convention (finding fix)**: Existing role, permission, membership, and assignment events record only the Application, so the affected record is not identifiable. Add an `ISecurityEventRecorder` overload carrying `SubjectType`/`SubjectId` (default interface method, so existing test doubles keep compiling) and make the existing services pass: `application`, `membership` (membership id, target user in `UserId`), `role`, `permission`, `role-permission` (assignment id), `user-role` (assignment id, target user in `UserId`), `session` (session id), `consumer-credential` (Application id). Values are identifiers only and satisfy the existing prohibited-term guard.
 - **Alternatives**: Add an actor parameter to every service method (rejected: large churn, easy to omit).
 
 ## R7. New and corrected security events
 
 - **Decision**: Add `ApplicationRegistered`, `UserCreated`, `RoleUpdated`, `PermissionUpdated`, `ConsumerCredentialGenerated`, `ConsumerCredentialRotated`, `ConsumerCredentialPreviousRetired` (all critical) and `AdministrativeAccessDenied` (operational). `SessionRevoked` (critical) is reused for administrative revocation.
 - **Decision**: Fix the existing bug where `PermissionService.UpdateDescriptionAsync` records `PermissionActivated`; check the role equivalent and record `RoleUpdated`/`PermissionUpdated`.
+- **Decision (finding fix)**: Existing services record lifecycle and assignment events unconditionally, even when nothing changed (Application, Membership, Role, Permission, RolePermission, UserRole). They are changed to record an event only when state actually changes, so repeated requests are quiet and idempotent.
 - **Reliability**: Follows the existing 009 policy (critical events make the operation incomplete on failure; denial events are operational and logged on failure).
 - **Denials**: Recorded only for authenticated callers who lack permission (actor, required permission code in `Reason`, target Application). Unauthenticated attempts are only debug-logged to avoid flooding and because there is no actor.
 
@@ -68,6 +70,7 @@ Findings come from inspecting the current code (`src/`) and the 002–010 specs.
 ## R11. Consumer secrets: persistence and flows
 
 - **Finding**: Consumer secret hashes currently live only in configuration (`AuthorizationConsumers:<code>:CurrentSecretHash` / `RetiringSecretHash`), loaded once at startup into a singleton validator, so they cannot be changed at runtime.
+- **Atomicity (finding fix)**: Generate and rotate run inside a database transaction that also writes the critical security event, using the existing but still unimplemented `ISecurityAuditTransaction` port (new Infrastructure adapter over the shared scoped `DbContext`). The plaintext is returned only after commit; any failure rolls back and the old secret keeps working, so an audit failure can never leave a changed secret the administrator never received. Other administrative mutations keep the 009 policy (event persisted right after the state change, same transaction where technically practical); this is an accepted limitation recorded in the security review.
 - **Decision**: Add a database table `ApplicationConsumerCredentials` (one row per Application) holding the current hash, an optional retiring hash, timestamps, and a concurrency token. A small Domain entity `ConsumerCredential` owns rotation invariants. An Infrastructure `EfConsumerCredentialStore` implements the Application port (generate secret with `RandomNumberGenerator`, hash with the same `PasswordHasher<string>` scheme keyed by Application code, persist). The validator reads the store and **falls back to configured hashes only when the Application has no database record**, so existing deployments keep working unchanged. The validator becomes scoped (it now touches the database).
 - **Flows** (global administrator, explicit target Application):
   - **Generate**: only if the Application has neither a database record nor configured hashes; returns the plaintext once.
@@ -82,7 +85,7 @@ Findings come from inspecting the current code (`src/`) and the 002–010 specs.
 ## R12. Sessions administration
 
 - **Decision**: Extend `ISessionRepository` with a filtered, bounded list (by user, Application, state) and bounded lookups for revocation. New `AdministrativeSessionService` handles list/inspect and revocation; single revoke delegates to the existing `SessionService.RevokeAsync`, user-wide delegates to `RevokeAllForUserAsync`.
-- **Scopes**: single session; all sessions of a user within an Application; all sessions of an Application (Application scope with `auth.sessions.revoke`); all sessions of a user across Applications (global only). No identifier-list revocation.
+- **Scopes**: single session; all sessions of a user within an Application; all sessions of an Application (Application scope with `auth.sessions.revoke`); all sessions of a user across Applications (global only). No identifier-list revocation. All bulk scopes, including the global user-wide one, use the same capped path; the existing unbounded `RevokeAllForUserAsync` stays only for the password-change flow.
 - **Bounds**: bulk operations revoke at most `Administration:MaxBulkSessionRevocation` (default 1000) active sessions per request and report `{ revoked, hasMore }` so the operator repeats. One `SessionRevoked` event is written per revoked session (stamped with actor), matching existing per-session auditing.
 - **State filter**: `active | revoked | expired` computed from `RevokedAt`/`ExpiresAt` at query time; list is newest first with a composite `(createdAt, id)` cursor, max page 100.
 - **Safe metadata only**: id, userId, applicationId, createdAt, expiresAt, revokedAt, state.
@@ -99,7 +102,7 @@ Findings come from inspecting the current code (`src/`) and the 002–010 specs.
 ## R15. Permission mapping, idempotency, and errors
 
 - **Decision**: Memberships use `auth.memberships.*`; roles and user-role assignment use `auth.roles.*`; permissions and role-permission assignment use `auth.permissions.*`; sessions use `auth.sessions.*`. Full table in [contracts/admin-api.md](contracts/admin-api.md).
-- **Idempotency**: Activate/deactivate on an unchanged state returns `200` with the current state and records no event (existing handlers already do this). Revoking a revoked or expired session returns `200`. Creating an existing record or assigning an active assignment returns `409` (the spec's "duplicate" error). Unique indexes remain authoritative under concurrency.
+- **Idempotency**: Activate/deactivate on an unchanged state returns `200` with the current state and records no event. Only the user lifecycle handlers behave this way today; the other services are changed to match (see R7). Revoking a revoked or expired session returns `200`. Creating an existing record or assigning an active assignment returns `409` (the spec's "duplicate" error). Unique indexes remain authoritative under concurrency.
 - **Errors**: Existing `ProblemDetails` shape; `401` unauthenticated, `403` insufficient permission or wrong Application, `404` not found, `409` invalid state or duplicate, `400` invalid request.
 - **Spec adjustment**: Retrieving an Application's own state is global-only (`GET /admin/applications/{id}`); Application administrators see Application state through the effective authorization view. The spec Assumptions line was updated accordingly.
 
@@ -109,7 +112,7 @@ Findings come from inspecting the current code (`src/`) and the 002–010 specs.
 
 ## R17. Testing approach
 
-- **Decision**: Tests replace `IGlobalAdministratorPolicy` in the `WebApplicationFactory` with a controllable test policy so a created user can be made global administrator. A shared `AdministrativeTestHost` fixture creates an administrator client; existing tests switch to `/admin/...` through it.
+- **Decision**: Tests replace `IGlobalAdministratorPolicy` in the `WebApplicationFactory` with a controllable test policy so a created user can be made global administrator, and raise `RateLimiting:Administration:PermitLimit` by configuration so setup-heavy tests never receive `429`. A shared `AdministrativeTestHost` fixture creates an administrator client; existing tests switch to `/admin/...` through it.
 - **Scope**: Essential cases only, mapped to the spec's priority list: authorization and isolation, user lifecycle and no sensitive fields, memberships/roles/permissions including cross-application rejection, session revoke (single and bulk, unusable afterward), consumer-secret rotation and non-disclosure, audit actor/target and absence of secrets, seeding idempotency, audit-permission migration, and reserved-prefix rejection.
 
 ## R18. Documentation

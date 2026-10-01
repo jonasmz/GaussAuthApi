@@ -6,7 +6,7 @@
 
 ## Summary
 
-Put every management operation behind one permission-based administrative boundary served under `/admin/...`, reusing the existing 002–010 services instead of re-implementing them. A small Application-layer authorizer resolves the caller's session and decides between the externally configured **global administrator** list (generalizing the 009 global audit setting) and application-scoped **`auth.*` permissions** that are seeded into every Application. An ambient per-request actor context lets the single security-event recorder stamp a distinct `ActorUserId` on every administrative event. New slices add user listing, an effective-authorization view, administrative session listing/revocation with bounded bulk scopes, and database-backed consumer-secret management with one-way hashes and the existing active+retiring policy. The legacy unauthenticated management routes are removed so no unprotected back door remains.
+Put every management operation behind one permission-based administrative boundary served under `/admin/...`, reusing the existing 002–010 services instead of re-implementing them. A small Application-layer authorizer resolves the caller's session and decides between the externally configured **global administrator** list (generalizing the 009 global audit setting) and application-scoped **`auth.*` permissions** that are seeded into every Application. An ambient per-request actor context lets the single security-event recorder stamp a distinct `ActorUserId` on every administrative event, and existing services now identify the affected role, permission, membership, assignment, or session as the event subject and record events only on real state changes. New slices add user listing, an effective-authorization view, administrative session listing/revocation with bounded bulk scopes, and database-backed consumer-secret management with one-way hashes, the existing active+retiring policy, and an atomic secret-change-plus-audit transaction. The legacy unauthenticated management routes are removed so no unprotected back door remains.
 
 ## Technical Context
 
@@ -14,7 +14,7 @@ Put every management operation behind one permission-based administrative bounda
 
 **Primary Dependencies**: ASP.NET Core minimal APIs, EF Core, PostgreSQL 17, ASP.NET Core Identity `PasswordHasher` (already used for consumer hashes). No new packages.
 
-**Storage**: PostgreSQL. Two migrations: security-event actor column plus consumer-credential table; seeding of administrative permissions plus 009 audit-permission migration.
+**Storage**: PostgreSQL. Four migrations: `addSecurityEventActor`, `seedAdministrativePermissions`, `addApplicationConsumerCredentials`, `moveAuditPermissionToAuthNamespace`.
 
 **Testing**: MSTest integration, migration, and architecture tests in the Docker SDK container, extending `tests/GaussAuth.Foundation.Tests`.
 
@@ -83,8 +83,8 @@ src/
 ├── GaussAuth.Infrastructure/
 │   ├── Administration/                                  # configured global administrators; EF consumer credential store + hasher
 │   ├── AuthorizationContext/                            # validator reads store, falls back to configured hashes
-│   ├── Persistence/Migrations/                          # actor + credentials; seeding + audit-permission migration
-│   └── Security/persistedSecurityEventRecorder...       # stamps actor
+│   ├── Persistence/Migrations/                          # actor, seeding, credentials, audit-permission move
+│   └── Security/                                        # recorder stamps actor; efSecurityAuditTransaction adapter
 └── GaussAuth.Api/
     ├── Administration/                                  # authorization endpoint filter, session/credential/view endpoints
     ├── Users|Applications|Memberships|Roles|Permissions|Authorization/   # existing endpoint classes re-mapped under /admin group

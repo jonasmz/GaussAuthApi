@@ -6,7 +6,7 @@ All administrative routes are under `/admin` and require `Authorization: Bearer 
 
 - **Global (G)**: caller's UserId is in `Administration:GlobalAdministratorUserIds`. Required for operations marked **G**.
 - **Application-scoped (A)**: the route `applicationId` must equal the caller's session Application and the caller must hold the listed `auth.*` permission through an active role there. Operations marked **A** may also be performed by a global administrator on any named Application.
-- Global authority is administrative only: it never appears in effective permissions or in the authorization context for consuming APIs and grants no business permission.
+- Global authority is administrative only: it never appears in effective permissions or in the authorization context for consuming APIs and grants no business permission. Application-scoped operations performed by a global administrator are audited with that administrator as actor.
 - The `auth.` prefix is reserved. Business permissions cannot use it, and platform permissions cannot be edited, activated, or deactivated through normal operations. `auth.roles.manage` is not equivalent to a business permission named `roles.manage`.
 - A global administrator signs in through any Application where they hold an active membership.
 
@@ -120,15 +120,15 @@ Safe metadata only: `{ id, userId, applicationId, createdAtUtc, expiresAtUtc, re
 | Revoke all in Application | `POST /admin/applications/{applicationId}/sessions/revoke` | A · `auth.sessions.revoke` |
 | Revoke user everywhere | `POST /admin/users/{userId}/sessions/revoke` | G |
 
-Bulk revocation revokes at most `Administration:MaxBulkSessionRevocation` active sessions per request and returns `{ "revoked": n, "hasMore": bool }`; repeat while `hasMore`. A revoked session is unusable on the next request. No arbitrary identifier-list revocation exists.
+Bulk revocation, including the global user-wide route, revokes at most `Administration:MaxBulkSessionRevocation` active sessions per request and returns `{ "revoked": n, "hasMore": bool }`; repeat while `hasMore`. A revoked session is unusable on the next request. No arbitrary identifier-list revocation exists.
 
 ## Security audit
 
-`GET /security-events` (unchanged path). Application scope requires `auth.security.audit.read` and returns only that Application's events; global scope (all Applications and global events) requires the global administrator. Events include `actorUserId`, target identifiers, `applicationId`, type, outcome, time, and correlation id.
+`GET /security-events` (path kept from 009 for compatibility; it is outside the `/admin` group but protected by the same authorization model). Application scope requires `auth.security.audit.read` and returns only that Application's events; global scope (all Applications and global events) requires the global administrator. Events include `actorUserId`, target identifiers, `applicationId`, type, outcome, time, and correlation id.
 
 ## Audit behavior
 
-Every administrative state change writes a critical security event with `ActorUserId` (from the session), the target (`UserId`, `ApplicationId`, `SubjectType`/`SubjectId`), outcome, time, and correlation id when available; the operation is incomplete if the event cannot persist. Permission-denied attempts by authenticated callers write an operational `administration.access.denied` event. No event, log, or response contains passwords, hashes, tokens, session secrets, or consumer secrets.
+Every administrative state change writes a critical security event with `ActorUserId` (from the session), the target (`UserId` for the affected user; `ApplicationId`; and `SubjectType`/`SubjectId` of `membership`, `role`, `permission`, `role-permission`, `user-role`, `session`, or `consumer-credential`), outcome, time, and correlation id when available; events are written only when state actually changes. Consumer-secret generate/rotate persist the change and the event in one transaction and return the plaintext only after commit; other mutations follow the 009 reliability policy. Permission-denied attempts by authenticated callers write an operational `administration.access.denied` event. No event, log, or response contains passwords, hashes, tokens, session secrets, or consumer secrets.
 
 ## Self-service versus administration
 

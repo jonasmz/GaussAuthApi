@@ -9,7 +9,7 @@ No existing domain concept is redesigned. Changes are additive.
 | `ActorUserId` | `Guid?` (new) | Authenticated administrator who performed the operation. Null for self-service and system events. Never inferred from the target. |
 | `UserId` | existing | The affected (target) user where one exists. |
 | `ApplicationId` | existing | Application in scope where applicable. |
-| `SubjectType` / `SubjectId` | existing | Other targets: `role`, `permission`, `session`, `membership`, `consumer-credential`. |
+| `SubjectType` / `SubjectId` | existing | Typed target id: `application`, `membership`, `role`, `permission`, `role-permission` (assignment id), `user-role` (assignment id), `session`, `consumer-credential` (Application id). Identifiers only. |
 
 - Index: `(ActorUserId, OccurredAtUtc, Id)`.
 - Invariants unchanged: append-only, UTC, bounded, prohibited-term guard on `Reason`/`Metadata`/`SubjectType`.
@@ -64,8 +64,10 @@ Reserved, not seeded (global only): `auth.users.read`, `auth.users.manage`, `aut
 
 ## Migrations
 
-1. `addAdministrationAuditActorAndConsumerCredentials`: `SecurityEvents.ActorUserId` + index; `ApplicationConsumerCredentials`.
-2. `seedAdministrativePermissions`: idempotent seeding for existing Applications (aborts if a pre-existing `auth.`-prefixed permission exists), then audit-permission transfer from `audit.events.read` to `auth.security.audit.read`.
+1. `addSecurityEventActor`: `SecurityEvents.ActorUserId` + index `IX_SecurityEvents_ActorUserId_OccurredAtUtc_Id`.
+2. `seedAdministrativePermissions`: idempotent seeding for existing Applications (aborts if a pre-existing `auth.`-prefixed permission exists).
+3. `addApplicationConsumerCredentials`: table `ApplicationConsumerCredentials`.
+4. `moveAuditPermissionToAuthNamespace`: transfers `audit.events.read` assignments to `auth.security.audit.read`.
 
 ## Configuration
 
