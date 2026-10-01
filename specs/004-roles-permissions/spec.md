@@ -34,6 +34,7 @@ A trusted administrator registers roles and concrete permissions for one consumi
 4. **Given** an active application, **When** an administrator creates a permission with a valid stable code, **Then** the permission is stored in that application and is active.
 5. **Given** an inactive application, **When** an administrator attempts to create an active role or permission, **Then** the operation is rejected and no authorization record is created.
 6. **Given** an existing role or permission, **When** it is activated or deactivated repeatedly, **Then** the state transition is idempotent and its historical record remains available.
+7. **Given** an existing role or permission in its application context, **When** an administrator updates only its description, **Then** the description and update timestamp change while the role name or permission code remains unchanged.
 
 ---
 
@@ -90,7 +91,7 @@ A consuming application or trusted administrator asks which permissions a user e
 - **FR-002**: The system MUST allow roles to be created, retrieved, listed by application, activated, and deactivated; role names MUST be unique after normalization within an application and MAY repeat in different applications.
 - **FR-003**: The system MUST represent a Permission with a stable identifier, application context, stable machine-readable code, optional description, active state, and historical timestamps.
 - **FR-004**: The system MUST validate permission codes as required, bounded, lowercase machine-readable capability identifiers composed of one or more dot-separated alphanumeric segments with optional internal hyphens; permission codes MUST be unique within an application and MAY repeat in different applications.
-- **FR-005**: The system MUST keep role names and permission codes immutable after creation; descriptions MAY be updated without changing either stable identifier.
+- **FR-005**: The system MUST keep role names and permission codes immutable after creation and MUST allow a bounded description update without changing either stable identifier.
 - **FR-006**: The system MUST reject creation of an active role or permission for an inactive or nonexistent application.
 - **FR-007**: The system MUST represent a RolePermission relationship with role, permission, active state, and historical timestamps; it MUST permit only one relationship for a role-permission pair.
 - **FR-008**: The system MUST allow a permission to be assigned only to an active role in the same application when the permission and application are active.

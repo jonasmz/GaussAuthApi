@@ -9,6 +9,7 @@ All routes are management operations for trusted callers in this feature. They a
 | `POST /applications/{applicationId}/roles` | `{ "name": "Operator", "description": "Optional" }` | `201` role | `400` invalid input; `404` application absent; `409` inactive application or duplicate normalized name. |
 | `GET /applications/{applicationId}/roles/{roleId}` | — | `200` role | `404` absent/mismatched role or application. |
 | `GET /applications/{applicationId}/roles` | Optional cursor/limit | `200` page | `400` invalid pagination; `404` application absent. |
+| `PUT /applications/{applicationId}/roles/{roleId}/description` | `{ "description": "Optional" }` | `200` role | `400` description longer than 500 characters; `404` absent/mismatched role or application. |
 | `POST /applications/{applicationId}/roles/{roleId}/activate` | — | `200` role | `404` absent/mismatched role; `409` inactive application. |
 | `POST /applications/{applicationId}/roles/{roleId}/deactivate` | — | `200` role | `404` absent/mismatched role. |
 
@@ -19,6 +20,7 @@ All routes are management operations for trusted callers in this feature. They a
 | `POST /applications/{applicationId}/permissions` | `{ "code": "reservations.read", "description": "Optional" }` | `201` permission | `400` invalid input; `404` application absent; `409` inactive application or duplicate code. |
 | `GET /applications/{applicationId}/permissions/{permissionId}` | — | `200` permission | `404` absent/mismatched permission or application. |
 | `GET /applications/{applicationId}/permissions` | Optional cursor/limit | `200` page | `400` invalid pagination; `404` application absent. |
+| `PUT /applications/{applicationId}/permissions/{permissionId}/description` | `{ "description": "Optional" }` | `200` permission | `400` description longer than 500 characters; `404` absent/mismatched permission or application. |
 | `POST /applications/{applicationId}/permissions/{permissionId}/activate` | — | `200` permission | `404` absent/mismatched permission; `409` inactive application. |
 | `POST /applications/{applicationId}/permissions/{permissionId}/deactivate` | — | `200` permission | `404` absent/mismatched permission. |
 
