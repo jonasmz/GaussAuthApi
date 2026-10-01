@@ -323,7 +323,7 @@ response exposes identity and profile fields while withholding credential
 internals; retrieve an unknown identifier and confirm a safe not-found
 result.
 
-- [ ] T023 [US2] Add
+- [X] T023 [US2] Add
   `tests/GaussAuth.Foundation.Tests/userRetrievalTests.test.cs` against
   `GET /users/{id}`: an existing user returns `200 OK` with a `UserResponse`
   containing the identifier, login email, normalized email, active state,
@@ -331,24 +331,24 @@ result.
   stamps, and other internal credential details; an unknown identifier
   returns `404 Not Found` without revealing persistence internals. Confirm
   this test compiles but fails before T024-T027 are implemented.
-- [ ] T024 [US2] Create
+- [X] T024 [US2] Create
   `src/GaussAuth.Application/Users/GetUser/getUser.query.cs` with a
   `GetUserQuery` carrying the requested `Guid` id.
-- [ ] T025 [US2] Create
+- [X] T025 [US2] Create
   `src/GaussAuth.Application/Users/GetUser/getUser.handler.cs` calling
   `IUserRepository.GetByIdAsync` and returning the `User?` (null meaning
   "not found", left to the API layer to translate to `404`). Log one
   structured `ILogger` entry per invocation containing only the requested
   user id and whether it was found (FR-021).
-- [ ] T026 [US2] Extend
+- [X] T026 [US2] Extend
   `src/GaussAuth.Api/Users/usersEndpoints.extension.cs` (from T019) with
   `GET /users/{id}`: dispatch `GetUserQuery`, return `200 OK` with a
   `UserResponse` (T011) when found, `404 Not Found` with generic Problem
   Details when not, per `contracts/users-api.md`.
-- [ ] T027 [US2] Extend
+- [X] T027 [US2] Extend
   `src/GaussAuth.Api/DependencyInjection/applicationServiceCollectionExtensions.extension.cs`
   to register the `GetUser` handler (scoped).
-- [ ] T028 [US2] Run
+- [X] T028 [US2] Run
   `tests/GaussAuth.Foundation.Tests/userRetrievalTests.test.cs` and the
   corresponding `quickstart.md` section 4 "retrieve" scenario; confirm both
   acceptance scenarios from spec User Story 2 pass.

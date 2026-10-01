@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using GaussAuth.Application.Users.CreateUser;
+using GaussAuth.Application.Users.GetUser;
 using Microsoft.AspNetCore.Mvc;
 
 namespace GaussAuth.Api.Users;
@@ -9,8 +10,28 @@ public static class UsersEndpoints
     public static IEndpointRouteBuilder MapUsersEndpoints(this IEndpointRouteBuilder app)
     {
         app.MapPost("/users", CreateUserAsync).RequireRateLimiting("user-creation");
+        app.MapGet("/users/{id:guid}", GetUserAsync);
 
         return app;
+    }
+
+    private static async Task<IResult> GetUserAsync(
+        Guid id,
+        GetUserHandler handler,
+        CancellationToken cancellationToken)
+    {
+        var user = await handler.HandleAsync(new GetUserQuery(id), cancellationToken);
+
+        if (user is null)
+        {
+            return TypedResults.NotFound(new ProblemDetails
+            {
+                Status = StatusCodes.Status404NotFound,
+                Title = "User not found."
+            });
+        }
+
+        return TypedResults.Ok(UserResponse.FromDomain(user));
     }
 
     private static async Task<IResult> CreateUserAsync(

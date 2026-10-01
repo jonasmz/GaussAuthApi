@@ -1,4 +1,5 @@
 using GaussAuth.Application.Users.CreateUser;
+using GaussAuth.Application.Users.GetUser;
 
 namespace GaussAuth.Api.DependencyInjection;
 
@@ -7,6 +8,7 @@ public static class ApplicationServiceCollectionExtensions
     public static IServiceCollection AddApplication(this IServiceCollection services)
     {
         services.AddScoped<CreateUserHandler>();
+        services.AddScoped<GetUserHandler>();
         return services;
     }
 }
