@@ -448,7 +448,7 @@ changes while the record and profile remain intact and retrievable;
 reactivate it and confirm it returns to active state; repeating either
 transition is a safe no-op, not an error.
 
-- [ ] T037 [US4] Add
+- [X] T037 [US4] Add
   `tests/GaussAuth.Foundation.Tests/userActivationTests.test.cs` against
   `POST /users/{id}/activate` and `POST /users/{id}/deactivate`: an active
   user deactivated → `200 OK` with `isActive: false` and `updatedAt`
@@ -459,29 +459,43 @@ transition is a safe no-op, not an error.
   it again → `200 OK`, unchanged, idempotent; an unknown identifier on
   either route → `404 Not Found`. Confirm this test compiles but fails
   before T038-T041 are implemented.
-- [ ] T038 [US4] Create
+
+  **Implementation correction found while building this test**: comparing
+  `updatedAt` for exact equality across an immediate POST response versus a
+  subsequent GET/POST reload intermittently failed — PostgreSQL's
+  `timestamptz` column stores microsecond precision while .NET's
+  `DateTimeOffset` carries tick (100ns) precision, so a value taken
+  in-memory right after a write (not yet round-tripped) can differ from the
+  same value reloaded from the database by a few hundred nanoseconds. The
+  "preserved and retrievable" assertion was changed to check `isActive`
+  and profile fields rather than an exact `updatedAt` match across a
+  non-reloaded and a reloaded response, and the idempotency assertions
+  compare two reloaded (GET-sourced or already-persisted no-op) values
+  against each other instead of an in-memory just-written value against a
+  reloaded one.
+- [X] T038 [US4] Create
   `src/GaussAuth.Application/Users/ActivateUser/activateUser.handler.cs`:
   load the user via `IUserRepository.GetByIdAsync`; if null, signal
   not-found; otherwise call `user.Activate(now)` (T002, idempotent) and
   `IUserRepository.SaveChangesAsync`; return the (possibly unchanged) user.
   Log one structured `ILogger` entry per invocation containing only the
   user id and whether the state actually changed (FR-021).
-- [ ] T039 [US4] Create
+- [X] T039 [US4] Create
   `src/GaussAuth.Application/Users/DeactivateUser/deactivateUser.handler.cs`:
   same shape as T038 but calling `user.Deactivate(now)`. Must not perform
   any physical deletion of the user or profile row (FR-014). Log one
   structured `ILogger` entry per invocation containing only the user id and
   whether the state actually changed (FR-021).
-- [ ] T040 [US4] Extend
+- [X] T040 [US4] Extend
   `src/GaussAuth.Api/Users/usersEndpoints.extension.cs` with
   `POST /users/{id}/activate` and `POST /users/{id}/deactivate`: dispatch to
   the corresponding handler, return `200 OK` with the current
   `UserResponse` on success (whether or not the state actually changed), or
   `404 Not Found` for an unknown identifier, per `contracts/users-api.md`.
-- [ ] T041 [US4] Extend
+- [X] T041 [US4] Extend
   `src/GaussAuth.Api/DependencyInjection/applicationServiceCollectionExtensions.extension.cs`
   to register the `ActivateUser` and `DeactivateUser` handlers (scoped).
-- [ ] T042 [US4] Run
+- [X] T042 [US4] Run
   `tests/GaussAuth.Foundation.Tests/userActivationTests.test.cs` and the
   corresponding `quickstart.md` section 4 "deactivate/activate" scenario;
   confirm all three acceptance scenarios from spec User Story 4 pass.

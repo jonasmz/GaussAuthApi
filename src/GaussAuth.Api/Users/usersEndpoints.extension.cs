@@ -1,5 +1,7 @@
 using System.ComponentModel.DataAnnotations;
+using GaussAuth.Application.Users.ActivateUser;
 using GaussAuth.Application.Users.CreateUser;
+using GaussAuth.Application.Users.DeactivateUser;
 using GaussAuth.Application.Users.GetUser;
 using GaussAuth.Application.Users.Profiles;
 using Microsoft.AspNetCore.Mvc;
@@ -13,9 +15,35 @@ public static class UsersEndpoints
         app.MapPost("/users", CreateUserAsync).RequireRateLimiting("user-creation");
         app.MapGet("/users/{id:guid}", GetUserAsync);
         app.MapPut("/users/{id:guid}/profile", UpdateProfileAsync);
+        app.MapPost("/users/{id:guid}/activate", ActivateUserAsync);
+        app.MapPost("/users/{id:guid}/deactivate", DeactivateUserAsync);
 
         return app;
     }
+
+    private static async Task<IResult> ActivateUserAsync(
+        Guid id,
+        ActivateUserHandler handler,
+        CancellationToken cancellationToken)
+    {
+        var user = await handler.HandleAsync(id, cancellationToken);
+        return user is null ? UserNotFound() : TypedResults.Ok(UserResponse.FromDomain(user));
+    }
+
+    private static async Task<IResult> DeactivateUserAsync(
+        Guid id,
+        DeactivateUserHandler handler,
+        CancellationToken cancellationToken)
+    {
+        var user = await handler.HandleAsync(id, cancellationToken);
+        return user is null ? UserNotFound() : TypedResults.Ok(UserResponse.FromDomain(user));
+    }
+
+    private static IResult UserNotFound() => TypedResults.NotFound(new ProblemDetails
+    {
+        Status = StatusCodes.Status404NotFound,
+        Title = "User not found."
+    });
 
     private static async Task<IResult> UpdateProfileAsync(
         Guid id,
@@ -52,11 +80,7 @@ public static class UsersEndpoints
 
         if (result.IsNotFound)
         {
-            return TypedResults.NotFound(new ProblemDetails
-            {
-                Status = StatusCodes.Status404NotFound,
-                Title = "User not found."
-            });
+            return UserNotFound();
         }
 
         return TypedResults.ValidationProblem(
@@ -70,16 +94,7 @@ public static class UsersEndpoints
     {
         var user = await handler.HandleAsync(new GetUserQuery(id), cancellationToken);
 
-        if (user is null)
-        {
-            return TypedResults.NotFound(new ProblemDetails
-            {
-                Status = StatusCodes.Status404NotFound,
-                Title = "User not found."
-            });
-        }
-
-        return TypedResults.Ok(UserResponse.FromDomain(user));
+        return user is null ? UserNotFound() : TypedResults.Ok(UserResponse.FromDomain(user));
     }
 
     private static async Task<IResult> CreateUserAsync(
