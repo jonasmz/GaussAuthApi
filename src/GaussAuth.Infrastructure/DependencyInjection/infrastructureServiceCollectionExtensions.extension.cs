@@ -65,7 +65,8 @@ public static class InfrastructureServiceCollectionExtensions
                 options.Lockout.AllowedForNewUsers = true;
             })
             .AddEntityFrameworkStores<AuthenticationDbContext>()
-            .AddSignInManager();
+            .AddSignInManager()
+            .AddDefaultTokenProviders();
 
         SessionPolicy sessionPolicy;
         try

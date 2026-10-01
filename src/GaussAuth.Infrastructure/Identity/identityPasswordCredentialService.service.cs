@@ -5,13 +5,15 @@ namespace GaussAuth.Infrastructure.Identity;
 
 public sealed class IdentityPasswordCredentialService(UserManager<IdentityUser<Guid>> userManager) : IPasswordCredentialService
 {
-    public async Task<PasswordChangeOutcome> ChangePasswordAsync(Guid userId, string currentPassword, string newPassword, CancellationToken cancellationToken)
+    public async Task<PasswordChangeResult> ChangePasswordAsync(Guid userId, string currentPassword, string newPassword, CancellationToken cancellationToken)
     {
         var user = await userManager.FindByIdAsync(userId.ToString());
-        if (user is null) return PasswordChangeOutcome.UserNotFound;
+        if (user is null) return PasswordChangeResult.Failure(PasswordChangeOutcome.UserNotFound);
         var result = await userManager.ChangePasswordAsync(user, currentPassword, newPassword);
-        if (result.Succeeded) return PasswordChangeOutcome.Succeeded;
-        return result.Errors.Any(error => error.Code == "PasswordMismatch") ? PasswordChangeOutcome.InvalidCurrentPassword : PasswordChangeOutcome.PasswordPolicyRejected;
+        if (result.Succeeded) return PasswordChangeResult.Success();
+        return result.Errors.Any(error => error.Code == "PasswordMismatch")
+            ? PasswordChangeResult.Failure(PasswordChangeOutcome.InvalidCurrentPassword)
+            : PasswordChangeResult.Failure(PasswordChangeOutcome.PasswordPolicyRejected, result.Errors.Select(error => error.Description).ToArray());
     }
 
     public async Task<string?> GenerateResetCredentialAsync(Guid userId, CancellationToken cancellationToken)

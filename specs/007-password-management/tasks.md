@@ -26,10 +26,10 @@
 
 **Independent Test**: Change password through the API; old password and old session fail, new password succeeds, and all user sessions are revoked.
 
-- [ ] T011 [US1] Add change-password integration scenarios in `tests/GaussAuth.Foundation.Tests/passwordManagementTests.test.cs` for success, wrong current password, policy rejection, inactive user, revoke-all behavior, and unchanged memberships/roles/permissions/application data.
-- [ ] T012 [US1] Implement `PasswordManagementService.ChangeAsync` in `src/GaussAuth.Application/Passwords/passwordManagementService.service.cs` using trusted session context, current-password verification, safe outcomes, revoke-all, and events.
-- [ ] T013 [US1] Create change request DTO and map `POST /auth/password/change` in `src/GaussAuth.Api/Passwords/` with required/max-128 fields, bearer validation, safe responses, and no target user id.
-- [ ] T014 [US1] Register password endpoints from `src/GaussAuth.Api/Program.cs` and run the full Docker test suite.
+- [X] T011 [US1] Add change-password integration scenarios in `tests/GaussAuth.Foundation.Tests/passwordManagementTests.test.cs` for success, wrong current password, policy rejection, inactive user, revoke-all behavior, and unchanged memberships/roles/permissions/application data.
+- [X] T012 [US1] Implement `PasswordManagementService.ChangeAsync` in `src/GaussAuth.Application/Passwords/passwordManagementService.service.cs` using trusted session context, current-password verification, safe outcomes, revoke-all, and events.
+- [X] T013 [US1] Create change request DTO and map `POST /auth/password/change` in `src/GaussAuth.Api/Passwords/` with required/max-128 fields, bearer validation, safe responses, and no target user id.
+- [X] T014 [US1] Register password endpoints from `src/GaussAuth.Api/Program.cs` and run the full Docker test suite.
 
 ## Phase 4: User Story 2 - Request Password Recovery (P1)
 
@@ -37,9 +37,9 @@
 
 **Independent Test**: Known, unknown, and inactive emails produce identical `202` responses; only eligible account writes a protected instruction; rate limit returns `429`.
 
-- [ ] T015 [US2] Add recovery-request integration and log-hygiene scenarios in `tests/GaussAuth.Foundation.Tests/passwordManagementTests.test.cs`.
-- [ ] T016 [US2] Implement `PasswordManagementService.RequestRecoveryAsync` in `src/GaussAuth.Application/Passwords/passwordManagementService.service.cs` with normalized email, active-user check, generic outcome, and safe event recording.
-- [ ] T017 [US2] Create recovery DTO and map `POST /auth/password/recovery` in `src/GaussAuth.Api/Passwords/` with required valid email/max-256, generic `202`, and recovery rate limiting.
+- [X] T015 [US2] Add recovery-request integration and log-hygiene scenarios in `tests/GaussAuth.Foundation.Tests/passwordManagementTests.test.cs`.
+- [X] T016 [US2] Implement `PasswordManagementService.RequestRecoveryAsync` in `src/GaussAuth.Application/Passwords/passwordManagementService.service.cs` with normalized email, active-user check, generic outcome, and safe event recording.
+- [X] T017 [US2] Create recovery DTO and map `POST /auth/password/recovery` in `src/GaussAuth.Api/Passwords/` with required valid email/max-256, generic `202`, and recovery rate limiting.
 
 ## Phase 5: User Story 3 - Reset a Forgotten Password (P1)
 

@@ -67,6 +67,12 @@ public sealed class SessionService(
         return SessionOperationResult.Success(session.Id, session.UserId, session.ApplicationId, renewed, expiresAt, session.ExpiresAt);
     }
 
+    public async Task<SessionOperationResult> GetAuthenticatedContextAsync(string credential, CancellationToken ct)
+    {
+        var checkedSession = await CheckCredentialAsync(credential, ct);
+        return checkedSession.Result ?? SuccessFor(checkedSession.Session!, checkedSession.Claims!);
+    }
+
     public async Task<SessionOperationResult> RevokeAsync(Guid sessionId, CancellationToken ct)
     {
         var session = await sessions.GetByIdAsync(sessionId, ct);
