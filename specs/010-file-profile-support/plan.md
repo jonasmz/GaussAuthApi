@@ -88,4 +88,3 @@ tests/GaussAuth.Foundation.Tests/
 ## Post-Design Constitution Check
 
 All gates remain PASS. ImageSharp is a focused Infrastructure dependency justified by the explicit metadata stripping and safe decode/re-encode requirement; its license must be verified before implementation. No prohibited infrastructure is introduced.
-| [e.g., Repository pattern] | [specific problem] | [why direct DB access insufficient] |
