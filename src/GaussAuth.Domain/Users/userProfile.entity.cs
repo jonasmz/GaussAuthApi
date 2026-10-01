@@ -24,7 +24,6 @@ public sealed class UserProfile
         string lastName,
         string displayName,
         string? phoneNumber,
-        string? avatarReference,
         DateTimeOffset now)
     {
         UserId = userId;
@@ -32,7 +31,6 @@ public sealed class UserProfile
         LastName = lastName;
         DisplayName = displayName;
         PhoneNumber = phoneNumber;
-        AvatarReference = avatarReference;
         CreatedAt = now;
         UpdatedAt = now;
     }
@@ -49,7 +47,6 @@ public sealed class UserProfile
         string lastName,
         string displayName,
         string? phoneNumber,
-        string? avatarReference,
         DateTimeOffset now)
     {
         if (string.IsNullOrWhiteSpace(firstName))
@@ -67,7 +64,7 @@ public sealed class UserProfile
             throw new ArgumentException("Display name must not be blank.", nameof(displayName));
         }
 
-        return new UserProfile(userId, firstName, lastName, displayName, phoneNumber, avatarReference, now);
+        return new UserProfile(userId, firstName, lastName, displayName, phoneNumber, now);
     }
 
     public void Update(
@@ -75,7 +72,6 @@ public sealed class UserProfile
         string lastName,
         string displayName,
         string? phoneNumber,
-        string? avatarReference,
         DateTimeOffset now)
     {
         if (string.IsNullOrWhiteSpace(firstName))
@@ -97,7 +93,6 @@ public sealed class UserProfile
         LastName = lastName;
         DisplayName = displayName;
         PhoneNumber = phoneNumber;
-        AvatarReference = avatarReference;
         UpdatedAt = now;
     }
 

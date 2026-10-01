@@ -27,7 +27,4 @@ public sealed class CreateUserRequest
 
     [MaxLength(32)]
     public string? PhoneNumber { get; set; }
-
-    [MaxLength(2048)]
-    public string? AvatarReference { get; set; }
 }

@@ -72,7 +72,6 @@ public sealed class UserRetrievalTests
         firstName,
         lastName = "Start",
         displayName = "Quick Start",
-        phoneNumber = (string?)null,
-        avatarReference = (string?)null
+        phoneNumber = (string?)null
     };
 }

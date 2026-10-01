@@ -49,7 +49,6 @@ public sealed class CreateUserHandler(
             command.LastName,
             command.DisplayName,
             command.PhoneNumber,
-            command.AvatarReference,
             now);
 
         var user = User.Create(userId, email, normalizedEmail, profile, now);

@@ -77,10 +77,9 @@ public sealed class User
         string lastName,
         string displayName,
         string? phoneNumber,
-        string? avatarReference,
         DateTimeOffset now)
     {
-        Profile.Update(firstName, lastName, displayName, phoneNumber, avatarReference, now);
+        Profile.Update(firstName, lastName, displayName, phoneNumber, now);
         UpdatedAt = now;
     }
 

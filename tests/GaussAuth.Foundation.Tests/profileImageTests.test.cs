@@ -194,7 +194,7 @@ public sealed class ProfileImageTests
     public void Domain_avatar_transitions_accept_only_opaque_references()
     {
         var now = DateTimeOffset.UtcNow;
-        var profile = UserProfile.Create(Guid.NewGuid(), "A", "B", "AB", null, null, now);
+        var profile = UserProfile.Create(Guid.NewGuid(), "A", "B", "AB", null, now);
         var reference = ProfileImageReference.Create(ProfileImageFormat.WebP).Value;
 
         profile.SetAvatarReference(reference, now.AddMinutes(1));
@@ -569,6 +569,38 @@ public sealed class ProfileImageTests
         Assert.AreEqual(upload.Body.GetProperty("avatarReference").GetString(), locked!.Profile.AvatarReference);
         Assert.IsNull(await users.GetByIdForUpdateAsync(Guid.NewGuid(), CancellationToken.None));
         await transaction.RollbackAsync(CancellationToken.None);
+    }
+
+    [TestMethod]
+    public async Task User_requests_cannot_set_the_avatar_and_profile_updates_preserve_it()
+    {
+        using var env = new ImageEnvironment();
+        using var factory = await env.CreateFactoryAsync();
+        using var client = factory.CreateClient();
+        var user = await CreateLoginAsync(client);
+        var upload = await UploadAsync(client, user.AccessToken, Encode(ProfileImageFormat.Png, 8, 8));
+        var reference = upload.Body.GetProperty("avatarReference").GetString()!;
+
+        using var attempt = await client.PutAsJsonAsync($"/users/{user.UserId}/profile", new
+        {
+            firstName = "New", lastName = "Name", displayName = "New Name", avatarReference = "0123456789abcdef0123456789abcdef.png"
+        });
+        Assert.AreEqual(HttpStatusCode.BadRequest, attempt.StatusCode);
+        Assert.AreEqual(reference, await ReadReferenceAsync(client, user.UserId));
+
+        using var update = await client.PutAsJsonAsync($"/users/{user.UserId}/profile", new { firstName = "New", lastName = "Name", displayName = "New Name" });
+        Assert.AreEqual(HttpStatusCode.OK, update.StatusCode);
+        Assert.AreEqual(reference, await ReadReferenceAsync(client, user.UserId), "A profile update must not clear the avatar.");
+        CollectionAssert.AreEqual(new[] { reference }, env.StoredFiles());
+
+        using var created = await client.PostAsJsonAsync("/users", new
+        {
+            email = $"noavatar-{Guid.NewGuid():N}@example.test", password = "Quickstart!2026", firstName = "A", lastName = "B", displayName = "AB",
+            avatarReference = "0123456789abcdef0123456789abcdef.png"
+        });
+        Assert.AreEqual(HttpStatusCode.Created, created.StatusCode);
+        using var document = JsonDocument.Parse(await created.Content.ReadAsStringAsync());
+        Assert.IsNull(document.RootElement.GetProperty("profile").GetProperty("avatarReference").GetString());
     }
 
     private static void AssertLogsAreSafe(CapturingLoggerProvider logs, ImageEnvironment env)

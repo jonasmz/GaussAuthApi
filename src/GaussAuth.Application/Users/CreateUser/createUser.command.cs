@@ -6,5 +6,4 @@ public sealed record CreateUserCommand(
     string FirstName,
     string LastName,
     string DisplayName,
-    string? PhoneNumber,
-    string? AvatarReference);
+    string? PhoneNumber);

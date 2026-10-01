@@ -68,8 +68,7 @@ public static class UsersEndpoints
             request.FirstName,
             request.LastName,
             request.DisplayName,
-            request.PhoneNumber,
-            request.AvatarReference);
+            request.PhoneNumber);
 
         var result = await handler.HandleAsync(command, cancellationToken);
 
@@ -113,8 +112,7 @@ public static class UsersEndpoints
             request.FirstName,
             request.LastName,
             request.DisplayName,
-            request.PhoneNumber,
-            request.AvatarReference);
+            request.PhoneNumber);
 
         var result = await handler.HandleAsync(command, cancellationToken);
 

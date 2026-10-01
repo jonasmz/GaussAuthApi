@@ -16,7 +16,7 @@
 ## Findings
 
 - **Fixed during implementation:** concurrent replacements initially left orphan files because the profile was read in the same statement as the row lock (and could be a stale tracked copy), so a competing request deleted the wrong predecessor. The lock is now a separate statement followed by a fresh read; covered by the concurrency test.
-- **Residual – legacy writable reference:** `PUT /users/{id}/profile` and `POST /users` still accept an arbitrary `AvatarReference` string. It is only ever served if it parses as a valid opaque reference, and `avatarUrl` is only emitted for valid references, but the field should be removed from those requests in a follow-up.
+- **Fixed – legacy writable reference:** `AvatarReference` was removed from `POST /users` and `PUT /users/{id}/profile`. It is now settable only through the avatar endpoints; `PUT .../profile` rejects it as an unexpected field, `POST /users` ignores it, and profile updates preserve the current avatar (`User_requests_cannot_set_the_avatar_and_profile_updates_preserve_it`).
 - **Residual – retirement window:** between a replacement's commit and its file deletion the previous URL can still be served briefly.
 - **Residual – orphans:** crashes or cleanup failures can leave unreferenced files; see the operator guidance in `quickstart.md`. No retention job exists by design.
 - **Residual – native dependency:** SkiaSharp wraps native Skia code; keep `SkiaSharp` and its native asset patched, and keep the input byte/dimension limits (decoding happens only after both pass).
