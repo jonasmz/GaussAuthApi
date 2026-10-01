@@ -5,6 +5,7 @@ using GaussAuth.Domain.Roles;
 using DomainPermission = GaussAuth.Domain.Permissions.Permission;
 using GaussAuth.Domain.Authorization;
 using GaussAuth.Domain.Sessions;
+using GaussAuth.Domain.Security;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
@@ -24,6 +25,7 @@ public sealed class AuthenticationDbContext(DbContextOptions<AuthenticationDbCon
     public DbSet<RolePermission> RolePermissions => Set<RolePermission>();
     public DbSet<UserRole> UserRoles => Set<UserRole>();
     public DbSet<Session> Sessions => Set<Session>();
+    public DbSet<SecurityEvent> SecurityEvents => Set<SecurityEvent>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -116,6 +118,25 @@ public sealed class AuthenticationDbContext(DbContextOptions<AuthenticationDbCon
             session.Property(x => x.CreatedAt).IsRequired(); session.Property(x => x.ExpiresAt).IsRequired();
             session.HasIndex(x => new { x.UserId, x.ApplicationId }).HasDatabaseName("IX_Sessions_UserId_ApplicationId");
             session.HasOne<ApplicationMembership>().WithMany().HasForeignKey(x => new { x.UserId, x.ApplicationId }).HasPrincipalKey(x => new { x.UserId, x.ApplicationId }).HasConstraintName("FK_Sessions_ApplicationMemberships_UserId_ApplicationId").OnDelete(DeleteBehavior.Restrict);
+        });
+
+        builder.Entity<SecurityEvent>(securityEvent =>
+        {
+            securityEvent.ToTable("SecurityEvents");
+            securityEvent.HasKey(x => x.Id);
+            securityEvent.Property(x => x.Id).ValueGeneratedNever();
+            securityEvent.Property(x => x.EventType).HasMaxLength(128).IsRequired();
+            securityEvent.Property(x => x.Outcome).HasMaxLength(16).IsRequired();
+            securityEvent.Property(x => x.OccurredAtUtc).IsRequired();
+            securityEvent.Property(x => x.CorrelationId).HasMaxLength(128);
+            securityEvent.Property(x => x.SubjectType).HasMaxLength(64);
+            securityEvent.Property(x => x.Reason).HasMaxLength(128);
+            securityEvent.Property(x => x.Metadata).HasMaxLength(2048);
+            securityEvent.HasIndex(x => new { x.OccurredAtUtc, x.Id }).HasDatabaseName("IX_SecurityEvents_OccurredAtUtc_Id");
+            securityEvent.HasIndex(x => new { x.ApplicationId, x.OccurredAtUtc, x.Id }).HasDatabaseName("IX_SecurityEvents_ApplicationId_OccurredAtUtc_Id");
+            securityEvent.HasIndex(x => new { x.UserId, x.OccurredAtUtc, x.Id }).HasDatabaseName("IX_SecurityEvents_UserId_OccurredAtUtc_Id");
+            securityEvent.HasIndex(x => new { x.SessionId, x.OccurredAtUtc, x.Id }).HasDatabaseName("IX_SecurityEvents_SessionId_OccurredAtUtc_Id");
+            securityEvent.HasIndex(x => new { x.EventType, x.OccurredAtUtc, x.Id }).HasDatabaseName("IX_SecurityEvents_EventType_OccurredAtUtc_Id");
         });
     }
 }

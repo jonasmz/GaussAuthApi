@@ -12,8 +12,8 @@
 
 **Purpose**: Establish the documented configuration and review baseline.
 
-- [ ] T001 Review `specs/009-security-audit/spec.md`, `plan.md`, `research.md`, `data-model.md`, `contracts/security-events-api.md`, `quickstart.md`, and `security-review.md` against existing security, persistence, and authorization composition.
-- [ ] T002 Verify `.gitignore`, `.env.example`, and `compose.dev.yml` keep plaintext consumer secrets, hashed representations, database credentials, signing keys, and recovery material outside versioned configuration.
+- [X] T001 Review `specs/009-security-audit/spec.md`, `plan.md`, `research.md`, `data-model.md`, `contracts/security-events-api.md`, `quickstart.md`, and `security-review.md` against existing security, persistence, and authorization composition.
+- [X] T002 Verify `.gitignore`, `.env.example`, and `compose.dev.yml` keep plaintext consumer secrets, hashed representations, database credentials, signing keys, and recovery material outside versioned configuration.
 
 ---
 
@@ -21,11 +21,11 @@
 
 **Purpose**: Create the append-only SecurityEvent boundary and persistence substrate required by all stories.
 
-- [ ] T003 Add immutable SecurityEvent domain/entity and stable outcome/category contracts in `src/GaussAuth.Domain/Security/` with server-controlled UTC timestamp, optional known IDs, optional correlation ID maximum 128 characters, and no mutation transition.
-- [ ] T004 Extend `src/GaussAuth.Application/Security/` and `src/GaussAuth.Application/Security/Ports/` with central catalog/draft/recorder/query/transaction contracts enforcing event type maximum 128 characters, allow-listed context, and metadata maximum 2 KiB.
-- [ ] T005 Add SecurityEvents mapping, indexes for newest-first global/application/user/session/type paths, append-only repository, and EF migration in `src/GaussAuth.Infrastructure/Persistence/` with nullable application ownership for global Auth events and no cascade evidence deletion.
-- [ ] T006 Replace logging-only registration with persisted recorder, safe operational-failure logger, correlation source, validated configurable `SecurityAudit:RetentionDays` policy (without a normal-flow delete or purge scheduler), and required Application/Infrastructure registrations in `src/GaussAuth.Infrastructure/Security/` and dependency-injection extensions.
-- [ ] T007 Add foundational persistence/immutability/catalog safety tests in `tests/GaussAuth.Foundation.Tests/securityAuditTests.test.cs` covering no prohibited credential/header/request values and no normal event mutation surface.
+- [X] T003 Add immutable SecurityEvent domain/entity and stable outcome/category contracts in `src/GaussAuth.Domain/Security/` with server-controlled UTC timestamp, optional known IDs, optional correlation ID maximum 128 characters, and no mutation transition.
+- [X] T004 Extend `src/GaussAuth.Application/Security/` and `src/GaussAuth.Application/Security/Ports/` with central catalog/draft/recorder/query/transaction contracts enforcing event type maximum 128 characters, allow-listed context, and metadata maximum 2 KiB.
+- [X] T005 Add SecurityEvents mapping, indexes for newest-first global/application/user/session/type paths, append-only repository, and EF migration in `src/GaussAuth.Infrastructure/Persistence/` with nullable application ownership for global Auth events and no cascade evidence deletion.
+- [X] T006 Replace logging-only registration with persisted recorder, safe operational-failure logger, correlation source, validated configurable `SecurityAudit:RetentionDays` policy (without a normal-flow delete or purge scheduler), and required Application/Infrastructure registrations in `src/GaussAuth.Infrastructure/Security/` and dependency-injection extensions.
+- [X] T007 Add foundational persistence/immutability/catalog safety tests in `tests/GaussAuth.Foundation.Tests/securityAuditTests.test.cs` covering no prohibited credential/header/request values and no normal event mutation surface.
 
 **Checkpoint**: SecurityEvent writes are durable, safe, append-only, and available to all application slices.
 
