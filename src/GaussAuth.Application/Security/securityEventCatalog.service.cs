@@ -39,6 +39,9 @@ public sealed class SecurityEventCatalog
         SecurityEventType.RoleRemoved => Critical("role.removed", SecurityEventOutcome.Succeeded),
         SecurityEventType.PermissionAssigned => Critical("permission.assigned", SecurityEventOutcome.Succeeded),
         SecurityEventType.PermissionRemoved => Critical("permission.removed", SecurityEventOutcome.Succeeded),
+        SecurityEventType.AvatarUpdated => Operational("profile.avatar.updated", SecurityEventOutcome.Succeeded),
+        SecurityEventType.AvatarRemoved => Operational("profile.avatar.removed", SecurityEventOutcome.Succeeded),
+        SecurityEventType.AvatarUploadRejected => Operational("profile.avatar.upload.rejected", SecurityEventOutcome.Rejected),
         _ => throw new ArgumentOutOfRangeException(nameof(type))
     };
 

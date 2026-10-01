@@ -137,7 +137,6 @@ public sealed class UserActivationTests
         firstName,
         lastName = "Start",
         displayName = "Quick Start",
-        phoneNumber = (string?)null,
-        avatarReference = (string?)null
+        phoneNumber = (string?)null
     };
 }

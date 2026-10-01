@@ -1,4 +1,5 @@
 using System.Threading.RateLimiting;
+using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.RateLimiting;
 
 namespace GaussAuth.Api.DependencyInjection;
@@ -26,6 +27,19 @@ public static class ApiServiceCollectionExtensions
         var authorizationContextWindow = TimeSpan.FromSeconds(configuration.GetValue("RateLimiting:AuthorizationContext:WindowSeconds", 60));
         var securityEventsPermitLimit = configuration.GetValue("RateLimiting:SecurityEvents:PermitLimit", 60);
         var securityEventsWindow = TimeSpan.FromSeconds(configuration.GetValue("RateLimiting:SecurityEvents:WindowSeconds", 60));
+
+        var profileImageWritePermitLimit = configuration.GetValue("RateLimiting:ProfileImageWrite:PermitLimit", 10);
+        var profileImageWriteWindow = TimeSpan.FromSeconds(configuration.GetValue("RateLimiting:ProfileImageWrite:WindowSeconds", 60));
+
+        services.Configure<FormOptions>(options =>
+        {
+            options.ValueCountLimit = 4;
+            options.MultipartHeadersCountLimit = 8;
+            options.MultipartHeadersLengthLimit = 4096;
+            options.MultipartBoundaryLengthLimit = 128;
+            options.BufferBody = false;
+            options.MemoryBufferThreshold = 64 * 1024;
+        });
 
         services.AddRateLimiter(options =>
         {
@@ -75,6 +89,9 @@ public static class ApiServiceCollectionExtensions
             options.AddPolicy("authorization-context", httpContext => RateLimitPartition.GetFixedWindowLimiter(
                 partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
                 factory: _ => new FixedWindowRateLimiterOptions { PermitLimit = authorizationContextPermitLimit, Window = authorizationContextWindow, QueueLimit = 0 }));
+            options.AddPolicy("profile-image-write", httpContext => RateLimitPartition.GetFixedWindowLimiter(
+                partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+                factory: _ => new FixedWindowRateLimiterOptions { PermitLimit = profileImageWritePermitLimit, Window = profileImageWriteWindow, QueueLimit = 0 }));
             options.AddPolicy("security-events", httpContext => RateLimitPartition.GetFixedWindowLimiter(
                 partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
                 factory: _ => new FixedWindowRateLimiterOptions { PermitLimit = securityEventsPermitLimit, Window = securityEventsWindow, QueueLimit = 0 }));

@@ -79,8 +79,7 @@ public sealed class ProfileUpdateTests
             firstName = "Updated",
             lastName = "Name",
             displayName = "Updated Name",
-            phoneNumber = (string?)null,
-            avatarReference = (string?)null
+            phoneNumber = (string?)null
         });
 
         Assert.AreEqual(HttpStatusCode.BadRequest, response.StatusCode);
@@ -146,8 +145,7 @@ public sealed class ProfileUpdateTests
         firstName,
         lastName = "Start",
         displayName = "Quick Start",
-        phoneNumber = (string?)null,
-        avatarReference = (string?)null
+        phoneNumber = (string?)null
     };
 
     private static object ValidUpdateRequest(
@@ -158,7 +156,6 @@ public sealed class ProfileUpdateTests
         firstName,
         lastName,
         displayName,
-        phoneNumber = (string?)null,
-        avatarReference = (string?)null
+        phoneNumber = (string?)null
     };
 }

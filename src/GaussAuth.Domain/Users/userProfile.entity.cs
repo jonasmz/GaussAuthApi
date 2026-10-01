@@ -24,7 +24,6 @@ public sealed class UserProfile
         string lastName,
         string displayName,
         string? phoneNumber,
-        string? avatarReference,
         DateTimeOffset now)
     {
         UserId = userId;
@@ -32,7 +31,6 @@ public sealed class UserProfile
         LastName = lastName;
         DisplayName = displayName;
         PhoneNumber = phoneNumber;
-        AvatarReference = avatarReference;
         CreatedAt = now;
         UpdatedAt = now;
     }
@@ -49,7 +47,6 @@ public sealed class UserProfile
         string lastName,
         string displayName,
         string? phoneNumber,
-        string? avatarReference,
         DateTimeOffset now)
     {
         if (string.IsNullOrWhiteSpace(firstName))
@@ -67,7 +64,7 @@ public sealed class UserProfile
             throw new ArgumentException("Display name must not be blank.", nameof(displayName));
         }
 
-        return new UserProfile(userId, firstName, lastName, displayName, phoneNumber, avatarReference, now);
+        return new UserProfile(userId, firstName, lastName, displayName, phoneNumber, now);
     }
 
     public void Update(
@@ -75,7 +72,6 @@ public sealed class UserProfile
         string lastName,
         string displayName,
         string? phoneNumber,
-        string? avatarReference,
         DateTimeOffset now)
     {
         if (string.IsNullOrWhiteSpace(firstName))
@@ -97,7 +93,41 @@ public sealed class UserProfile
         LastName = lastName;
         DisplayName = displayName;
         PhoneNumber = phoneNumber;
+        UpdatedAt = now;
+    }
+
+    public void SetAvatarReference(string avatarReference, DateTimeOffset now)
+    {
+        if (!IsValidOpaqueReference(avatarReference))
+        {
+            throw new ArgumentException("Avatar reference must be a simple opaque token.", nameof(avatarReference));
+        }
+
         AvatarReference = avatarReference;
         UpdatedAt = now;
+    }
+
+    public void ClearAvatarReference(DateTimeOffset now)
+    {
+        AvatarReference = null;
+        UpdatedAt = now;
+    }
+
+    private static bool IsValidOpaqueReference(string? value)
+    {
+        if (string.IsNullOrEmpty(value) || value.Length > 128 || value.Contains("..", StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        foreach (var character in value)
+        {
+            if (!(char.IsAsciiLetterOrDigit(character) || character is '.' or '-' or '_'))
+            {
+                return false;
+            }
+        }
+
+        return char.IsAsciiLetterOrDigit(value[0]);
     }
 }

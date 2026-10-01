@@ -10,6 +10,8 @@ using GaussAuth.Api.Sessions;
 using GaussAuth.Api.Passwords;
 using GaussAuth.Api.AuthorizationContext;
 using GaussAuth.Api.Security;
+using GaussAuth.Api.Profiles;
+using GaussAuth.Application.Profiles.Avatars;
 using GaussAuth.Infrastructure.DependencyInjection;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -44,5 +46,6 @@ app.MapSessionsEndpoints();
 app.MapPasswordsEndpoints();
 app.MapAuthorizationContextEndpoints();
 app.MapSecurityEventEndpoints();
+app.MapProfileAvatarEndpoints(app.Services.GetRequiredService<ProfileImageLimits>());
 
 app.Run();

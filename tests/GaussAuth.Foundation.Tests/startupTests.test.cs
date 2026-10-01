@@ -13,6 +13,8 @@ namespace GaussAuth.Foundation.Tests;
 public sealed class StartupTests
 {
     private const string TestConnection = "Host=localhost;Database=foundation_test;Username=test;Password=not_a_secret";
+    private static readonly string TestProfileImagesRoot = Path.Combine(Path.GetTempPath(), "gaussauth-startup-test-images");
+
     private static readonly string TestSigningKeyPem = ECDsa.Create(ECCurve.NamedCurves.nistP256).ExportPkcs8PrivateKeyPem();
 
     [TestMethod]
@@ -41,6 +43,7 @@ public sealed class StartupTests
         start.ArgumentList.Add(typeof(Program).Assembly.Location);
         start.Environment["ConnectionStrings__AuthenticationDatabase"] = connection;
         start.Environment["ASPNETCORE_ENVIRONMENT"] = "Production";
+        start.Environment["ProfileImages__RootPath"] = TestProfileImagesRoot;
 
         using var process = Process.Start(start) ?? throw new InvalidOperationException("Could not start API process.");
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
@@ -78,6 +81,7 @@ public sealed class StartupTests
         start.ArgumentList.Add(typeof(Program).Assembly.Location);
         start.Environment["ConnectionStrings__AuthenticationDatabase"] = TestConnection;
         start.Environment["ASPNETCORE_ENVIRONMENT"] = "Production";
+        start.Environment["ProfileImages__RootPath"] = TestProfileImagesRoot;
         start.Environment["Sessions__Signing__PrivateKeyPem"] = withKey ? TestSigningKeyPem : "";
         start.Environment[key] = value;
 
@@ -159,6 +163,7 @@ public sealed class StartupTests
     {
         // Environment variables are visible to the eager configuration reads in Program.cs; in-memory sources are not.
         Environment.SetEnvironmentVariable("Sessions__Signing__PrivateKeyPem", TestSigningKeyPem);
+        Environment.SetEnvironmentVariable("ProfileImages__RootPath", TestProfileImagesRoot);
         return new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
         {
             builder.UseEnvironment("Production");

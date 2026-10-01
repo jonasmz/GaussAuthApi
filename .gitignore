@@ -14,3 +14,7 @@ Thumbs.db
 *.swp
 .vscode/
 .idea/
+
+# Private profile-image storage (user content; never version)
+.profile-images/
+profile-images/

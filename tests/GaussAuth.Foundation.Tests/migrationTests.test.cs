@@ -121,4 +121,23 @@ public sealed class MigrationTests
             Assert.AreEqual(1, Convert.ToInt32(await sessionIndexCommand.ExecuteScalarAsync()));
         }
     }
+
+    [TestMethod]
+    public async Task Avatar_reference_column_is_nullable_text_and_needs_no_additional_migration()
+    {
+        using var factory = new WebApplicationFactory<Program>();
+        using var scope = factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AuthenticationDbContext>();
+        await db.Database.MigrateAsync();
+        Assert.IsEmpty(await db.Database.GetPendingMigrationsAsync());
+
+        var connection = db.Database.GetDbConnection();
+        await connection.OpenAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = "SELECT data_type, is_nullable FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'UserProfiles' AND column_name = 'AvatarReference'";
+        await using var reader = await command.ExecuteReaderAsync();
+        Assert.IsTrue(await reader.ReadAsync());
+        Assert.AreEqual("text", reader.GetString(0));
+        Assert.AreEqual("YES", reader.GetString(1));
+    }
 }

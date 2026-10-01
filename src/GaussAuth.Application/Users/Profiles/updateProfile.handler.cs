@@ -21,7 +21,6 @@ public sealed class UpdateProfileHandler(IUserRepository userRepository, ILogger
             command.LastName,
             command.DisplayName,
             command.PhoneNumber,
-            command.AvatarReference,
             now);
 
         await userRepository.SaveChangesAsync(cancellationToken);
