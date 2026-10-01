@@ -70,7 +70,7 @@ public sealed class SessionsAccessTests
         using var factory = await FactoryAsync(); using var client = factory.CreateClient();
         var login = await CreateLoginAsync(client);
         var cases = new[] { "not-a-token", login.AccessToken[..^1] + (login.AccessToken[^1] == 'a' ? "b" : "a") };
-        string? baseline = null;
+        JsonElement? baseline = null;
         foreach (var credential in cases)
         {
             using var request = new HttpRequestMessage(HttpMethod.Post, "/auth/session/validate") { Content = JsonContent.Create(new { applicationCode = login.ApplicationCode }) };
@@ -78,8 +78,12 @@ public sealed class SessionsAccessTests
             using var response = await client.SendAsync(request);
             Assert.AreEqual(HttpStatusCode.Unauthorized, response.StatusCode);
             Assert.AreEqual("Bearer", response.Headers.WwwAuthenticate.Single().Scheme);
-            baseline ??= await response.Content.ReadAsStringAsync();
-            Assert.AreEqual(baseline, await response.Content.ReadAsStringAsync());
+            var problem = JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement;
+            baseline ??= problem.Clone();
+            Assert.AreEqual(baseline.Value.GetProperty("type").GetString(), problem.GetProperty("type").GetString());
+            Assert.AreEqual(baseline.Value.GetProperty("title").GetString(), problem.GetProperty("title").GetString());
+            Assert.AreEqual(baseline.Value.GetProperty("status").GetInt32(), problem.GetProperty("status").GetInt32());
+            Assert.IsFalse(string.IsNullOrWhiteSpace(problem.GetProperty("traceId").GetString()));
         }
     }
 

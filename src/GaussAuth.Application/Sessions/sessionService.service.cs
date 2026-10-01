@@ -38,7 +38,7 @@ public sealed class SessionService(
         await sessions.SaveChangesAsync(ct);
         logger.LogInformation("Session {SessionId} created for user {UserId} in application {ApplicationId}.", session.Id, session.UserId, session.ApplicationId);
         await securityEvents.RecordAsync(SecurityEventType.SessionCreated, session.UserId, session.ApplicationId, session.Id, ct);
-        return SessionOperationResult.Success(session.Id, session.UserId, session.ApplicationId, credential, expiresAt, session.ExpiresAt);
+        return SessionOperationResult.Success(session.Id, session.UserId, session.ApplicationId, credential, now, expiresAt, session.ExpiresAt);
     }
 
     public async Task<SessionOperationResult> ValidateAsync(string credential, string applicationCode, CancellationToken ct)
@@ -64,7 +64,7 @@ public sealed class SessionService(
         var renewed = issuer.Issue(new AccessCredentialClaims(session.Id, session.UserId, session.ApplicationId, now, expiresAt));
         logger.LogInformation("Access credential renewed for session {SessionId} user {UserId} application {ApplicationId}.", session.Id, session.UserId, session.ApplicationId);
         await securityEvents.RecordAsync(SecurityEventType.AccessRenewed, session.UserId, session.ApplicationId, session.Id, ct);
-        return SessionOperationResult.Success(session.Id, session.UserId, session.ApplicationId, renewed, expiresAt, session.ExpiresAt);
+        return SessionOperationResult.Success(session.Id, session.UserId, session.ApplicationId, renewed, now, expiresAt, session.ExpiresAt);
     }
 
     public async Task<SessionOperationResult> GetAuthenticatedContextAsync(string credential, CancellationToken ct)
@@ -84,7 +84,7 @@ public sealed class SessionService(
             await securityEvents.RecordAsync(SecurityEventType.SessionRevoked, session.UserId, session.ApplicationId, session.Id, ct);
         }
 
-        return SessionOperationResult.Success(sessionId, session?.UserId ?? Guid.Empty, session?.ApplicationId ?? Guid.Empty, null, null, session?.ExpiresAt);
+        return SessionOperationResult.Success(sessionId, session?.UserId ?? Guid.Empty, session?.ApplicationId ?? Guid.Empty, null, null, null, session?.ExpiresAt);
     }
 
     public async Task<int> RevokeAllForUserAsync(Guid userId, CancellationToken ct)
@@ -147,7 +147,7 @@ public sealed class SessionService(
     }
 
     private static SessionOperationResult SuccessFor(Session session, AccessCredentialClaims claims) =>
-        SessionOperationResult.Success(session.Id, session.UserId, session.ApplicationId, null, claims.ExpiresAt, session.ExpiresAt);
+        SessionOperationResult.Success(session.Id, session.UserId, session.ApplicationId, null, claims.IssuedAt, claims.ExpiresAt, session.ExpiresAt);
 
     private async Task<SessionOperationResult> RejectAsync(SessionRejectionReason reason, Guid? userId, Guid? applicationId, Guid? sessionId, CancellationToken ct, bool recordSecurityEvent = true)
     {
