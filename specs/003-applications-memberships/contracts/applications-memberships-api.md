@@ -62,7 +62,9 @@ or application-specific profile data.
 ## Paged list response
 
 All collection routes return this bounded envelope. `limit` defaults to 50 and
-cannot exceed 100. `nextCursor` is absent when the returned page is final.
+cannot exceed 100. Results are ordered by ascending stable id. `nextCursor` is
+absent when the returned page is final and otherwise resumes after the final
+id of the current page.
 
 ```json
 {

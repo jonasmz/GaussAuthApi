@@ -32,6 +32,20 @@
 
 **Alternatives considered**: User-only mutation routes and a global active-membership reporting endpoint were rejected because they weaken explicit context or exceed scope.
 
+## Bounded collection listings
+
+**Decision**: Every application or membership list is ordered by stable
+ascending identifier and uses an opaque continuation cursor representing the
+last returned identifier. The default limit is 50 and valid limits are 1–100.
+
+**Rationale**: Stable key ordering prevents duplicate/omitted records within a
+continuation sequence and gives the required explicit collection bound without
+adding a reporting/search feature.
+
+**Alternatives considered**: Offset paging was rejected because it becomes
+unstable as records change; unbounded arrays were rejected by the constitution's
+explicit collection-limit requirement.
+
 ## Development and verification workflow
 
 **Decision**: Reuse `compose.dev.yml`'s PostgreSQL 17 and .NET 10 SDK services; run migrations, API, and tests from `sdk`. Extend the existing MSTest integration suite and migration schema test.

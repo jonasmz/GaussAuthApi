@@ -71,7 +71,7 @@ is rejected and repeated transitions are no-ops.
 ### Implementation for User Story 1
 
 - [ ] T015 [US1] Add create-application command, focused result, and handler in `src/GaussAuth.Application/Applications/CreateApplication/createApplication.command.cs`, `createApplication.result.cs`, and `createApplication.handler.cs`; enforce code “3–64 ASCII letters/digits/single hyphens, begins/ends alphanumeric” after trim/lowercase and name “trimmed, 1–200 non-whitespace chars,” then log only application id/outcome.
-- [ ] T016 [US1] Add get-by-id/get-by-code queries and handlers in `src/GaussAuth.Application/Applications/GetApplication/` and a cursor/limit list query/handler in `src/GaussAuth.Application/Applications/ListApplications/` (default 50, valid limit 1–100), with no broad search/reporting behavior.
+- [ ] T016 [US1] Add get-by-id/get-by-code queries and handlers in `src/GaussAuth.Application/Applications/GetApplication/` and a cursor/limit list query/handler in `src/GaussAuth.Application/Applications/ListApplications/` (default 50, valid limit 1–100, stable ascending `Id` order, opaque continuation after the final id), with no broad search/reporting behavior.
 - [ ] T017 [US1] Add idempotent lifecycle handlers in `src/GaussAuth.Application/Applications/ActivateApplication/activateApplication.handler.cs` and `src/GaussAuth.Application/Applications/DeactivateApplication/deactivateApplication.handler.cs`; preserve historical records and never delete memberships.
 - [ ] T018 [US1] Create request/response DTOs with Data Annotations and safe domain mapping in `src/GaussAuth.Api/Applications/createApplicationRequest.dto.cs` and `src/GaussAuth.Api/Applications/applicationResponse.dto.cs`.
 - [ ] T019 [US1] Implement `POST /applications`, `GET /applications/{id:guid}`, `GET /applications/by-code/{code}`, paged `GET /applications`, and state routes with 400/404/409 Problem Details in `src/GaussAuth.Api/Applications/applicationsEndpoints.extension.cs`.
@@ -93,13 +93,13 @@ and inactive-user rules produce the specified safe outcomes.
 
 ### Tests for User Story 2
 
-- [ ] T021 [US2] Add integration tests for active-user/active-application membership `201`, pair retrieval, missing user/application `404`, duplicate sequential/concurrent `409`, and database retention of exactly one pair in `tests/GaussAuth.Foundation.Tests/applicationMembershipsTests.test.cs`.
+- [ ] T021 [US2] Add integration tests for active-user/active-application membership `201`, pair retrieval, missing user/application `404`, duplicate sequential/concurrent `409`, database retention of exactly one pair, and both cursor/limit membership lists (default 50; valid 1–100; invalid limit/cursor `400`) in `tests/GaussAuth.Foundation.Tests/applicationMembershipsTests.test.cs`.
 - [ ] T022 [US2] Add integration tests proving inactive application rejects every new membership and inactive user plus active application creates one inactive historical membership in `tests/GaussAuth.Foundation.Tests/applicationMembershipsTests.test.cs`.
 
 ### Implementation for User Story 2
 
 - [ ] T023 [US2] Add create-membership command, result, and handler in `src/GaussAuth.Application/Memberships/CreateMembership/createMembership.command.cs`, `createMembership.result.cs`, and `createMembership.handler.cs`; load the existing global User and Application, reject inactive application, create active only when user is active, and never create a missing parent.
-- [ ] T024 [US2] Add pair retrieval query/handler in `src/GaussAuth.Application/Memberships/GetMembership/` and cursor/limit user/application list queries/handlers in `src/GaussAuth.Application/Memberships/ListMemberships/` (default 50, valid limit 1–100); results must retain both ids and must not claim cross-application eligibility.
+- [ ] T024 [US2] Add pair retrieval query/handler in `src/GaussAuth.Application/Memberships/GetMembership/` and cursor/limit user/application list queries/handlers in `src/GaussAuth.Application/Memberships/ListMemberships/` (default 50, valid limit 1–100, stable ascending `Id` order, opaque continuation after the final id); results must retain both ids and must not claim cross-application eligibility.
 - [ ] T025 [US2] Create membership request/response DTOs in `src/GaussAuth.Api/Memberships/createMembershipRequest.dto.cs` and `src/GaussAuth.Api/Memberships/applicationMembershipResponse.dto.cs`; require non-empty `userId` and expose only ids, state, and timestamps.
 - [ ] T026 [US2] Implement explicit-context membership create, pair retrieval, and paged application/user list routes with 400/404/409 contracts in `src/GaussAuth.Api/Memberships/membershipsEndpoints.extension.cs`.
 - [ ] T027 [US2] Register membership handlers in `src/GaussAuth.Api/DependencyInjection/applicationServiceCollectionExtensions.extension.cs` and map `MapMembershipsEndpoints()` in `src/GaussAuth.Api/program.entrypoint.cs`.

@@ -52,7 +52,8 @@ cascade membership state changes when a parent user or application is
 deactivated; idempotent state changes; PostgreSQL uniqueness and referential
 integrity are authoritative; safe error contracts; no new runtime dependency,
 container, role, or authorization substitute; every collection listing uses
-an opaque cursor and a validated `limit` of 1–100.
+an opaque cursor and a validated `limit` of 1–100, ordered by stable ascending
+identifier so a cursor can continue after the last returned record.
 
 **Scale/Scope**: Two Domain types, focused Applications and Memberships
 vertical slices, two small persistence ports/adapters, one EF migration, twelve

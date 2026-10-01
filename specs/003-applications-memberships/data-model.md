@@ -73,6 +73,10 @@ and foreign keys.
 | Listing `cursor` | No | Opaque continuation token returned by a prior listing. |
 | Request payload | Yes | Small fixed DTOs only; reject missing/invalid fields before state changes. |
 
+All list queries order records by ascending stable `Id`. Their opaque cursor
+continues after the final `Id` in the previous page; invalid cursors are
+rejected without exposing persistence details.
+
 ## Application and port boundary
 
 - `IApplicationRepository`: targeted code/id reads, list, add, save, and
