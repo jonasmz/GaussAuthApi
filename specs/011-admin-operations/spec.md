@@ -192,7 +192,7 @@ Every administrative state change is recorded with the acting administrator and 
 **Sessions**
 
 - **FR-018**: An administrator MUST be able to list sessions for a user or an Application with bounded pagination and filters for state, exposing only safe metadata and never access credentials, refresh material, session secrets, or cryptographic material.
-- **FR-019**: An administrator MUST be able to revoke a single session, all sessions of one user within one Application, and all sessions of one Application, within their own Application scope. A global administrator MUST additionally be able to revoke all sessions of one user across Applications. No other bulk revocation scope and no arbitrary identifier-list revocation is provided.
+- **FR-019**: An administrator MUST be able to revoke a single session, all sessions of one user within one Application, and all sessions of one Application, within their own Application scope. A global administrator MUST additionally be able to revoke all sessions of one user across Applications. No other bulk revocation scope and no arbitrary identifier-list revocation is provided. Each bulk request MUST revoke at most a documented, configurable maximum number of active sessions and MUST report whether more remain, so operators repeat the request until none remain.
 - **FR-020**: Session revocation MUST use the existing revocation behavior so revoked sessions are immediately unusable, and MUST be idempotent.
 
 **Consumer secrets (global)**
@@ -249,7 +249,7 @@ Every administrative state change is recorded with the acting administrator and 
 
 - **Global administrator representation (clarified)**: A small externally configured list of UserIds shared with the 009 global audit capability; see FR-004a. Configured identifiers are assumed to refer to existing users, and a listed UserId that does not correspond to an active user confers no usable authority.
 - **Global administrators sign in normally**: a global administrator obtains a session through any Application where they hold an active membership; global authority does not depend on which Application that is, and no special sign-in path is introduced.
-- **Global operations**: user lifecycle and provisioning, user listing, listing a user's memberships across Applications, application registration, listing, activation and deactivation, all consumer-secret operations, user-wide session revocation across Applications, and global audit access.
+- **Global operations**: user lifecycle and provisioning, user listing, listing a user's memberships across Applications, application registration, listing, activation and deactivation, all consumer-secret operations, listing and revoking a user's sessions across Applications, and global audit access.
 - **Application-scoped operations** (also available to global administrators on any named Application): memberships, roles, permissions, assignments, effective-authorization inspection (which includes the Application's state), session listing and revocation within the Application, and application audit access. Retrieving or listing Applications themselves is global-only.
 - **Users and applications are managed globally**: application-scoped administrators see users only through membership and session views in their own Application.
 - **Consumer-secret administration is global only**, because the secret authenticates a service to Auth platform-wide; delegation to application administrators is not part of this feature unless clarification changes it.
