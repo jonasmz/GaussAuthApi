@@ -41,7 +41,9 @@ runtime, and EF Core Design 10.0.12; Npgsql's EF Core provider 10.0.3; local `do
 10.0.12. The focused test project uses Microsoft.NET.Test.Sdk 18.10.0,
 MSTest framework and adapter 4.4.1, and Microsoft.AspNetCore.Mvc.Testing
 10.0.12. Package restore and build in the .NET 10 SDK container verify this
-combination.
+combination. EF tooling with API as the startup project also requires a
+private design-time reference in the API project; it does not add a runtime
+dependency or expose EF Core to the inner layers.
 
 **Decision**: Put a roleless Identity user context in Infrastructure using
 `IdentityUser<Guid>` and `IdentityUserContext<IdentityUser<Guid>, Guid>`.

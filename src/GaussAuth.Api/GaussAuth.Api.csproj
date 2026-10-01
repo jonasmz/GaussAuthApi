@@ -8,4 +8,7 @@
     <ProjectReference Include="../GaussAuth.Application/GaussAuth.Application.csproj" />
     <ProjectReference Include="../GaussAuth.Infrastructure/GaussAuth.Infrastructure.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.12" PrivateAssets="all" />
+  </ItemGroup>
 </Project>

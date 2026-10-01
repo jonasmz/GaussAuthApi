@@ -17,10 +17,13 @@ services:
 
   sdk:
     image: mcr.microsoft.com/dotnet/sdk:10.0
+    user: ${LOCAL_UID:?Set LOCAL_UID in the private .env file}:${LOCAL_GID:?Set LOCAL_GID in the private .env file}
     working_dir: ${PROJECT_DIR:?Set PROJECT_DIR in the private .env file}
     volumes:
       - ${PROJECT_DIR:?Set PROJECT_DIR in the private .env file}:${PROJECT_DIR:?Set PROJECT_DIR in the private .env file}
     environment:
+      DOTNET_CLI_HOME: /tmp
+      HOME: /tmp
       ConnectionStrings__AuthenticationDatabase: Host=postgres;Port=5432;Database=${POSTGRES_DB:?Set POSTGRES_DB};Username=${POSTGRES_USER:?Set POSTGRES_USER};Password=${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}
       ASPNETCORE_ENVIRONMENT: Development
     command: ["dotnet", "run", "--project", "src/GaussAuth.Api", "--urls", "http://0.0.0.0:8080"]

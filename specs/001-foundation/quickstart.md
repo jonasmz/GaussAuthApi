@@ -19,12 +19,16 @@ needed. The SDK and database run in separate containers.
 ```sh
 test -S /var/run/docker.sock
 docker info --format '{{.ServerVersion}}'
-cp .env.example .env
+id -u
+id -g
+test -f .env || cp .env.example .env
 ```
 
-Fill the placeholder development values in `.env`, including the database
+On first setup, fill the placeholder development values in `.env`, including the database
 password. Set `PROJECT_DIR` to the absolute repository path reported by `pwd`;
 that path must also be visible to the host Docker daemon for the SDK bind mount.
+Set `LOCAL_UID` and `LOCAL_GID` to the displayed numeric user and group IDs so
+generated source files remain editable from the development container.
 The implementation must ignore `.env` in Git and validate missing values
 without printing them. The development container itself is unchanged.
 
@@ -67,8 +71,7 @@ docker compose --env-file .env -f compose.dev.yml exec -T sdk curl -sS -o /dev/n
 ```
 
 Expected: the SDK service runs the API and the final command prints `204`.
-The implementation must verify the selected SDK image provides the HTTP
-client used here, or update this guide to the actual in-container client.
+The .NET 10 SDK image used by this workflow provides the `curl` client used here.
 The response body is empty. The route does not query PostgreSQL or disclose
 configuration. The API must expose no identity or business endpoint.
 
