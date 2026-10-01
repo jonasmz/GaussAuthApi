@@ -1,5 +1,6 @@
 using GaussAuth.Application.Users.CreateUser;
 using GaussAuth.Application.Users.GetUser;
+using GaussAuth.Application.Users.Profiles;
 
 namespace GaussAuth.Api.DependencyInjection;
 
@@ -9,6 +10,7 @@ public static class ApplicationServiceCollectionExtensions
     {
         services.AddScoped<CreateUserHandler>();
         services.AddScoped<GetUserHandler>();
+        services.AddScoped<UpdateProfileHandler>();
         return services;
     }
 }

@@ -367,7 +367,7 @@ email or credentials.
 values and confirm only the profile changes; attempt to change the login
 email through the same operation and confirm it is rejected.
 
-- [ ] T029 [US3] Add
+- [X] T029 [US3] Add
   `tests/GaussAuth.Foundation.Tests/profileUpdateTests.test.cs` against
   `PUT /users/{id}/profile`: valid `firstName`/`lastName`/`displayName`
   (each required, max 100 chars per `data-model.md`), optional
@@ -382,16 +382,16 @@ email through the same operation and confirm it is rejected.
   consistent with the "Concurrency and consistency" clarification — no
   `409` is produced for a second successful write). Confirm this test
   compiles but fails before T030-T035 are implemented.
-- [ ] T030 [US3] Create
+- [X] T030 [US3] Create
   `src/GaussAuth.Application/Users/Profiles/updateProfile.command.cs` with
   an `UpdateProfileCommand` carrying the target `Guid` id and the permitted
   profile fields (`firstName`, `lastName`, `displayName`, `phoneNumber`,
   `avatarReference`) — no email field.
-- [ ] T031 [US3] Create
+- [X] T031 [US3] Create
   `src/GaussAuth.Application/Users/Profiles/updateProfile.result.cs` with an
   `UpdateProfileResult` exposing `Success(User user)`, `NotFound()`, and
   `ValidationFailed(...)` outcomes.
-- [ ] T032 [US3] Create
+- [X] T032 [US3] Create
   `src/GaussAuth.Application/Users/Profiles/updateProfile.handler.cs`:
   load the user via `IUserRepository.GetByIdAsync`; if null, return
   `NotFound()`; otherwise call `user.UpdateProfile(...)` (T002/T003) and
@@ -399,22 +399,35 @@ email through the same operation and confirm it is rejected.
   touches `Email`/`NormalizedEmail`/credential state (FR-013). Log one
   structured `ILogger` entry per invocation containing only the user id and
   outcome (updated/not found) (FR-021).
-- [ ] T033 [US3] Create
+- [X] T033 [US3] Create
   `src/GaussAuth.Api/Users/updateProfileRequest.dto.cs` with Data
   Annotations matching `data-model.md`: `FirstName` required, max length
   100; `LastName` required, max length 100; `DisplayName` required, max
   length 100; `PhoneNumber` optional, max length 32; `AvatarReference`
   optional, max length 2048. No `Email` property exists on this type.
-- [ ] T034 [US3] Extend
+
+  **Implementation correction found while building this task**: the
+  contract requires a `400 Bad Request` when the request includes an
+  `email` field (or any other field outside this contract), not silent
+  acceptance/ignoring. A `[JsonUnmappedMemberHandling(Disallow)]` attribute
+  was tried first but its deserialization failure surfaces as an unhandled
+  exception caught by the existing global `SafeExceptionHandler` (producing
+  `500`, not `400`). Instead, `UpdateProfileRequest` gained a
+  `[JsonExtensionData] Dictionary<string, object?>? ExtensionData`
+  property to capture any unmapped field without throwing, and
+  `usersEndpoints.extension.cs`'s `UpdateProfileAsync` rejects the request
+  with `TypedResults.ValidationProblem` (`400`) when `ExtensionData` is
+  non-empty — before dispatching `UpdateProfileCommand`.
+- [X] T034 [US3] Extend
   `src/GaussAuth.Api/Users/usersEndpoints.extension.cs` with
   `PUT /users/{id}/profile`: validate the request DTO, dispatch
   `UpdateProfileCommand`, translate `UpdateProfileResult` to `200 OK` (with
   the updated `UserResponse`), `404 Not Found`, or `400`
   `ValidationProblemDetails`, per `contracts/users-api.md`.
-- [ ] T035 [US3] Extend
+- [X] T035 [US3] Extend
   `src/GaussAuth.Api/DependencyInjection/applicationServiceCollectionExtensions.extension.cs`
   to register the `UpdateProfile` handler (scoped).
-- [ ] T036 [US3] Run
+- [X] T036 [US3] Run
   `tests/GaussAuth.Foundation.Tests/profileUpdateTests.test.cs` and the
   corresponding `quickstart.md` section 4 "update profile" scenario;
   confirm all three acceptance scenarios from spec User Story 3 pass.

@@ -1,6 +1,7 @@
 using System.ComponentModel.DataAnnotations;
 using GaussAuth.Application.Users.CreateUser;
 using GaussAuth.Application.Users.GetUser;
+using GaussAuth.Application.Users.Profiles;
 using Microsoft.AspNetCore.Mvc;
 
 namespace GaussAuth.Api.Users;
@@ -11,8 +12,55 @@ public static class UsersEndpoints
     {
         app.MapPost("/users", CreateUserAsync).RequireRateLimiting("user-creation");
         app.MapGet("/users/{id:guid}", GetUserAsync);
+        app.MapPut("/users/{id:guid}/profile", UpdateProfileAsync);
 
         return app;
+    }
+
+    private static async Task<IResult> UpdateProfileAsync(
+        Guid id,
+        UpdateProfileRequest request,
+        UpdateProfileHandler handler,
+        CancellationToken cancellationToken)
+    {
+        if (HasValidationErrors(request, out var validationErrors))
+        {
+            return TypedResults.ValidationProblem(validationErrors);
+        }
+
+        if (request.ExtensionData is { Count: > 0 })
+        {
+            var unexpectedFields = request.ExtensionData.Keys.ToDictionary(
+                key => key, _ => new[] { "This field is not part of the profile update contract." });
+            return TypedResults.ValidationProblem(unexpectedFields);
+        }
+
+        var command = new UpdateProfileCommand(
+            id,
+            request.FirstName,
+            request.LastName,
+            request.DisplayName,
+            request.PhoneNumber,
+            request.AvatarReference);
+
+        var result = await handler.HandleAsync(command, cancellationToken);
+
+        if (result.User is not null)
+        {
+            return TypedResults.Ok(UserResponse.FromDomain(result.User));
+        }
+
+        if (result.IsNotFound)
+        {
+            return TypedResults.NotFound(new ProblemDetails
+            {
+                Status = StatusCodes.Status404NotFound,
+                Title = "User not found."
+            });
+        }
+
+        return TypedResults.ValidationProblem(
+            result.ValidationErrors ?? new Dictionary<string, string[]>());
     }
 
     private static async Task<IResult> GetUserAsync(
