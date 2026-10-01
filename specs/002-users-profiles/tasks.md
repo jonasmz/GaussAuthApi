@@ -44,7 +44,7 @@ changing migration IDs or generated class identities, exactly as
 
 **Purpose**: Confirm no new dependency is required before starting.
 
-- [ ] T001 Verify no new NuGet package is required for this feature: confirm
+- [X] T001 Verify no new NuGet package is required for this feature: confirm
   `Microsoft.AspNetCore.Identity.ILookupNormalizer` already resolves from the
   `AddIdentityCore` registration in
   `src/GaussAuth.Infrastructure/DependencyInjection/infrastructureServiceCollectionExtensions.extension.cs`;
@@ -69,7 +69,7 @@ response contract that every user story depends on.
 
 **⚠️ CRITICAL**: No user story task may start until this phase is complete.
 
-- [ ] T002 Create `src/GaussAuth.Domain/Users/user.entity.cs` with a `User`
+- [X] T002 Create `src/GaussAuth.Domain/Users/user.entity.cs` with a `User`
   aggregate root (no EF Core/ASP.NET Core/Identity reference): `Id` (`Guid`,
   stable, set once), `Email` (`string`, required, max 256 chars, immutable
   after creation), `NormalizedEmail` (`string`, unique at persistence),
@@ -80,7 +80,7 @@ response contract that every user story depends on.
   either while already in that state is a no-op that still succeeds and
   does **not** advance `UpdatedAt` (per spec Clarifications 2026-10-01 and
   `data-model.md`'s state-transition diagram).
-- [ ] T003 Create `src/GaussAuth.Domain/Users/userProfile.entity.cs` with a
+- [X] T003 Create `src/GaussAuth.Domain/Users/userProfile.entity.cs` with a
   `UserProfile` owned entity (no EF Core/ASP.NET Core/Identity reference):
   `UserId` (`Guid`, same value as the owning `User.Id`), `FirstName`
   (`string`, required, max 100 chars), `LastName` (`string`, required, max
@@ -92,14 +92,14 @@ response contract that every user story depends on.
   `UpdateProfile(firstName, lastName, displayName, phoneNumber,
   avatarReference, now)` method that advances `UpdatedAt` and never touches
   identity/credential fields.
-- [ ] T004 Create
+- [X] T004 Create
   `src/GaussAuth.Application/Users/Ports/userRepository.interface.cs` with
   `IUserRepository`: `Task<bool> ExistsByNormalizedEmailAsync(string
   normalizedEmail, CancellationToken ct)`, `Task AddAsync(User user,
   CancellationToken ct)`, `Task<User?> GetByIdAsync(Guid id,
   CancellationToken ct)`, `Task SaveChangesAsync(CancellationToken ct)`.
   Application MUST NOT depend on a concrete persistence implementation.
-- [ ] T005 Create
+- [X] T005 Create
   `src/GaussAuth.Application/Users/Ports/credentialProvisioningService.interface.cs`
   with `ICredentialProvisioningService`: `string NormalizeEmail(string
   email)` and `Task<CredentialProvisioningResult> CreateCredentialAsync(Guid
@@ -109,7 +109,7 @@ response contract that every user story depends on.
   port MUST be the only way Application triggers Identity credential
   creation; it MUST NOT reference `UserManager` or any other concrete
   Identity type.
-- [ ] T006 Extend
+- [X] T006 Extend
   `src/GaussAuth.Infrastructure/Persistence/authenticationDbContext.context.cs`
   per `research.md`'s "EF Core naming collision to avoid" and
   `data-model.md`'s "Persistence mapping" section: add `DbSet<User>
@@ -122,12 +122,12 @@ response contract that every user story depends on.
   to `AspNetUsers.Id` with `DeleteBehavior.Cascade`; `UserProfiles.UserId` as
   primary key and one-to-one foreign key to `Users.Id` with
   `DeleteBehavior.Cascade`; and a unique index on `Users.NormalizedEmail`.
-- [ ] T007 Create
+- [X] T007 Create
   `src/GaussAuth.Infrastructure/Persistence/userRepository.repository.cs`
   implementing `IUserRepository` against `AuthenticationDbContext`
   (`DomainUsers`/`UserProfiles` DbSets added in T006), including eager
   loading of the owned `Profile` on `GetByIdAsync`.
-- [ ] T008 Create
+- [X] T008 Create
   `src/GaussAuth.Infrastructure/Identity/identityCredentialProvisioningService.service.cs`
   implementing `ICredentialProvisioningService`: `NormalizeEmail` delegates
   to the injected `ILookupNormalizer` (the same normalizer
@@ -139,13 +139,13 @@ response contract that every user story depends on.
   translates Identity's `IdentityResult` (including password-policy
   failures) into `CredentialProvisioningResult`, never logging or returning
   the password or any password hash.
-- [ ] T009 Extend
+- [X] T009 Extend
   `src/GaussAuth.Infrastructure/DependencyInjection/infrastructureServiceCollectionExtensions.extension.cs`
   to register `IUserRepository → UserRepository` and
   `ICredentialProvisioningService → IdentityCredentialProvisioningService`
   (both scoped, consistent with the existing `AddDbContext`/
   `AddIdentityCore` lifetimes in that file).
-- [ ] T010 Using `.config/dotnet-tools.json`'s pinned local `dotnet-ef`,
+- [X] T010 Using `.config/dotnet-tools.json`'s pinned local `dotnet-ef`,
   Infrastructure as target and API as startup project (same tooling
   `001-foundation` established), generate the new EF Core migration adding
   the `Users` and `UserProfiles` tables and their constraints from T006
@@ -156,15 +156,17 @@ response contract that every user story depends on.
   `20261001012324_InitialIdentityFoundation.migration.cs`). Confirm the
   migration adds only `Users`/`UserProfiles` schema — no application,
   membership, role, permission, or session table (FR-016).
-- [ ] T011 Create `src/GaussAuth.Api/Users/userResponse.dto.cs` with the
+- [X] T011 Create `src/GaussAuth.Api/Users/userResponse.dto.cs` with the
   shared `UserResponse` shape from `contracts/users-api.md`: `Id` (`Guid`),
   `Email` (`string`), `NormalizedEmail` (`string`), `IsActive` (`bool`),
   `CreatedAt`/`UpdatedAt` (`DateTimeOffset`), and a nested `Profile` object
   with `FirstName`, `LastName`, `DisplayName`, `PhoneNumber` (nullable),
   `AvatarReference` (nullable), `CreatedAt`/`UpdatedAt`. This type MUST NOT
   include a password hash, security stamp, internal credential token, or any
-  other sensitive Identity infrastructure field (FR-011).
-- [ ] T012 Add
+  other sensitive Identity infrastructure field (FR-011). Implemented as two
+  files (`userResponse.dto.cs` + `userProfileResponse.dto.cs`) to keep one
+  top-level type per file; `UserResponse.Profile` is `UserProfileResponse`.
+- [X] T012 Add
   `tests/GaussAuth.Foundation.Tests/usersSchemaMigrationTests.test.cs`:
   apply the migration from T010 against the PostgreSQL 17 development
   service, reapply it and assert no further schema change is produced,
@@ -174,7 +176,10 @@ response contract that every user story depends on.
   role, permission, or session table was introduced. Run it only against the
   reproducible development service, mirroring
   `tests/GaussAuth.Foundation.Tests/migrationTests.test.cs` from
-  `001-foundation`.
+  `001-foundation`. That existing test's `expectedTables`/applied-migration-
+  count assertions were also updated in place (2 migrations; `Users`/
+  `UserProfiles` added to the expected table set), since they now correctly
+  reflect the full schema after this feature's migration.
 
 **Checkpoint**: Domain, ports, persistence, migration, and the shared
 response contract exist. Every user story below can now be implemented.
