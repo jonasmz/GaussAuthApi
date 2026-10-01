@@ -26,7 +26,7 @@ Turn a successful `005-authentication-login` result into a persisted, revocable,
 
 **Constraints**: Credential lifetime 15 minutes and session lifetime 8 hours (absolute, no sliding), both configurable and validated at startup (positive, credential <= session); credential `exp` never exceeds session expiry; only ES256 accepted; roles/permissions never in the credential; every credential rejection returns one uniform `401`; logout is durable and idempotent; credentials, keys, and the `Authorization` header are never logged; signing key externally supplied and never committed (ephemeral key only in Development); no OAuth 2.0/OIDC, refresh tokens, key rotation, distributed cache, or broker.
 
-**Scale/Scope**: One new Domain entity and enum, one new Application slice (`Sessions`: service, result, rejection reason, options, four ports, two small records), one repository and one migration, three Infrastructure token/key classes, one extension of login, one new API slice (four routes plus a bearer-header helper and DTOs), one rate-limit policy, an additive change to the security-event port and enum, plus proportionate tests. No password recovery, MFA, social login, administrative UI, or audit store.
+**Scale/Scope**: One new Domain entity and enum, one new Application slice (`Sessions`: service, result, rejection reason, options, four ports, two small records), one repository and one migration, three Infrastructure token/key classes, one extension of login, one new API slice (four routes plus a bearer-header helper and DTOs), one rate-limit policy, an additive change (new `sessionId` parameter, new event types) to the security-event port and enum, plus proportionate tests. No password recovery, MFA, social login, administrative UI, or audit store.
 
 ## Constitution Check
 
@@ -89,7 +89,7 @@ src/
 │   ├── Login/
 │   │   └── loginOperationResult.result.cs        # Success(...) -> internal
 │   └── Security/
-│       ├── Ports/securityEventRecorder.interface.cs   # + optional sessionId
+│       ├── Ports/securityEventRecorder.interface.cs   # + sessionId parameter
 │       └── securityEventType.enum.cs                  # + session/access events
 ├── GaussAuth.Infrastructure/
 │   ├── GaussAuth.Infrastructure.csproj               # + Microsoft.IdentityModel.JsonWebTokens

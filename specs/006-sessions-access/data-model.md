@@ -72,14 +72,14 @@ There is no transition back to `Active`. Loss and regain of user/application/mem
 |---|---|---|
 | `ISessionRepository` | `AddAsync(Session)`, `GetByIdAsync(Guid)`, `SaveChangesAsync()` | Infrastructure EF Core repository |
 | `IAccessCredentialIssuer` | `Issue(AccessCredentialClaims) -> string` | Infrastructure signed-token adapter |
-| `IAccessCredentialValidator` | `Validate(string) -> AccessCredentialClaims?` (`null` = unauthentic or malformed; **does not** judge lifetime) | Infrastructure signed-token adapter |
+| `IAccessCredentialValidator` | `ValidateAsync(string, CancellationToken) -> Task<AccessCredentialClaims?>` (`null` = unauthentic or malformed; **does not** judge lifetime) | Infrastructure signed-token adapter |
 | `IAccessCredentialKeySet` | `GetPublicKeys() -> IReadOnlyList<PublicSigningKey>` | Infrastructure signing-key service |
 
 Existing ports reused unchanged: `IUserRepository.GetByIdAsync`, `IApplicationRepository.GetByIdAsync`/`GetByCodeAsync`, `IApplicationMembershipRepository.GetAsync`, `ISecurityEventRecorder` (signature extended, below). The existing effective-permission lookup is **not** called by this feature.
 
 ### Change to existing contracts
 
-- `ISecurityEventRecorder.RecordAsync(type, userId, applicationId, ct)` gains an optional `Guid? sessionId` (placed before the cancellation token). `LoggingSecurityEventRecorder` and the recording test double are updated; existing call sites pass nothing.
+- `ISecurityEventRecorder.RecordAsync(type, userId, applicationId, ct)` gains a `Guid? sessionId` parameter between `applicationId` and the cancellation token (a required parameter, because a C# optional parameter cannot precede the non-optional token). `LoggingSecurityEventRecorder`, the recording test double, and the three existing `LoginService` call sites (which pass `null`) are updated.
 - `SecurityEventType` gains: `SessionCreated`, `AccessRenewed`, `SessionRevoked`, `LogoutCompleted`, `AccessRejectedExpired`, `AccessRejectedRevoked`, `AccessRejectedInvalidState`, `AccessRejectedApplicationMismatch`.
 - `LoginOperationResult.Success(...)` becomes `internal` so only `LoginService` can mint a successful authentication result.
 - `LoginResponse` (API DTO) gains `sessionId`, `tokenType`, `accessToken`, `expiresAt`, `sessionExpiresAt` (additive).
