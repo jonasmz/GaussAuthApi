@@ -8,6 +8,10 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using GaussAuth.Application.Profiles.Avatars;
+using GaussAuth.Application.Profiles.Avatars.Ports;
+using GaussAuth.Application.Users.Ports;
+using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Logging;
 using GaussAuth.Domain.Users;
 using GaussAuth.Infrastructure.ProfileImages;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -446,6 +450,225 @@ public sealed class ProfileImageTests
         Assert.IsTrue(events.All(item => item.Metadata is null && item.SubjectId is null));
     }
 
+
+    // ---- Failure injection, concurrency and safety (US3) ----
+
+    [TestMethod]
+    public async Task Old_file_cleanup_failure_keeps_the_new_avatar_current_and_logs_a_safe_orphan_warning()
+    {
+        using var env = new ImageEnvironment();
+        var faults = new StorageFaults();
+        var logs = new CapturingLoggerProvider();
+        using var factory = await env.CreateFactoryAsync(services => InjectStorage(services, faults), logs);
+        using var client = factory.CreateClient();
+        var user = await CreateLoginAsync(client);
+
+        var first = await UploadAsync(client, user.AccessToken, Encode(ProfileImageFormat.Png, 8, 8), "secret-name.png");
+        var firstReference = first.Body.GetProperty("avatarReference").GetString()!;
+        faults.FailDelete.Add(firstReference);
+        var second = await UploadAsync(client, user.AccessToken, Encode(ProfileImageFormat.Png, 9, 9));
+
+        Assert.AreEqual(HttpStatusCode.OK, second.Status);
+        var secondReference = second.Body.GetProperty("avatarReference").GetString()!;
+        Assert.AreEqual(secondReference, await ReadReferenceAsync(client, user.UserId));
+        CollectionAssert.AreEquivalent(new[] { firstReference, secondReference }, env.StoredFiles());
+        var warning = logs.Messages.Single(message => message.Contains("orphan", StringComparison.OrdinalIgnoreCase));
+        StringAssert.Contains(warning, firstReference);
+        StringAssert.Contains(warning, user.UserId.ToString());
+        AssertLogsAreSafe(logs, env);
+    }
+
+    [TestMethod]
+    public async Task Persistence_failure_after_the_file_is_written_removes_the_new_file_and_keeps_the_profile()
+    {
+        using var env = new ImageEnvironment();
+        var faults = new StorageFaults();
+        var logs = new CapturingLoggerProvider();
+        using var factory = await env.CreateFactoryAsync(services => InjectStorage(services, faults), logs);
+        using var client = factory.CreateClient();
+        var user = await CreateLoginAsync(client);
+        var good = await UploadAsync(client, user.AccessToken, Encode(ProfileImageFormat.Png, 8, 8));
+        var goodReference = good.Body.GetProperty("avatarReference").GetString()!;
+
+        faults.FailSave = true;
+        var failed = await UploadAsync(client, user.AccessToken, Encode(ProfileImageFormat.Jpeg, 8, 8), "secret-name.jpg");
+        faults.FailSave = false;
+
+        Assert.AreEqual(HttpStatusCode.InternalServerError, failed.Status);
+        Assert.IsFalse(failed.Raw.Contains("secret-name", StringComparison.Ordinal));
+        Assert.IsFalse(failed.Raw.Contains(env.Root, StringComparison.Ordinal));
+        Assert.AreEqual(goodReference, await ReadReferenceAsync(client, user.UserId));
+        CollectionAssert.AreEqual(new[] { goodReference }, env.StoredFiles());
+        Assert.AreEqual(0, Directory.GetFiles(Path.Combine(env.Root, ".staging")).Length);
+        AssertLogsAreSafe(logs, env);
+    }
+
+    [TestMethod]
+    public async Task Storage_promotion_failure_leaves_no_staged_file_and_no_reference_change()
+    {
+        using var env = new ImageEnvironment();
+        var faults = new StorageFaults();
+        using var factory = await env.CreateFactoryAsync(services => InjectStorage(services, faults));
+        using var client = factory.CreateClient();
+        var user = await CreateLoginAsync(client);
+
+        faults.FailPromote = true;
+        var failed = await UploadAsync(client, user.AccessToken, Encode(ProfileImageFormat.Png, 8, 8));
+
+        Assert.AreEqual(HttpStatusCode.InternalServerError, failed.Status);
+        Assert.IsNull(await ReadReferenceAsync(client, user.UserId));
+        Assert.AreEqual(0, env.StoredFiles().Length);
+        Assert.AreEqual(0, Directory.GetFiles(Path.Combine(env.Root, ".staging")).Length);
+    }
+
+    [TestMethod]
+    public async Task Concurrent_replacements_converge_on_one_file_matching_the_profile()
+    {
+        using var env = new ImageEnvironment();
+        using var factory = await env.CreateFactoryAsync();
+        using var client = factory.CreateClient();
+        var user = await CreateLoginAsync(client);
+
+        var results = await Task.WhenAll(Enumerable.Range(0, 6).Select(index =>
+            UploadAsync(client, user.AccessToken, Encode(ProfileImageFormat.Png, 8 + index, 8))));
+
+        Assert.IsTrue(results.All(result => result.Status == HttpStatusCode.OK), string.Join(",", results.Select(result => result.Status)));
+        var reference = await ReadReferenceAsync(client, user.UserId);
+        CollectionAssert.AreEqual(new[] { reference }, env.StoredFiles(), $"profile={reference}; files={string.Join(",", env.StoredFiles())}");
+        Assert.AreEqual(0, Directory.GetFiles(Path.Combine(env.Root, ".staging")).Length);
+    }
+
+    [TestMethod]
+    public async Task Over_dimension_images_and_write_rate_limit_are_enforced()
+    {
+        using var env = new ImageEnvironment();
+        using var factory = await env.CreateFactoryAsync();
+        using var client = factory.CreateClient();
+        var user = await CreateLoginAsync(client);
+
+        var tooWide = await UploadAsync(client, user.AccessToken, Encode(ProfileImageFormat.Png, 4097, 1));
+        Assert.AreEqual(HttpStatusCode.UnprocessableEntity, tooWide.Status);
+        Assert.AreEqual(0, env.StoredFiles().Length);
+
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", user.AccessToken);
+        HttpStatusCode last = default;
+        for (var attempt = 0; attempt < 12 && last != HttpStatusCode.TooManyRequests; attempt++)
+        {
+            using var response = await client.DeleteAsync("/me/profile/avatar");
+            last = response.StatusCode;
+        }
+
+        Assert.AreEqual(HttpStatusCode.TooManyRequests, last);
+    }
+
+    [TestMethod]
+    public async Task Profile_locking_requires_a_transaction_and_returns_the_current_committed_profile()
+    {
+        using var env = new ImageEnvironment();
+        using var factory = await env.CreateFactoryAsync();
+        using var client = factory.CreateClient();
+        var user = await CreateLoginAsync(client);
+        var upload = await UploadAsync(client, user.AccessToken, Encode(ProfileImageFormat.Png, 8, 8));
+
+        using var scope = factory.Services.CreateScope();
+        var users = scope.ServiceProvider.GetRequiredService<IUserRepository>();
+        await Assert.ThrowsExactlyAsync<InvalidOperationException>(() => users.GetByIdForUpdateAsync(user.UserId, CancellationToken.None));
+        await using var transaction = await users.BeginTransactionAsync(CancellationToken.None);
+        var locked = await users.GetByIdForUpdateAsync(user.UserId, CancellationToken.None);
+        Assert.AreEqual(upload.Body.GetProperty("avatarReference").GetString(), locked!.Profile.AvatarReference);
+        Assert.IsNull(await users.GetByIdForUpdateAsync(Guid.NewGuid(), CancellationToken.None));
+        await transaction.RollbackAsync(CancellationToken.None);
+    }
+
+    private static void AssertLogsAreSafe(CapturingLoggerProvider logs, ImageEnvironment env)
+    {
+        foreach (var message in logs.Messages)
+        {
+            Assert.IsFalse(message.Contains(env.Root, StringComparison.Ordinal), "Logs must not contain storage paths.");
+            Assert.IsFalse(message.Contains("secret-name", StringComparison.Ordinal), "Logs must not contain original filenames.");
+            Assert.IsFalse(message.Contains("Quickstart!2026", StringComparison.Ordinal), "Logs must not contain credentials.");
+            Assert.IsFalse(message.Contains("Content-Disposition: form-data", StringComparison.OrdinalIgnoreCase) || message.Contains("\u0089PNG", StringComparison.Ordinal), "Logs must not contain multipart bodies.");
+        }
+    }
+
+    private static void InjectStorage(IServiceCollection services, StorageFaults faults)
+    {
+        services.RemoveAll<IProfileImageStorage>();
+        services.AddSingleton<IProfileImageStorage>(provider => new FaultInjectingStorage(
+            new LocalProfileImageStorage(provider.GetRequiredService<ProfileImagesOptions>(), provider.GetRequiredService<ILogger<LocalProfileImageStorage>>()),
+            faults));
+        services.RemoveAll<IUserRepository>();
+        services.AddScoped<IUserRepository>(provider => new FaultInjectingUserRepository(
+            ActivatorUtilities.CreateInstance<UserRepository>(provider), faults));
+    }
+
+    private sealed class StorageFaults
+    {
+        public bool FailPromote { get; set; }
+
+        public volatile bool FailSave;
+
+        public HashSet<string> FailDelete { get; } = [];
+    }
+
+    private sealed class FaultInjectingStorage(IProfileImageStorage inner, StorageFaults faults) : IProfileImageStorage
+    {
+        public Task<StagedProfileImage> StageAsync(ProcessedProfileImage image, CancellationToken cancellationToken) => inner.StageAsync(image, cancellationToken);
+
+        public Task PromoteAsync(StagedProfileImage staged, CancellationToken cancellationToken) =>
+            faults.FailPromote ? throw new IOException("injected promotion failure") : inner.PromoteAsync(staged, cancellationToken);
+
+        public Task<bool> DiscardStagedAsync(StagedProfileImage staged, CancellationToken cancellationToken) => inner.DiscardStagedAsync(staged, cancellationToken);
+
+        public Task<bool> DeleteAsync(ProfileImageReference reference, CancellationToken cancellationToken) =>
+            faults.FailDelete.Contains(reference.Value) ? Task.FromResult(false) : inner.DeleteAsync(reference, cancellationToken);
+
+        public Task<ProfileImageContent?> OpenReadAsync(ProfileImageReference reference, CancellationToken cancellationToken) => inner.OpenReadAsync(reference, cancellationToken);
+    }
+
+    private sealed class FaultInjectingUserRepository(IUserRepository inner, StorageFaults faults) : IUserRepository
+    {
+        public Task<bool> ExistsByNormalizedEmailAsync(string normalizedEmail, CancellationToken cancellationToken) => inner.ExistsByNormalizedEmailAsync(normalizedEmail, cancellationToken);
+
+        public Task AddAsync(User user, CancellationToken cancellationToken) => inner.AddAsync(user, cancellationToken);
+
+        public Task<User?> GetByIdAsync(Guid id, CancellationToken cancellationToken) => inner.GetByIdAsync(id, cancellationToken);
+
+        public Task<User?> GetByIdForUpdateAsync(Guid id, CancellationToken cancellationToken) => inner.GetByIdForUpdateAsync(id, cancellationToken);
+
+        public Task<User?> GetByNormalizedEmailAsync(string normalizedEmail, CancellationToken cancellationToken) => inner.GetByNormalizedEmailAsync(normalizedEmail, cancellationToken);
+
+        public Task SaveChangesAsync(CancellationToken cancellationToken) =>
+            faults.FailSave ? throw new InvalidOperationException("injected persistence failure") : inner.SaveChangesAsync(cancellationToken);
+
+        public Task<bool> TrySaveChangesAsync(CancellationToken cancellationToken) => inner.TrySaveChangesAsync(cancellationToken);
+
+        public Task<IUserRepositoryTransaction> BeginTransactionAsync(CancellationToken cancellationToken) => inner.BeginTransactionAsync(cancellationToken);
+    }
+
+    private sealed class CapturingLoggerProvider : ILoggerProvider
+    {
+        private readonly System.Collections.Concurrent.ConcurrentQueue<string> messages = new();
+
+        public IReadOnlyCollection<string> Messages => messages.ToArray();
+
+        public ILogger CreateLogger(string categoryName) => new CapturingLogger(messages);
+
+        public void Dispose()
+        {
+        }
+
+        private sealed class CapturingLogger(System.Collections.Concurrent.ConcurrentQueue<string> sink) : ILogger
+        {
+            public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+
+            public bool IsEnabled(LogLevel logLevel) => true;
+
+            public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter) =>
+                sink.Enqueue(formatter(state, exception));
+        }
+    }
+
     private sealed record UploadOutcome(HttpStatusCode Status, JsonElement Body, string Raw);
 
     private sealed record LoginResult(Guid UserId, string AccessToken);
@@ -506,10 +729,13 @@ public sealed class ProfileImageTests
 
         public string Root { get; }
 
-        public async Task<WebApplicationFactory<Program>> CreateFactoryAsync(Action<IServiceCollection>? configure = null)
+        public async Task<WebApplicationFactory<Program>> CreateFactoryAsync(Action<IServiceCollection>? configure = null, ILoggerProvider? logs = null)
         {
             var factory = new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
-                builder.ConfigureServices(services => configure?.Invoke(services)));
+            {
+                builder.ConfigureServices(services => configure?.Invoke(services));
+                if (logs is not null) builder.ConfigureServices(services => services.AddLogging(logging => logging.AddProvider(logs)));
+            });
             using var scope = factory.Services.CreateScope();
             await scope.ServiceProvider.GetRequiredService<AuthenticationDbContext>().Database.MigrateAsync();
             return factory;

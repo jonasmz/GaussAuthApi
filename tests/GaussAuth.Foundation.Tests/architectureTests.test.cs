@@ -166,6 +166,38 @@ public sealed class ArchitectureTests
             ".env.example must not version a consumer service credential.");
     }
 
+    [TestMethod]
+    public void Image_processing_dependency_and_filesystem_access_stay_inside_infrastructure_profile_images()
+    {
+        var root = FindRepositoryRoot();
+        foreach (var project in new[] { "Domain", "Application", "Api" })
+        {
+            var csproj = File.ReadAllText(Path.Combine(root, $"src/GaussAuth.{project}/GaussAuth.{project}.csproj"));
+            Assert.IsFalse(csproj.Contains("SixLabors", StringComparison.Ordinal), $"{project} must not reference an imaging package.");
+        }
+
+        foreach (var tree in new[] { "src/GaussAuth.Domain", "src/GaussAuth.Application", "src/GaussAuth.Api" })
+        {
+            foreach (var path in Directory.EnumerateFiles(Path.Combine(root, tree), "*.cs", SearchOption.AllDirectories)
+                         .Where(path => !path.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}") &&
+                                        !path.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}")))
+            {
+                var source = File.ReadAllText(path);
+                Assert.IsFalse(source.Contains("SixLabors", StringComparison.Ordinal), $"{Path.GetRelativePath(root, path)} must not use ImageSharp.");
+                if (!tree.EndsWith("Api", StringComparison.Ordinal))
+                {
+                    Assert.IsFalse(source.Contains("System.IO.File", StringComparison.Ordinal) || source.Contains("FileStream", StringComparison.Ordinal),
+                        $"{Path.GetRelativePath(root, path)} must not touch the filesystem.");
+                }
+            }
+        }
+
+        var avatarApi = File.ReadAllText(Path.Combine(root, "src/GaussAuth.Api/Profiles/profileAvatarEndpoints.extension.cs"));
+        Assert.IsFalse(avatarApi.Contains("FileName", StringComparison.Ordinal), "Original upload filenames must never be read or echoed.");
+        Assert.IsFalse(avatarApi.Contains("ContentType", StringComparison.Ordinal) && avatarApi.Contains("Files[0].ContentType", StringComparison.Ordinal),
+            "The declared file media type must not be trusted.");
+    }
+
     private static string FindRepositoryRoot()
     {
         for (var directory = new DirectoryInfo(AppContext.BaseDirectory);

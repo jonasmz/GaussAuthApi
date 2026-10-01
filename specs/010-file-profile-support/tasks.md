@@ -70,9 +70,9 @@
 
 **Independent Test**: Force signature/decode/size/dimension failures and storage/persistence/old-cleanup failures; verify safe response, stable profile reference, compensation, and safe logs/events.
 
-- [ ] T019 [US3] Add failure-injection tests in `tests/GaussAuth.Foundation.Tests/profileImageTests.test.cs` for spoofed content/MIME, SVG, oversized body/file/output, undecodable image, concurrent replacements, storage-after-validation failure, persistence-after-write failure, and old-file cleanup failure.
-- [ ] T020 [US3] Harden compensation and concurrency handling in `src/GaussAuth.Application/Profiles/Avatars/`, `src/GaussAuth.Infrastructure/ProfileImages/`, and `src/GaussAuth.Infrastructure/Persistence/` so a profile never commits a nonexistent reference and orphan cleanup failures are structured-log observable by UserId/reference/operation/outcome only.
-- [ ] T021 [US3] Add architecture/error/log safety checks in `tests/GaussAuth.Foundation.Tests/architectureTests.test.cs` and `tests/GaussAuth.Foundation.Tests/profileImageTests.test.cs` proving Domain/Application do not depend on filesystem/ASP.NET/ImageSharp, and responses/log events omit paths, raw bytes, multipart bodies, credentials, and original filenames.
+- [X] T019 [US3] Add failure-injection tests in `tests/GaussAuth.Foundation.Tests/profileImageTests.test.cs` for spoofed content/MIME, SVG, oversized body/file/output, undecodable image, concurrent replacements, storage-after-validation failure, persistence-after-write failure, and old-file cleanup failure.
+- [X] T020 [US3] Harden compensation and concurrency handling in `src/GaussAuth.Application/Profiles/Avatars/`, `src/GaussAuth.Infrastructure/ProfileImages/`, and `src/GaussAuth.Infrastructure/Persistence/` so a profile never commits a nonexistent reference and orphan cleanup failures are structured-log observable by UserId/reference/operation/outcome only.
+- [X] T021 [US3] Add architecture/error/log safety checks in `tests/GaussAuth.Foundation.Tests/architectureTests.test.cs` and `tests/GaussAuth.Foundation.Tests/profileImageTests.test.cs` proving Domain/Application do not depend on filesystem/ASP.NET/ImageSharp, and responses/log events omit paths, raw bytes, multipart bodies, credentials, and original filenames.
 
 **Checkpoint**: Invalid uploads and partial failures preserve a valid current profile state with observable, recoverable cleanup behavior.
 
@@ -80,9 +80,9 @@
 
 ## Phase 6: Polish and Validation
 
-- [ ] T022 Verify avatar migration, nullable reference behavior, profile locking, and existing identity/application constraints in `tests/GaussAuth.Foundation.Tests/migrationTests.test.cs` and `tests/GaussAuth.Foundation.Tests/profileImageTests.test.cs`.
-- [ ] T023 Finalize allowed types/limits, metadata stripping, opaque public retrieval, replacement/removal compensation, storage root/volume, retention-free orphan policy, and coordinated backup/restore guidance in `specs/010-file-profile-support/quickstart.md`, `contracts/profile-images-api.md`, and a new `specs/010-file-profile-support/security-review.md`.
-- [ ] T024 Run `dotnet test GaussAuth.slnx` inside the SDK Docker container, execute every `quickstart.md` scenario, perform a sensitive path/content hygiene scan, and validate `git diff --check` for `specs/010-file-profile-support/`, `src/`, and `tests/`.
+- [X] T022 Verify avatar migration, nullable reference behavior, profile locking, and existing identity/application constraints in `tests/GaussAuth.Foundation.Tests/migrationTests.test.cs` and `tests/GaussAuth.Foundation.Tests/profileImageTests.test.cs`. *(No avatar migration was needed; the test asserts the existing nullable `AvatarReference` column and zero pending migrations.)*
+- [X] T023 Finalize allowed types/limits, metadata stripping, opaque public retrieval, replacement/removal compensation, storage root/volume, retention-free orphan policy, and coordinated backup/restore guidance in `specs/010-file-profile-support/quickstart.md`, `contracts/profile-images-api.md`, and a new `specs/010-file-profile-support/security-review.md`.
+- [X] T024 Run `dotnet test GaussAuth.slnx` inside the SDK Docker container, execute every `quickstart.md` scenario, perform a sensitive path/content hygiene scan, and validate `git diff --check` for `specs/010-file-profile-support/`, `src/`, and `tests/`.
 
 ## Dependencies & Execution Order
 
