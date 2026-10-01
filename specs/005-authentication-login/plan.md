@@ -26,7 +26,7 @@ Add a single public login endpoint that authenticates a user by email and passwo
 
 **Constraints**: Login requires application code (not raw identifier), email, and password; email is normalized using the existing `002-users-profiles` semantics; every credential/account-state rejection (unknown email, wrong password, inactive user, invalid/inactive application, missing/inactive membership, account lockout) returns one uniform `401` response; rate-limit rejections use their own `429` response ahead of the use case, per the 2026-10-01 clarification. Lockout and rate-limit thresholds are configuration-driven, defaulting to Identity's own built-in lockout defaults and the existing `user-creation` rate-limit defaults respectively.
 
-**Scale/Scope**: One new vertical slice (Login), two new minimal Application ports, one new Infrastructure read method and two new Infrastructure adapters, one new API route, and proportionate high-value tests. No session, token, MFA, OAuth/OIDC, password recovery, or email-confirmation capability.
+**Scale/Scope**: One new vertical slice (Login), two new minimal Application ports, one new Infrastructure read method and two new Infrastructure adapters, one new API route, one extension of the existing architecture test's forbidden-reference list (to cover Identity assemblies, per FR-017), and proportionate high-value tests. No session, token, MFA, OAuth/OIDC, password recovery, or email-confirmation capability.
 
 ## Constitution Check
 
@@ -70,6 +70,7 @@ src/
 ├── GaussAuth.Application/
 │   ├── Login/
 │   │   ├── Ports/
+│   │   │   ├── credentialVerificationOutcome.enum.cs
 │   │   │   └── credentialVerificationService.interface.cs
 │   │   ├── loginService.service.cs
 │   │   └── loginOperationResult.result.cs
