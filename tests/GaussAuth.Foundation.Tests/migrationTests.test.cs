@@ -28,7 +28,7 @@ public sealed class MigrationTests
 
         await db.Database.MigrateAsync();
         await db.Database.MigrateAsync();
-        Assert.AreEqual(4, (await db.Database.GetAppliedMigrationsAsync()).Count());
+        Assert.AreEqual(5, (await db.Database.GetAppliedMigrationsAsync()).Count());
         Assert.IsEmpty(await db.Database.GetPendingMigrationsAsync());
 
         var connection = db.Database.GetDbConnection();
@@ -56,7 +56,7 @@ public sealed class MigrationTests
         {
             "AspNetUsers", "AspNetUserClaims", "AspNetUserLogins",
             "AspNetUserTokens", "__EFMigrationsHistory", "Users", "UserProfiles",
-            "Applications", "ApplicationMemberships", "Roles", "Permissions", "RolePermissions", "UserRoles"
+            "Applications", "ApplicationMemberships", "Roles", "Permissions", "RolePermissions", "UserRoles", "Sessions"
         };
         CollectionAssert.AreEquivalent(expectedTables, tables.ToArray());
 
@@ -75,5 +75,36 @@ public sealed class MigrationTests
                                            index.Contains("NormalizedEmail", StringComparison.Ordinal)));
         Assert.IsTrue(indexes.Any(index => index.Contains("UNIQUE", StringComparison.Ordinal) &&
                                            index.Contains("NormalizedUserName", StringComparison.Ordinal)));
+
+        var columns = new Dictionary<string, (string Type, string Nullable)>();
+        await using (var columnCommand = connection.CreateCommand())
+        {
+            columnCommand.CommandText = "SELECT column_name, data_type, is_nullable FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'Sessions'";
+            await using var reader = await columnCommand.ExecuteReaderAsync();
+            while (await reader.ReadAsync())
+            {
+                columns[reader.GetString(0)] = (reader.GetString(1), reader.GetString(2));
+            }
+        }
+
+        CollectionAssert.AreEquivalent(new[] { "Id", "UserId", "ApplicationId", "CreatedAt", "ExpiresAt", "RevokedAt" }, columns.Keys.ToArray());
+        Assert.AreEqual(("uuid", "NO"), columns["Id"]);
+        Assert.AreEqual(("uuid", "NO"), columns["UserId"]);
+        Assert.AreEqual(("uuid", "NO"), columns["ApplicationId"]);
+        Assert.AreEqual(("timestamp with time zone", "NO"), columns["CreatedAt"]);
+        Assert.AreEqual(("timestamp with time zone", "NO"), columns["ExpiresAt"]);
+        Assert.AreEqual(("timestamp with time zone", "YES"), columns["RevokedAt"]);
+
+        await using (var constraintCommand = connection.CreateCommand())
+        {
+            constraintCommand.CommandText = "SELECT count(*) FROM information_schema.table_constraints WHERE table_name = 'Sessions' AND constraint_name = 'FK_Sessions_ApplicationMemberships_UserId_ApplicationId' AND constraint_type = 'FOREIGN KEY'";
+            Assert.AreEqual(1, Convert.ToInt32(await constraintCommand.ExecuteScalarAsync()));
+        }
+
+        await using (var sessionIndexCommand = connection.CreateCommand())
+        {
+            sessionIndexCommand.CommandText = "SELECT count(*) FROM pg_indexes WHERE schemaname = 'public' AND tablename = 'Sessions' AND indexname = 'IX_Sessions_UserId_ApplicationId'";
+            Assert.AreEqual(1, Convert.ToInt32(await sessionIndexCommand.ExecuteScalarAsync()));
+        }
     }
 }

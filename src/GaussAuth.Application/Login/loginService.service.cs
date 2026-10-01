@@ -63,7 +63,7 @@ public sealed class LoginService(
         }
 
         logger.LogInformation("Login attempt {UserId} {ApplicationId} completed with outcome {Outcome}.", user.Id, application.Id, "success");
-        await securityEvents.RecordAsync(SecurityEventType.LoginSucceeded, user.Id, application.Id, ct);
+        await securityEvents.RecordAsync(SecurityEventType.LoginSucceeded, user.Id, application.Id, null, ct);
         return LoginOperationResult.Success(user.Id, application.Id);
     }
 
@@ -71,7 +71,7 @@ public sealed class LoginService(
     {
         logger.LogInformation("Login attempt {UserId} {ApplicationId} failed with outcome {Outcome}.", userId, applicationId, reason);
         var eventType = reason == LoginFailureReason.LockedOut ? SecurityEventType.AccountLockedOut : SecurityEventType.LoginFailed;
-        await securityEvents.RecordAsync(eventType, userId, applicationId, ct);
+        await securityEvents.RecordAsync(eventType, userId, applicationId, null, ct);
         return LoginOperationResult.Failure(reason, userId, applicationId);
     }
 }
