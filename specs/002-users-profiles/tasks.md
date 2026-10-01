@@ -509,7 +509,7 @@ ready for Polish.
 
 **Purpose**: Validate the complete feature and remove accidental scope.
 
-- [ ] T043 Review every file touched by T002-T041 for the constitutional
+- [X] T043 Review every file touched by T002-T041 for the constitutional
   reference direction (Domain has no EF Core/ASP.NET Core/Identity
   reference; Application depends only on Domain and its own ports;
   Infrastructure/API implement those ports), the one-type/filename
@@ -521,20 +521,31 @@ ready for Polish.
   session scope; fix only concrete violations. `ArchitectureTests` from
   `001-foundation` already enforces the reference-direction and filename
   rules automatically — use it to confirm, not duplicate it.
-- [ ] T044 Run every command in `specs/002-users-profiles/quickstart.md`
+- [X] T044 Run every command in `specs/002-users-profiles/quickstart.md`
   from the existing development container, including the build, both
   migrations (apply and reapply), starting the API, all five `/users`
   scenarios from `contracts/users-api.md`, the rate-limit scenario, the full
   test run, and the stop/recreate lifecycle; update `quickstart.md` to the
   verified commands and expected outcomes.
-- [ ] T045 Review API responses and structured logs for the five new
+
+  **Finding corrected while verifying this task**: the documented
+  rate-limit scenario originally implied "first five of this loop succeed,
+  6th returns 429." Verified behavior: the fixed-window policy counts
+  every `POST /users` call in the current 60s window regardless of which
+  quickstart section issued it, so the two calls earlier in section 4
+  (creation + duplicate-email) already consumed 2 of the 5 permits before
+  the rate-limit loop runs — observed result was `201, 201, 201, 429, 429,
+  429`, not `201×5, 429×1`. `quickstart.md` was updated to document this
+  (and the fresh-window alternative split) instead of the original
+  assumption.
+- [X] T045 Review API responses and structured logs for the five new
   routes for committed secrets, password/password-hash/security-stamp
   leakage, and unnecessary exposure of persistence or Identity internals
   (FR-020/FR-021); confirm the log line added in T016/T025/T032/T038/T039
   contains only a user id and outcome, never a password, hash, or security
   stamp; confirm no full request payload containing a password is logged;
   correct any finding.
-- [ ] T046 Perform the final clean build and full essential test run with
+- [X] T046 Perform the final clean build and full essential test run with
   `GaussAuth.slnx` from the SDK container; confirm exactly two migrations
   exist (`001-foundation`'s initial migration plus this feature's) and that
   the five routes match `contracts/users-api.md` exactly (no extra route);

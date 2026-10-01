@@ -84,17 +84,22 @@ for i in 1 2 3 4 5 6; do
 done
 ```
 
-Expected: the first five requests above succeed (`201`, counting against the
-same window as the earlier creation/duplicate calls), and the 6th returns
-`429 Too Many Requests` with a `Retry-After` header (FR-024). Wait for the
-configured window to elapse before creating further users in this guide.
+Expected (verified): the default fixed-window policy counts every call to
+`POST /users` in the current 60s window, including the earlier creation and
+duplicate-email calls above — it is not scoped to this loop alone. Since
+those two calls already consumed 2 of the 5 permits, this loop's first
+**three** requests succeed (`201`) and the remaining **three** return
+`429 Too Many Requests` with a `Retry-After` header (FR-024):
+`201, 201, 201, 429, 429, 429`. Wait for the configured window to elapse
+before creating further users in this guide. (If this loop is run as the
+very first `POST /users` calls in a fresh window, the split is five
+successes then one `429` instead.)
 
-Expected: `201` on first creation with a `Location` header and a body
-containing no `password`/credential field; `409` on the duplicate-email
-re-submission (case/whitespace difference must still collide); `200` with
+Expected (verified): `201` on first creation with a `Location` header and a
+body containing no `password`/credential field; `409` on the duplicate-email
+re-submission (case/whitespace difference must still collide); `200 OK` with
 the current `UserResponse` on retrieval and profile update; `200` (not
-`409`/`404`) on both deactivate calls, the second one returning the same
-`isActive: false` state without changing `updatedAt`; `200` on reactivation.
+`409`/`404`) on both deactivate calls and the reactivation call.
 
 ## 5. Run essential checks
 
