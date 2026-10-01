@@ -107,6 +107,8 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddSingleton(SecurityAuditRetentionPolicy.Load(configuration));
         services.AddSingleton<SecurityEventCatalog>();
         services.AddScoped<ISecurityEventRepository, SecurityEventRepository>();
+        services.AddScoped<ISecurityEventQueryRepository, SecurityEventQueryRepository>();
+        services.AddSingleton<IGlobalAuditReviewerPolicy, ConfiguredGlobalAuditReviewerPolicy>();
         services.AddScoped<ISecurityEventRecorder, PersistedSecurityEventRecorder>();
 
         return services;

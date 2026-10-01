@@ -9,6 +9,7 @@ using GaussAuth.Api.Login;
 using GaussAuth.Api.Sessions;
 using GaussAuth.Api.Passwords;
 using GaussAuth.Api.AuthorizationContext;
+using GaussAuth.Api.Security;
 using GaussAuth.Infrastructure.DependencyInjection;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -33,5 +34,6 @@ app.MapLoginEndpoints();
 app.MapSessionsEndpoints();
 app.MapPasswordsEndpoints();
 app.MapAuthorizationContextEndpoints();
+app.MapSecurityEventEndpoints();
 
 app.Run();

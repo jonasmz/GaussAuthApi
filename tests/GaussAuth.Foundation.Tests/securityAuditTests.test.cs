@@ -5,6 +5,7 @@ using GaussAuth.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using System.Net;
 
 namespace GaussAuth.Foundation.Tests;
 
@@ -57,5 +58,19 @@ public sealed class SecurityAuditTests
         Assert.AreEqual("succeeded", recorded.Outcome);
         Assert.AreEqual(TimeSpan.Zero, recorded.OccurredAtUtc.Offset);
         Assert.IsNull(recorded.Metadata);
+    }
+
+    [TestMethod]
+    public async Task Audit_endpoint_is_read_only_bounded_and_requires_a_valid_session()
+    {
+        using var factory = new WebApplicationFactory<Program>();
+        using var client = factory.CreateClient();
+
+        using var invalidPage = await client.GetAsync("/security-events?pageSize=101");
+        Assert.AreEqual(HttpStatusCode.Unauthorized, invalidPage.StatusCode);
+        using var anonymous = await client.GetAsync("/security-events");
+        Assert.AreEqual(HttpStatusCode.Unauthorized, anonymous.StatusCode);
+        using var mutation = await client.PostAsync("/security-events", null);
+        Assert.AreEqual(HttpStatusCode.MethodNotAllowed, mutation.StatusCode);
     }
 }

@@ -24,6 +24,8 @@ public static class ApiServiceCollectionExtensions
         var passwordResetWindow = TimeSpan.FromSeconds(configuration.GetValue("RateLimiting:PasswordReset:WindowSeconds", 60));
         var authorizationContextPermitLimit = configuration.GetValue("RateLimiting:AuthorizationContext:PermitLimit", 600);
         var authorizationContextWindow = TimeSpan.FromSeconds(configuration.GetValue("RateLimiting:AuthorizationContext:WindowSeconds", 60));
+        var securityEventsPermitLimit = configuration.GetValue("RateLimiting:SecurityEvents:PermitLimit", 60);
+        var securityEventsWindow = TimeSpan.FromSeconds(configuration.GetValue("RateLimiting:SecurityEvents:WindowSeconds", 60));
 
         services.AddRateLimiter(options =>
         {
@@ -73,6 +75,9 @@ public static class ApiServiceCollectionExtensions
             options.AddPolicy("authorization-context", httpContext => RateLimitPartition.GetFixedWindowLimiter(
                 partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
                 factory: _ => new FixedWindowRateLimiterOptions { PermitLimit = authorizationContextPermitLimit, Window = authorizationContextWindow, QueueLimit = 0 }));
+            options.AddPolicy("security-events", httpContext => RateLimitPartition.GetFixedWindowLimiter(
+                partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+                factory: _ => new FixedWindowRateLimiterOptions { PermitLimit = securityEventsPermitLimit, Window = securityEventsWindow, QueueLimit = 0 }));
         });
 
         return services;

@@ -1,12 +1,14 @@
 using GaussAuth.Application.Applications.Ports;
 using GaussAuth.Application.Memberships.Ports;
 using GaussAuth.Application.Users.Ports;
+using GaussAuth.Application.Security;
+using GaussAuth.Application.Security.Ports;
 using GaussAuth.Domain.Memberships;
 using Microsoft.Extensions.Logging;
 
 namespace GaussAuth.Application.Memberships;
 
-public sealed class MembershipService(IApplicationMembershipRepository memberships, IApplicationRepository applications, IUserRepository users, ILogger<MembershipService> logger)
+public sealed class MembershipService(IApplicationMembershipRepository memberships, IApplicationRepository applications, IUserRepository users, ISecurityEventRecorder securityEvents, ILogger<MembershipService> logger)
 {
     public async Task<MembershipOperationResult> CreateAsync(Guid userId, Guid applicationId, CancellationToken ct)
     {
@@ -18,6 +20,7 @@ public sealed class MembershipService(IApplicationMembershipRepository membershi
         var membership = ApplicationMembership.Create(Guid.NewGuid(), userId, applicationId, user.IsActive, DateTimeOffset.UtcNow);
         await memberships.AddAsync(membership, ct);
         if (!await memberships.TrySaveChangesAsync(ct)) return MembershipOperationResult.Duplicate();
+        await securityEvents.RecordAsync(SecurityEventType.MembershipCreated, userId, applicationId, null, ct);
         logger.LogInformation("Membership {MembershipId} created.", membership.Id);
         return MembershipOperationResult.Success(membership);
     }
@@ -32,6 +35,7 @@ public sealed class MembershipService(IApplicationMembershipRepository membershi
         if (!application.IsActive) return MembershipOperationResult.InactiveApplication();
         membership.Activate(DateTimeOffset.UtcNow);
         await memberships.TrySaveChangesAsync(ct);
+        await securityEvents.RecordAsync(SecurityEventType.MembershipActivated, userId, applicationId, null, ct);
         logger.LogInformation("Membership {MembershipId} lifecycle transition completed with outcome {Outcome}.", membership.Id, "activated");
         return MembershipOperationResult.Success(membership);
     }
@@ -42,6 +46,7 @@ public sealed class MembershipService(IApplicationMembershipRepository membershi
         var membership = await memberships.GetAsync(userId, applicationId, ct); if (membership is null) return MembershipOperationResult.MembershipNotFound();
         membership.Deactivate(DateTimeOffset.UtcNow);
         await memberships.TrySaveChangesAsync(ct);
+        await securityEvents.RecordAsync(SecurityEventType.MembershipDeactivated, userId, applicationId, null, ct);
         logger.LogInformation("Membership {MembershipId} lifecycle transition completed with outcome {Outcome}.", membership.Id, "deactivated");
         return MembershipOperationResult.Success(membership);
     }
