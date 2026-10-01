@@ -1,12 +1,12 @@
 # Research: Secure Profile Images
 
-## Decision: decode, sanitize, and re-encode with ImageSharp
+## Decision: decode, sanitize, and re-encode with SkiaSharp
 
-**Rationale**: ImageSharp supports JPEG, PNG, and WebP on Linux, detects/decodes actual content, permits dimension validation, and can clear EXIF/IPTC/XMP metadata before an explicit re-encode. It stays entirely in Infrastructure.
+**Rationale**: SkiaSharp (MIT, no license key or fee) decodes and encodes JPEG, PNG, and WebP on Linux. `SKCodec` identifies the real format and dimensions from content before any pixel decode, and decoding the first frame into a raw bitmap then re-encoding drops every metadata block (EXIF, XMP, ICC, text chunks). It stays entirely in Infrastructure; the Linux native asset (`SkiaSharp.NativeAssets.Linux.NoDependencies`) is bundled, so the SDK/runtime images need no extra packages.
 
-**Alternatives considered**: `System.Drawing.Common` is unsupported for this Linux deployment; SkiaSharp introduces native binaries; Magick.NET is heavier. ImageSharp licensing must be verified before adoption.
+**Alternatives considered**: SixLabors.ImageSharp was adopted first and replaced because its Split License requires a paid commercial license (and a license key at build) for non-qualifying commercial use. `System.Drawing.Common` is unsupported for this Linux deployment; Magick.NET (Apache-2.0) works but is a heavier native dependency.
 
-**License review (T001)**: SixLabors.ImageSharp 4.1.2 is distributed under the Six Labors Split License: free under Apache-2.0 for open-source use and for qualifying small organizations, with a paid commercial license required otherwise. The project owner approved its use (2026-10-01) and is responsible for confirming the license tier applies to their deployment. The dependency is referenced only by `GaussAuth.Infrastructure`.
+**License review (T001)**: SkiaSharp 4.153.1 and its Linux native asset are MIT-licensed (Skia itself is BSD-3-Clause); no license key, fee, or warning applies. The dependency is referenced only by `GaussAuth.Infrastructure`.
 
 ## Decision: opaque versioned reference on UserProfile
 

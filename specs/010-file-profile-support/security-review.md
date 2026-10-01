@@ -19,5 +19,5 @@
 - **Residual – legacy writable reference:** `PUT /users/{id}/profile` and `POST /users` still accept an arbitrary `AvatarReference` string. It is only ever served if it parses as a valid opaque reference, and `avatarUrl` is only emitted for valid references, but the field should be removed from those requests in a follow-up.
 - **Residual – retirement window:** between a replacement's commit and its file deletion the previous URL can still be served briefly.
 - **Residual – orphans:** crashes or cleanup failures can leave unreferenced files; see the operator guidance in `quickstart.md`. No retention job exists by design.
-- **Residual – licensing:** SixLabors.ImageSharp 4.x is under the Six Labors Split License and its build emits a warning until a license key/file is supplied; the owner must confirm the applicable tier before production use.
+- **Residual – native dependency:** SkiaSharp wraps native Skia code; keep `SkiaSharp` and its native asset patched, and keep the input byte/dimension limits (decoding happens only after both pass).
 - **Residual – public caching:** images are public by design (global avatar); anyone holding a reference can fetch it until the file is retired.

@@ -20,7 +20,7 @@ Provide one global profile avatar per user with authenticated self-service mutat
 
 **Language/Version**: C# / .NET 10
 
-**Primary Dependencies**: ASP.NET Core minimal APIs, EF Core, PostgreSQL 17, ImageSharp (Infrastructure-only image decoding and re-encoding)
+**Primary Dependencies**: ASP.NET Core minimal APIs, EF Core, PostgreSQL 17, SkiaSharp (Infrastructure-only image decoding and re-encoding)
 
 **Storage**: PostgreSQL reference metadata plus configured local filesystem root; generated temporary and final avatar files
 
@@ -83,8 +83,8 @@ tests/GaussAuth.Foundation.Tests/
 └── profileImageTests.test.cs
 ```
 
-**Structure Decision**: Extend the existing global UserProfile with an opaque avatar reference. Keep multipart transport in API, lifecycle orchestration in the Profiles/Avatars application slice, and ImageSharp/local storage in Infrastructure.
+**Structure Decision**: Extend the existing global UserProfile with an opaque avatar reference. Keep multipart transport in API, lifecycle orchestration in the Profiles/Avatars application slice, and SkiaSharp/local storage in Infrastructure.
 
 ## Post-Design Constitution Check
 
-All gates remain PASS. ImageSharp is a focused Infrastructure dependency justified by the explicit metadata stripping and safe decode/re-encode requirement; its license must be verified before implementation. No prohibited infrastructure is introduced.
+All gates remain PASS. SkiaSharp is a focused Infrastructure dependency justified by the explicit metadata stripping and safe decode/re-encode requirement; its license must be verified before implementation. No prohibited infrastructure is introduced.

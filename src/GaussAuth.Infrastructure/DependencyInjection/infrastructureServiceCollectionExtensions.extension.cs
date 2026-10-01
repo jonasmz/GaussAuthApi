@@ -118,7 +118,7 @@ public static class InfrastructureServiceCollectionExtensions
         var profileImages = ProfileImagesOptions.Load(configuration, environment);
         services.AddSingleton(profileImages);
         services.AddSingleton(profileImages.Limits);
-        services.AddSingleton<IProfileImageProcessor>(new ImageSharpProfileImageProcessor(profileImages.Limits));
+        services.AddSingleton<IProfileImageProcessor>(new SkiaProfileImageProcessor(profileImages.Limits));
         services.AddSingleton<IProfileImageStorage>(provider => new LocalProfileImageStorage(
             profileImages, provider.GetRequiredService<ILogger<LocalProfileImageStorage>>()));
 

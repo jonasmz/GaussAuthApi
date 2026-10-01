@@ -15,12 +15,7 @@ using Microsoft.Extensions.Logging;
 using GaussAuth.Domain.Users;
 using GaussAuth.Infrastructure.ProfileImages;
 using Microsoft.Extensions.Logging.Abstractions;
-using SixLabors.ImageSharp;
-using SixLabors.ImageSharp.Formats.Jpeg;
-using SixLabors.ImageSharp.Formats.Png;
-using SixLabors.ImageSharp.Formats.Webp;
-using SixLabors.ImageSharp.Metadata.Profiles.Exif;
-using SixLabors.ImageSharp.PixelFormats;
+using SkiaSharp;
 
 namespace GaussAuth.Foundation.Tests;
 
@@ -66,7 +61,7 @@ public sealed class ProfileImageTests
     [DataRow(ProfileImageFormat.WebP)]
     public async Task Allowed_formats_are_accepted_by_content_and_reencoded_in_same_format(ProfileImageFormat format)
     {
-        var processor = new ImageSharpProfileImageProcessor(SmallLimits);
+        var processor = new SkiaProfileImageProcessor(SmallLimits);
 
         var result = await processor.ProcessAsync(new MemoryStream(Encode(format, 32, 24)), CancellationToken.None);
 
@@ -80,7 +75,7 @@ public sealed class ProfileImageTests
     [TestMethod]
     public async Task Invalid_content_is_rejected_regardless_of_name_or_declared_type()
     {
-        var processor = new ImageSharpProfileImageProcessor(SmallLimits);
+        var processor = new SkiaProfileImageProcessor(SmallLimits);
         var svg = "<svg xmlns=\"http://www.w3.org/2000/svg\"><script>alert(1)</script></svg>"u8.ToArray();
         var truncated = Encode(ProfileImageFormat.Png, 32, 32)[..40];
 
@@ -91,14 +86,17 @@ public sealed class ProfileImageTests
     }
 
     [TestMethod]
-    public async Task Gif_is_rejected_even_though_the_decoder_supports_it()
+    public async Task Gif_is_rejected_even_though_the_decoder_recognizes_it()
     {
-        using var image = new Image<Rgba32>(8, 8);
-        using var buffer = new MemoryStream();
-        await image.SaveAsGifAsync(buffer);
-        var processor = new ImageSharpProfileImageProcessor(SmallLimits);
+        byte[] gif =
+        [
+            0x47, 0x49, 0x46, 0x38, 0x39, 0x61, 0x01, 0x00, 0x01, 0x00, 0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0xFF, 0xFF, 0xFF,
+            0x21, 0xF9, 0x04, 0x01, 0x00, 0x00, 0x00, 0x00, 0x2C, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x01, 0x00, 0x00,
+            0x02, 0x02, 0x44, 0x01, 0x00, 0x3B
+        ];
+        var processor = new SkiaProfileImageProcessor(SmallLimits);
 
-        var result = await processor.ProcessAsync(new MemoryStream(buffer.ToArray()), CancellationToken.None);
+        var result = await processor.ProcessAsync(new MemoryStream(gif), CancellationToken.None);
 
         Assert.AreEqual(ProfileImageRejection.UnsupportedType, result.Rejection);
     }
@@ -106,7 +104,7 @@ public sealed class ProfileImageTests
     [TestMethod]
     public async Task Configured_byte_and_dimension_limits_are_enforced()
     {
-        var processor = new ImageSharpProfileImageProcessor(new ProfileImageLimits(2048, 64));
+        var processor = new SkiaProfileImageProcessor(new ProfileImageLimits(2048, 64));
 
         var tooWide = await processor.ProcessAsync(new MemoryStream(Encode(ProfileImageFormat.Png, 65, 10)), CancellationToken.None);
         var tooTall = await processor.ProcessAsync(new MemoryStream(Encode(ProfileImageFormat.Png, 10, 65)), CancellationToken.None);
@@ -120,14 +118,8 @@ public sealed class ProfileImageTests
     [TestMethod]
     public async Task Metadata_is_stripped_on_reencode()
     {
-        var processor = new ImageSharpProfileImageProcessor(SmallLimits);
-        using var image = new Image<Rgb24>(16, 16);
-        image.Metadata.ExifProfile = new ExifProfile();
-        image.Metadata.ExifProfile.SetValue(ExifTag.Software, "secret-tool-name");
-        image.Metadata.ExifProfile.SetValue(ExifTag.Artist, "private-person");
-        using var buffer = new MemoryStream();
-        await image.SaveAsync(buffer, new JpegEncoder());
-        var original = buffer.ToArray();
+        var processor = new SkiaProfileImageProcessor(SmallLimits);
+        var original = WithExifSegment(Encode(ProfileImageFormat.Jpeg, 16, 16), "secret-tool-name private-person");
         Assert.IsTrue(Contains(original, "private-person"u8), "Fixture must carry metadata.");
 
         var result = await processor.ProcessAsync(new MemoryStream(original), CancellationToken.None);
@@ -135,8 +127,7 @@ public sealed class ProfileImageTests
         Assert.IsTrue(result.IsSuccess);
         Assert.IsFalse(Contains(result.Image!.Content, "private-person"u8));
         Assert.IsFalse(Contains(result.Image.Content, "secret-tool-name"u8));
-        using var reloaded = Image.Load(result.Image.Content);
-        Assert.IsNull(reloaded.Metadata.ExifProfile);
+        Assert.IsFalse(Contains(result.Image.Content, "Exif"u8), "No EXIF segment survives.");
     }
 
     [TestMethod]
@@ -226,7 +217,7 @@ public sealed class ProfileImageTests
     public void Domain_and_application_do_not_depend_on_imaging_filesystem_or_http_types()
     {
         var root = FindRepositoryRoot();
-        var forbidden = new[] { "SixLabors", "System.IO.File", "System.IO.Directory", "FileStream", "Microsoft.AspNetCore", "IFormFile" };
+        var forbidden = new[] { "SkiaSharp", "System.IO.File", "System.IO.Directory", "FileStream", "Microsoft.AspNetCore", "IFormFile" };
         foreach (var tree in new[] { "src/GaussAuth.Domain", "src/GaussAuth.Application" })
         {
             foreach (var file in Directory.EnumerateFiles(Path.Combine(root, tree), "*.cs", SearchOption.AllDirectories)
@@ -402,7 +393,7 @@ public sealed class ProfileImageTests
         Assert.AreEqual("nosniff", response.Headers.GetValues("X-Content-Type-Options").Single());
         StringAssert.Contains(response.Headers.CacheControl!.ToString(), "public");
         StringAssert.Contains(response.Headers.CacheControl.ToString(), "immutable");
-        Assert.AreEqual(Image.Load(await response.Content.ReadAsByteArrayAsync()).Width, 10);
+        Assert.AreEqual(10, SKBitmap.Decode(await response.Content.ReadAsByteArrayAsync()).Width);
 
         var replaced = await UploadAsync(client, user.AccessToken, Encode(ProfileImageFormat.Jpeg, 10, 10));
         using var retired = await anonymous.GetAsync($"/profile-images/{reference}");
@@ -769,25 +760,39 @@ public sealed class ProfileImageTests
 
     private static byte[] Encode(ProfileImageFormat format, int width, int height)
     {
-        using var image = new Image<Rgb24>(width, height, new Rgb24(10, 120, 200));
-        using var buffer = new MemoryStream();
-        switch (format)
+        using var bitmap = new SKBitmap(width, height);
+        bitmap.Erase(new SKColor(10, 120, 200));
+        using var image = SKImage.FromBitmap(bitmap);
+        var skiaFormat = format switch
         {
-            case ProfileImageFormat.Jpeg: image.Save(buffer, new JpegEncoder()); break;
-            case ProfileImageFormat.Png: image.Save(buffer, new PngEncoder()); break;
-            default: image.Save(buffer, new WebpEncoder()); break;
-        }
-
-        return buffer.ToArray();
+            ProfileImageFormat.Jpeg => SKEncodedImageFormat.Jpeg,
+            ProfileImageFormat.Png => SKEncodedImageFormat.Png,
+            _ => SKEncodedImageFormat.Webp
+        };
+        using var data = image.Encode(skiaFormat, 90);
+        return data.ToArray();
     }
 
-    private static ProfileImageFormat? DetectFormat(byte[] bytes) => Image.DetectFormat(bytes).Name switch
+    private static byte[] WithExifSegment(byte[] jpeg, string text)
     {
-        "JPEG" => ProfileImageFormat.Jpeg,
-        "PNG" => ProfileImageFormat.Png,
-        "WEBP" => ProfileImageFormat.WebP,
-        _ => null
-    };
+        var payload = System.Text.Encoding.ASCII.GetBytes("Exif\0\0" + text);
+        var length = payload.Length + 2;
+        var segment = new byte[] { 0xFF, 0xE1, (byte)(length >> 8), (byte)(length & 0xFF) }.Concat(payload);
+        return jpeg[..2].Concat(segment).Concat(jpeg[2..]).ToArray();
+    }
+
+    private static ProfileImageFormat? DetectFormat(byte[] bytes)
+    {
+        using var data = SKData.CreateCopy(bytes);
+        using var codec = SKCodec.Create(data);
+        return codec?.EncodedFormat switch
+        {
+            SKEncodedImageFormat.Jpeg => ProfileImageFormat.Jpeg,
+            SKEncodedImageFormat.Png => ProfileImageFormat.Png,
+            SKEncodedImageFormat.Webp => ProfileImageFormat.WebP,
+            _ => null
+        };
+    }
 
     private static bool Contains(byte[] haystack, ReadOnlySpan<byte> needle) => haystack.AsSpan().IndexOf(needle) >= 0;
 }

@@ -173,7 +173,7 @@ public sealed class ArchitectureTests
         foreach (var project in new[] { "Domain", "Application", "Api" })
         {
             var csproj = File.ReadAllText(Path.Combine(root, $"src/GaussAuth.{project}/GaussAuth.{project}.csproj"));
-            Assert.IsFalse(csproj.Contains("SixLabors", StringComparison.Ordinal), $"{project} must not reference an imaging package.");
+            Assert.IsFalse(csproj.Contains("SkiaSharp", StringComparison.Ordinal), $"{project} must not reference an imaging package.");
         }
 
         foreach (var tree in new[] { "src/GaussAuth.Domain", "src/GaussAuth.Application", "src/GaussAuth.Api" })
@@ -183,7 +183,7 @@ public sealed class ArchitectureTests
                                         !path.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}")))
             {
                 var source = File.ReadAllText(path);
-                Assert.IsFalse(source.Contains("SixLabors", StringComparison.Ordinal), $"{Path.GetRelativePath(root, path)} must not use ImageSharp.");
+                Assert.IsFalse(source.Contains("SkiaSharp", StringComparison.Ordinal), $"{Path.GetRelativePath(root, path)} must not use SkiaSharp.");
                 if (!tree.EndsWith("Api", StringComparison.Ordinal))
                 {
                     Assert.IsFalse(source.Contains("System.IO.File", StringComparison.Ordinal) || source.Contains("FileStream", StringComparison.Ordinal),
