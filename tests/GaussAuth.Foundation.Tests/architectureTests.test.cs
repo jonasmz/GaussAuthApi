@@ -100,6 +100,72 @@ public sealed class ArchitectureTests
         }
     }
 
+    [TestMethod]
+    public void Authorization_context_contracts_expose_only_safe_public_data_and_inner_layers_do_not_depend_on_infrastructure()
+    {
+        var root = FindRepositoryRoot();
+        var contractFiles = new[]
+        {
+            "src/GaussAuth.Api/AuthorizationContext/authorizationContextResponse.dto.cs",
+            "src/GaussAuth.Api/AuthorizationContext/authorizationContextRoleResponse.dto.cs",
+            "src/GaussAuth.Application/AuthorizationContext/authorizationContext.result.cs",
+            "src/GaussAuth.Application/AuthorizationContext/authorizationContextRole.result.cs",
+            "src/GaussAuth.Application/AuthorizationContext/authorizationContextResolutionResult.result.cs"
+        };
+        var forbiddenContractTerms = new[]
+        {
+            "EntityFramework", "DbContext", "Identity", "SessionEntity", "SecurityStamp", "Password", "Profile", "Secret", "AccessToken", "Hash", "SigningKey"
+        };
+
+        foreach (var relativePath in contractFiles)
+        {
+            var source = File.ReadAllText(Path.Combine(root, relativePath));
+            foreach (var term in forbiddenContractTerms)
+            {
+                Assert.IsFalse(source.Contains(term, StringComparison.Ordinal), $"{relativePath} exposes forbidden contract term {term}.");
+            }
+        }
+
+        foreach (var tree in new[] { "src/GaussAuth.Domain", "src/GaussAuth.Application" })
+        {
+            foreach (var path in Directory.EnumerateFiles(Path.Combine(root, tree), "*.cs", SearchOption.AllDirectories))
+            {
+                Assert.IsFalse(File.ReadAllText(path).Contains("GaussAuth.Infrastructure", StringComparison.Ordinal),
+                    $"{Path.GetRelativePath(root, path)} must not depend on Infrastructure.");
+            }
+        }
+    }
+
+    [TestMethod]
+    public void Authorization_context_sources_do_not_log_or_version_consumer_credentials()
+    {
+        var root = FindRepositoryRoot();
+        var noLoggingFiles = new[]
+        {
+            "src/GaussAuth.Api/AuthorizationContext/authorizationContextEndpoints.extension.cs",
+            "src/GaussAuth.Application/AuthorizationContext/authorizationContextService.service.cs",
+            "src/GaussAuth.Infrastructure/AuthorizationContext/configuredConsumerCredentialValidator.service.cs"
+        };
+
+        foreach (var relativePath in noLoggingFiles)
+        {
+            var source = File.ReadAllText(Path.Combine(root, relativePath));
+            Assert.IsFalse(source.Contains(".Log", StringComparison.Ordinal), $"{relativePath} must not log credentials or bearer values.");
+            Assert.IsFalse(source.Contains("ILogger", StringComparison.Ordinal), $"{relativePath} must not receive a credential logger.");
+        }
+
+        var eventRecorder = File.ReadAllText(Path.Combine(root, "src/GaussAuth.Infrastructure/Security/loggingSecurityEventRecorder.service.cs"));
+        foreach (var forbidden in new[] { "Secret", "Credential", "Password", "Hash", "SecurityStamp", "SigningKey" })
+        {
+            Assert.IsFalse(eventRecorder.Contains(forbidden, StringComparison.Ordinal),
+                $"Security event logging must not include {forbidden}.");
+        }
+
+        var exampleEnvironment = File.ReadAllLines(Path.Combine(root, ".env.example"));
+        Assert.IsFalse(exampleEnvironment.Any(line => line.StartsWith("AuthorizationConsumers__", StringComparison.Ordinal) && line.Contains('=')),
+            ".env.example must not version a consumer service credential.");
+    }
+
     private static string FindRepositoryRoot()
     {
         for (var directory = new DirectoryInfo(AppContext.BaseDirectory);

@@ -17,6 +17,8 @@ services:
 
   sdk:
     image: mcr.microsoft.com/dotnet/sdk:10.0
+    env_file:
+      - .env
     user: ${LOCAL_UID:?Set LOCAL_UID in the private .env file}:${LOCAL_GID:?Set LOCAL_GID in the private .env file}
     working_dir: ${PROJECT_DIR:?Set PROJECT_DIR in the private .env file}
     volumes:

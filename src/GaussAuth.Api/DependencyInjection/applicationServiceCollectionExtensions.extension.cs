@@ -8,6 +8,7 @@ using GaussAuth.Application.Memberships;
 using GaussAuth.Application.Roles;
 using GaussAuth.Application.Permissions;
 using GaussAuth.Application.Authorization;
+using GaussAuth.Application.AuthorizationContext;
 using GaussAuth.Application.Login;
 using GaussAuth.Application.Sessions;
 using GaussAuth.Application.Sessions.Ports;
@@ -32,6 +33,7 @@ public static class ApplicationServiceCollectionExtensions
         services.AddScoped<RolePermissionService>();
         services.AddScoped<UserRoleService>();
         services.AddScoped<EffectivePermissionService>();
+        services.AddScoped<AuthorizationContextService>();
         services.AddScoped<LoginService>();
         services.TryAddSingleton(TimeProvider.System);
         services.AddScoped<SessionService>();
