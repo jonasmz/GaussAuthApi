@@ -8,6 +8,14 @@
 
 **Input**: Secure self-service password change, password recovery, and password reset for the reusable authentication API.
 
+## Clarifications
+
+### Session 2026-10-01
+
+- Q: ¿Qué política debe aplicarse a las sesiones después de un cambio de contraseña o un reset olvidado? → A: Revocar todas las sesiones después de ambos flujos.
+- Q: ¿Un reset exitoso de contraseña debe limpiar un bloqueo temporal de inicio de sesión? → A: Limpiar el bloqueo tras un reset exitoso.
+- Q: ¿Qué mecanismo autorizado debe entregar instrucciones de recuperación durante desarrollo y pruebas? → A: Archivo local protegido y excluido del repositorio.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Change My Password (Priority: P1)
@@ -20,7 +28,7 @@ An authenticated user changes their own password after proving knowledge of thei
 
 **Acceptance Scenarios**:
 
-1. **Given** an active user with a valid session and current password, **When** they submit the correct current password and an acceptable new password, **Then** their password changes and the configured session policy is applied.
+1. **Given** an active user with a valid session and current password, **When** they submit the correct current password and an acceptable new password, **Then** their password changes and all of their active sessions are revoked.
 2. **Given** a valid session, **When** the submitted current password is incorrect, **Then** no password or session state is changed and the response does not reveal sensitive credential detail.
 3. **Given** a valid session, **When** the proposed password violates configured requirements, **Then** the password remains unchanged and the user receives useful validation feedback without exposing security internals.
 4. **Given** an inactive user, **When** they attempt to change their password, **Then** they do not obtain active access and their account remains inactive.
@@ -53,7 +61,7 @@ A person who possesses valid recovery instructions establishes a new password. I
 
 **Acceptance Scenarios**:
 
-1. **Given** a valid recovery credential for an eligible account, **When** a compliant new password is submitted, **Then** the password changes, the configured session policy is applied, and a password-reset security event is recorded without secrets.
+1. **Given** a valid recovery credential for an eligible account, **When** a compliant new password is submitted, **Then** the password changes, any temporary login lockout is cleared, all of the user's active sessions are revoked, and a password-reset security event is recorded without secrets.
 2. **Given** an invalid, expired, malformed, or already-used recovery credential, **When** reset is attempted, **Then** the password and account state remain unchanged and the public failure is safe and non-revealing.
 3. **Given** an inactive account, **When** it presents a recovery credential, **Then** password reset does not activate the account or grant active access.
 
@@ -77,7 +85,7 @@ Security operations can observe password-management outcomes through safe events
 - A missing, oversized, malformed, or non-email recovery request must fail validation without echoing submitted sensitive data.
 - A missing, oversized, malformed, or reused reset credential must not alter account or session state.
 - Concurrent password changes or resets must leave one consistent credential state and must not restore revoked sessions.
-- A delivery failure after creating recovery instructions must not reveal account existence or expose the recovery credential.
+- A delivery failure after creating recovery instructions must not reveal account existence or expose the recovery credential; the protected local delivery file must be unavailable to public clients and excluded from source control.
 - Password changes and resets affect the user globally; they must not alter memberships, roles, permissions, or application-specific data.
 
 ## Requirements *(mandatory)*
@@ -91,12 +99,12 @@ Security operations can observe password-management outcomes through safe events
 - **FR-005**: The system MUST issue usable recovery instructions only for an eligible, active account and MUST send those instructions through a focused recovery-delivery boundary separate from credential generation.
 - **FR-006**: The system MUST let a holder of a valid, temporary recovery credential establish a new password; invalid, expired, malformed, and reused credentials MUST fail without changing credential, user-activation, membership, role, permission, or session state.
 - **FR-007**: The system MUST apply configurable abuse protection to the public recovery-request and reset capabilities.
-- **FR-008**: The system MUST define and apply a session-invalidation policy after both password change and password reset, using the established session-revocation capability and no separate revocation mechanism. [NEEDS CLARIFICATION: Should a normal password change revoke all sessions or preserve the current session, and should a forgotten-password reset revoke all sessions?]
+- **FR-008**: The system MUST revoke all active sessions for the affected user after both password change and password reset, using the established session-revocation capability and no separate revocation mechanism.
 - **FR-009**: The system MUST keep passwords, reset credentials, password hashes, security stamps, and complete sensitive request bodies out of logs, events, responses, and application-controlled persistence.
 - **FR-010**: The system MUST record safe security events for successful password changes, recovery requests where appropriate, successful resets, useful safe reset failures, and session revocations caused by credential changes.
 - **FR-011**: The system MUST not automatically activate an inactive user after recovery or reset, and MUST keep password credentials global to the user across all applications.
-- **FR-012**: The system MUST preserve configured login-lockout protections and apply the following post-reset lockout policy: [NEEDS CLARIFICATION: Should successful password reset clear an existing login lockout, or leave it unchanged?]
-- **FR-013**: Recovery delivery MUST be testable without selecting a production provider; delivery failure behavior must be safe and non-enumerating. [NEEDS CLARIFICATION: What development/test recovery-delivery mechanism should expose a usable credential to an authorized test recipient?]
+- **FR-012**: The system MUST preserve configured login-lockout protections and clear a temporary login lockout only after a successful password reset; password reset MUST NOT activate an inactive user.
+- **FR-013**: Recovery delivery MUST be testable without selecting a production provider; in development and tests, instructions MUST be written only to a protected local file excluded from source control and public responses. Delivery failure behavior MUST be safe and non-enumerating.
 - **FR-014**: The feature MUST NOT add MFA, passkeys, social login, OAuth, OpenID Connect, SSO, administrative password override, password history, account activation through reset, a complete audit subsystem, or business-domain behavior.
 
 ### Key Entities
@@ -123,6 +131,6 @@ Security operations can observe password-management outcomes through safe events
 - Existing users are already provisioned with global credentials through the established user-creation flow.
 - Password rules remain externally configurable; this feature introduces no password-history or reuse policy.
 - Recovery applies to the global user identity and does not require application membership or application selection.
-- Existing session validation and revocation are the sole mechanism for applying the final approved password-related session policy.
-- Production delivery provider selection is deferred; the plan will specify only a focused delivery adapter consistent with the approved development/test mechanism.
+- Existing session validation and revocation are the sole mechanism for revoking all active sessions after a password change or reset.
+- Production delivery provider selection is deferred; development and tests use a protected local file excluded from source control, while the plan specifies a focused delivery adapter without selecting a production provider.
 - Public responses use safe, generic wording and do not distinguish account existence, activity, credential validity, delivery outcome, or identity-service internals.

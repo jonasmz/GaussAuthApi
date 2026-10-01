@@ -15,7 +15,7 @@
 
 ## Requirement Completeness
 
-- [ ] No [NEEDS CLARIFICATION] markers remain
+- [x] No [NEEDS CLARIFICATION] markers remain
 - [x] Requirements are testable and unambiguous except explicit clarification items
 - [x] Success criteria are measurable
 - [x] Success criteria are technology-agnostic
@@ -26,7 +26,7 @@
 
 ## Feature Readiness
 
-- [ ] All functional requirements have clear acceptance criteria pending three security-policy decisions
+- [x] All functional requirements have clear acceptance criteria pending three security-policy decisions
 - [x] User scenarios cover primary flows
 - [x] Feature meets measurable outcomes defined in Success Criteria
 - [x] No implementation details leak into specification
