@@ -88,9 +88,9 @@
 
 ## Phase 7: Polish and Validation
 
-- [ ] T019 Verify external-configuration startup validation, secret rotation (current plus retiring credential for the same application), rejection after retiring credential removal, and log hygiene in `tests/GaussAuth.Foundation.Tests/authorizationContractTests.test.cs`.
-- [ ] T020 Verify no consumer service credential, bearer credential, password, hash, security stamp, or key material is committed or logged; update `tests/GaussAuth.Foundation.Tests/architectureTests.test.cs` only for feature-008 rules.
-- [ ] T021 Run `dotnet test GaussAuth.slnx` inside the SDK Docker container and execute all scenarios in `specs/008-authorization-contract/quickstart.md`; correct only feature-008 artifacts.
+- [X] T019 Verify external-configuration startup validation, secret rotation (current plus retiring credential for the same application), rejection after retiring credential removal, and log hygiene in `tests/GaussAuth.Foundation.Tests/authorizationContractTests.test.cs`.
+- [X] T020 Verify no consumer service credential, bearer credential, password, hash, security stamp, or key material is committed or logged; update `tests/GaussAuth.Foundation.Tests/architectureTests.test.cs` only for feature-008 rules.
+- [X] T021 Run `dotnet test GaussAuth.slnx` inside the SDK Docker container and execute all scenarios in `specs/008-authorization-contract/quickstart.md`; correct only feature-008 artifacts.
 
 ## Dependencies & Execution Order
 

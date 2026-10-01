@@ -33,6 +33,13 @@ public sealed class AuthorizationContractTests
         Assert.IsTrue((await validator.ValidateAsync("orders", "orders-retiring-secret", CancellationToken.None)).IsValid);
         Assert.IsFalse((await validator.ValidateAsync("billing", "orders-current-secret", CancellationToken.None)).IsValid);
         Assert.IsFalse((await validator.ValidateAsync("orders", "billing-current-secret", CancellationToken.None)).IsValid);
+
+        var afterRetiringCredentialRemoval = CreateValidator(new Dictionary<string, string?>
+        {
+            ["AuthorizationConsumers:orders:CurrentSecret"] = "orders-current-secret"
+        });
+        Assert.IsTrue((await afterRetiringCredentialRemoval.ValidateAsync("orders", "orders-current-secret", CancellationToken.None)).IsValid);
+        Assert.IsFalse((await afterRetiringCredentialRemoval.ValidateAsync("orders", "orders-retiring-secret", CancellationToken.None)).IsValid);
     }
 
     [TestMethod]
@@ -45,6 +52,17 @@ public sealed class AuthorizationContractTests
         }));
 
         Assert.IsFalse(exception.Message.Contains("shared-secret", StringComparison.Ordinal));
+    }
+
+    [TestMethod]
+    public void Consumer_configuration_fails_during_startup_validation_when_a_current_secret_is_invalid()
+    {
+        var exception = Assert.ThrowsExactly<InvalidOperationException>(() => CreateValidator(new Dictionary<string, string?>
+        {
+            ["AuthorizationConsumers:orders:CurrentSecret"] = " "
+        }));
+
+        Assert.AreEqual("Authorization consumer configuration is invalid.", exception.Message);
     }
 
     [TestMethod]

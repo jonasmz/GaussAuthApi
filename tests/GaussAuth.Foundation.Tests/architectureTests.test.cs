@@ -136,6 +136,36 @@ public sealed class ArchitectureTests
         }
     }
 
+    [TestMethod]
+    public void Authorization_context_sources_do_not_log_or_version_consumer_credentials()
+    {
+        var root = FindRepositoryRoot();
+        var noLoggingFiles = new[]
+        {
+            "src/GaussAuth.Api/AuthorizationContext/authorizationContextEndpoints.extension.cs",
+            "src/GaussAuth.Application/AuthorizationContext/authorizationContextService.service.cs",
+            "src/GaussAuth.Infrastructure/AuthorizationContext/configuredConsumerCredentialValidator.service.cs"
+        };
+
+        foreach (var relativePath in noLoggingFiles)
+        {
+            var source = File.ReadAllText(Path.Combine(root, relativePath));
+            Assert.IsFalse(source.Contains(".Log", StringComparison.Ordinal), $"{relativePath} must not log credentials or bearer values.");
+            Assert.IsFalse(source.Contains("ILogger", StringComparison.Ordinal), $"{relativePath} must not receive a credential logger.");
+        }
+
+        var eventRecorder = File.ReadAllText(Path.Combine(root, "src/GaussAuth.Infrastructure/Security/loggingSecurityEventRecorder.service.cs"));
+        foreach (var forbidden in new[] { "Secret", "Credential", "Password", "Hash", "SecurityStamp", "SigningKey" })
+        {
+            Assert.IsFalse(eventRecorder.Contains(forbidden, StringComparison.Ordinal),
+                $"Security event logging must not include {forbidden}.");
+        }
+
+        var exampleEnvironment = File.ReadAllLines(Path.Combine(root, ".env.example"));
+        Assert.IsFalse(exampleEnvironment.Any(line => line.StartsWith("AuthorizationConsumers__", StringComparison.Ordinal) && line.Contains('=')),
+            ".env.example must not version a consumer service credential.");
+    }
+
     private static string FindRepositoryRoot()
     {
         for (var directory = new DirectoryInfo(AppContext.BaseDirectory);
