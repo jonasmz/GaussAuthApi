@@ -1,4 +1,12 @@
+using System.Net;
+using System.Net.Http.Headers;
+using System.Net.Http.Json;
+using System.Text.Json;
+using GaussAuth.Infrastructure.Persistence;
+using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using GaussAuth.Application.Profiles.Avatars;
 using GaussAuth.Domain.Users;
 using GaussAuth.Infrastructure.ProfileImages;
@@ -238,6 +246,284 @@ public sealed class ProfileImageTests
         }
 
         return directory?.FullName ?? throw new InvalidOperationException("Repository root not found.");
+    }
+
+
+    // ---- HTTP lifecycle (US1) and retrieval (US2) ----
+
+    [TestMethod]
+    public async Task Owner_can_upload_replace_and_idempotently_remove_their_own_avatar()
+    {
+        using var env = new ImageEnvironment();
+        using var factory = await env.CreateFactoryAsync();
+        using var client = factory.CreateClient();
+        var user = await CreateLoginAsync(client);
+        var other = await CreateLoginAsync(client);
+
+        var first = await UploadAsync(client, user.AccessToken, Encode(ProfileImageFormat.Png, 20, 20));
+        Assert.AreEqual(HttpStatusCode.OK, first.Status);
+        var firstReference = first.Body.GetProperty("avatarReference").GetString()!;
+        Assert.AreEqual($"/profile-images/{firstReference}", first.Body.GetProperty("avatarUrl").GetString());
+        Assert.IsTrue(ProfileImageReference.TryParse(firstReference, out _));
+        CollectionAssert.AreEqual(new[] { firstReference }, env.StoredFiles());
+
+        var otherUpload = await UploadAsync(client, other.AccessToken, Encode(ProfileImageFormat.Jpeg, 20, 20));
+        var otherReference = otherUpload.Body.GetProperty("avatarReference").GetString()!;
+
+        var unrelated = Path.Combine(env.Root, "avatars", "notes-not-an-avatar.txt");
+        await File.WriteAllTextAsync(unrelated, "keep me");
+
+        var second = await UploadAsync(client, user.AccessToken, Encode(ProfileImageFormat.WebP, 20, 20));
+        Assert.AreEqual(HttpStatusCode.OK, second.Status);
+        var secondReference = second.Body.GetProperty("avatarReference").GetString()!;
+        Assert.AreNotEqual(firstReference, secondReference);
+        Assert.IsFalse(env.StoredFiles().Contains(firstReference), "Old file is retired after the reference commits.");
+        Assert.IsTrue(env.StoredFiles().Contains(secondReference));
+        Assert.IsTrue(env.StoredFiles().Contains(otherReference), "Another user's avatar is untouched.");
+        Assert.IsTrue(File.Exists(unrelated), "Unrelated files are never deleted.");
+        Assert.AreEqual(secondReference, await ReadReferenceAsync(client, user.UserId));
+        Assert.AreEqual(otherReference, await ReadReferenceAsync(client, other.UserId));
+
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", user.AccessToken);
+        using var removed = await client.DeleteAsync("/me/profile/avatar");
+        using var removedAgain = await client.DeleteAsync("/me/profile/avatar");
+        Assert.AreEqual(HttpStatusCode.NoContent, removed.StatusCode);
+        Assert.AreEqual(HttpStatusCode.NoContent, removedAgain.StatusCode);
+        Assert.IsNull(await ReadReferenceAsync(client, user.UserId));
+        Assert.IsFalse(env.StoredFiles().Contains(secondReference));
+        Assert.IsTrue(env.StoredFiles().Contains(otherReference));
+    }
+
+    [TestMethod]
+    public async Task Avatar_endpoints_require_a_valid_session_and_ignore_request_user_ids()
+    {
+        using var env = new ImageEnvironment();
+        using var factory = await env.CreateFactoryAsync();
+        using var client = factory.CreateClient();
+        var user = await CreateLoginAsync(client);
+        var victim = await CreateLoginAsync(client);
+
+        var anonymous = await UploadAsync(client, null, Encode(ProfileImageFormat.Png, 8, 8));
+        var invalid = await UploadAsync(client, "not-a-credential", Encode(ProfileImageFormat.Png, 8, 8));
+        Assert.AreEqual(HttpStatusCode.Unauthorized, anonymous.Status);
+        Assert.AreEqual(HttpStatusCode.Unauthorized, invalid.Status);
+        using var anonymousDelete = await client.DeleteAsync("/me/profile/avatar");
+        Assert.AreEqual(HttpStatusCode.Unauthorized, anonymousDelete.StatusCode);
+
+        using var content = new MultipartFormDataContent
+        {
+            { new ByteArrayContent(Encode(ProfileImageFormat.Png, 8, 8)), "file", "a.png" },
+            { new StringContent(victim.UserId.ToString()), "userId" }
+        };
+        using var request = new HttpRequestMessage(HttpMethod.Put, "/me/profile/avatar") { Content = content };
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", user.AccessToken);
+        using var rejected = await client.SendAsync(request);
+        Assert.AreEqual(HttpStatusCode.BadRequest, rejected.StatusCode);
+        Assert.IsNull(await ReadReferenceAsync(client, victim.UserId));
+        Assert.AreEqual(0, env.StoredFiles().Length);
+    }
+
+    [TestMethod]
+    public async Task Upload_requires_exactly_one_file_part()
+    {
+        using var env = new ImageEnvironment();
+        using var factory = await env.CreateFactoryAsync();
+        using var client = factory.CreateClient();
+        var user = await CreateLoginAsync(client);
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", user.AccessToken);
+
+        using var json = await client.PutAsJsonAsync("/me/profile/avatar", new { file = "x" });
+        using var none = await client.PutAsync("/me/profile/avatar", new MultipartFormDataContent());
+        using var two = new MultipartFormDataContent
+        {
+            { new ByteArrayContent(Encode(ProfileImageFormat.Png, 8, 8)), "file", "a.png" },
+            { new ByteArrayContent(Encode(ProfileImageFormat.Png, 8, 8)), "file", "b.png" }
+        };
+        using var twoResponse = await client.PutAsync("/me/profile/avatar", two);
+        using var wrongName = new MultipartFormDataContent { { new ByteArrayContent(Encode(ProfileImageFormat.Png, 8, 8)), "image", "a.png" } };
+        using var wrongNameResponse = await client.PutAsync("/me/profile/avatar", wrongName);
+
+        Assert.AreEqual(HttpStatusCode.BadRequest, json.StatusCode);
+        Assert.AreEqual(HttpStatusCode.BadRequest, none.StatusCode);
+        Assert.AreEqual(HttpStatusCode.BadRequest, twoResponse.StatusCode);
+        Assert.AreEqual(HttpStatusCode.BadRequest, wrongNameResponse.StatusCode);
+        Assert.AreEqual(0, env.StoredFiles().Length);
+    }
+
+    [TestMethod]
+    public async Task Unsafe_uploads_are_rejected_without_changing_the_profile_or_echoing_input()
+    {
+        using var env = new ImageEnvironment();
+        using var factory = await env.CreateFactoryAsync();
+        using var client = factory.CreateClient();
+        var user = await CreateLoginAsync(client);
+        var good = await UploadAsync(client, user.AccessToken, Encode(ProfileImageFormat.Png, 8, 8));
+        var goodReference = good.Body.GetProperty("avatarReference").GetString();
+
+        var svg = "<svg xmlns=\"http://www.w3.org/2000/svg\"><script>alert(1)</script></svg>"u8.ToArray();
+        var spoofed = await UploadAsync(client, user.AccessToken, svg, "secret-name.png", "image/png");
+        var oversized = await UploadAsync(client, user.AccessToken, new byte[(5 * 1024 * 1024) + 1], "big.png", "image/png");
+        var corrupt = await UploadAsync(client, user.AccessToken, Encode(ProfileImageFormat.Png, 32, 32)[..50], "corrupt.png", "image/png");
+
+        Assert.AreEqual(HttpStatusCode.UnsupportedMediaType, spoofed.Status);
+        Assert.AreEqual(HttpStatusCode.RequestEntityTooLarge, oversized.Status);
+        Assert.AreEqual(HttpStatusCode.UnprocessableEntity, corrupt.Status);
+        foreach (var rejected in new[] { spoofed, oversized, corrupt })
+        {
+            Assert.IsFalse(rejected.Raw.Contains("secret-name", StringComparison.Ordinal));
+            Assert.IsFalse(rejected.Raw.Contains(env.Root, StringComparison.Ordinal));
+        }
+
+        Assert.AreEqual(goodReference, await ReadReferenceAsync(client, user.UserId));
+        CollectionAssert.AreEqual(new[] { goodReference }, env.StoredFiles());
+        Assert.AreEqual(0, Directory.GetFiles(Path.Combine(env.Root, ".staging")).Length);
+    }
+
+    [TestMethod]
+    public async Task Public_retrieval_serves_only_current_known_references_with_trusted_headers()
+    {
+        using var env = new ImageEnvironment();
+        using var factory = await env.CreateFactoryAsync();
+        using var client = factory.CreateClient();
+        var user = await CreateLoginAsync(client);
+
+        var upload = await UploadAsync(client, user.AccessToken, Encode(ProfileImageFormat.Png, 10, 10), "x.html", "text/html");
+        var reference = upload.Body.GetProperty("avatarReference").GetString()!;
+
+        using var anonymous = factory.CreateClient();
+        using var response = await anonymous.GetAsync($"/profile-images/{reference}");
+        Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
+        Assert.AreEqual("image/png", response.Content.Headers.ContentType!.MediaType);
+        Assert.AreEqual("inline", response.Content.Headers.ContentDisposition?.DispositionType ?? string.Join(',', response.Headers.GetValues("Content-Disposition")));
+        Assert.AreEqual("nosniff", response.Headers.GetValues("X-Content-Type-Options").Single());
+        StringAssert.Contains(response.Headers.CacheControl!.ToString(), "public");
+        StringAssert.Contains(response.Headers.CacheControl.ToString(), "immutable");
+        Assert.AreEqual(Image.Load(await response.Content.ReadAsByteArrayAsync()).Width, 10);
+
+        var replaced = await UploadAsync(client, user.AccessToken, Encode(ProfileImageFormat.Jpeg, 10, 10));
+        using var retired = await anonymous.GetAsync($"/profile-images/{reference}");
+        using var current = await anonymous.GetAsync($"/profile-images/{replaced.Body.GetProperty("avatarReference").GetString()}");
+        Assert.AreEqual(HttpStatusCode.NotFound, retired.StatusCode);
+        Assert.AreEqual("image/jpeg", current.Content.Headers.ContentType!.MediaType);
+
+        foreach (var bad in new[] { "0123456789abcdef0123456789abcdef.png", "..", "%2e%2e%2fappsettings.json", "photo.png", "0123456789abcdef0123456789abcdef.svg", "..%5C..%5Cx.png" })
+        {
+            using var notFound = await anonymous.GetAsync($"/profile-images/{bad}");
+            Assert.AreEqual(HttpStatusCode.NotFound, notFound.StatusCode, bad);
+            var body = await notFound.Content.ReadAsStringAsync();
+            Assert.IsFalse(body.Contains(env.Root, StringComparison.Ordinal));
+        }
+
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", user.AccessToken);
+        using var removed = await client.DeleteAsync("/me/profile/avatar");
+        using var afterRemoval = await anonymous.GetAsync($"/profile-images/{replaced.Body.GetProperty("avatarReference").GetString()}");
+        Assert.AreEqual(HttpStatusCode.NotFound, afterRemoval.StatusCode);
+    }
+
+    [TestMethod]
+    public async Task Avatar_changes_and_rejections_record_allow_listed_security_events()
+    {
+        using var env = new ImageEnvironment();
+        using var factory = await env.CreateFactoryAsync();
+        using var client = factory.CreateClient();
+        var user = await CreateLoginAsync(client);
+
+        await UploadAsync(client, user.AccessToken, Encode(ProfileImageFormat.Png, 8, 8));
+        await UploadAsync(client, user.AccessToken, "<svg/>"u8.ToArray(), "secret-name.svg");
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", user.AccessToken);
+        using var removed = await client.DeleteAsync("/me/profile/avatar");
+        using var removedAgain = await client.DeleteAsync("/me/profile/avatar");
+
+        using var scope = factory.Services.CreateScope();
+        var events = await scope.ServiceProvider.GetRequiredService<AuthenticationDbContext>().SecurityEvents
+            .Where(item => item.UserId == user.UserId && item.EventType.StartsWith("profile.avatar"))
+            .ToListAsync();
+        CollectionAssert.AreEquivalent(
+            new[] { "profile.avatar.updated", "profile.avatar.upload.rejected", "profile.avatar.removed" },
+            events.Select(item => item.EventType).ToArray());
+        var rejected = events.Single(item => item.EventType == "profile.avatar.upload.rejected");
+        Assert.AreEqual("unsupported-type", rejected.Reason);
+        Assert.IsTrue(events.All(item => item.Metadata is null && item.SubjectId is null));
+    }
+
+    private sealed record UploadOutcome(HttpStatusCode Status, JsonElement Body, string Raw);
+
+    private sealed record LoginResult(Guid UserId, string AccessToken);
+
+    private static async Task<UploadOutcome> UploadAsync(HttpClient client, string? token, byte[] bytes, string fileName = "photo.png", string contentType = "application/octet-stream")
+    {
+        using var content = new MultipartFormDataContent();
+        var file = new ByteArrayContent(bytes);
+        file.Headers.ContentType = MediaTypeHeaderValue.Parse(contentType);
+        content.Add(file, "file", fileName);
+        using var request = new HttpRequestMessage(HttpMethod.Put, "/me/profile/avatar") { Content = content };
+        if (token is not null) request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        using var response = await client.SendAsync(request);
+        var raw = await response.Content.ReadAsStringAsync();
+        JsonElement body = default;
+        if (raw.StartsWith('{'))
+        {
+            var document = JsonDocument.Parse(raw);
+            if (response.StatusCode == HttpStatusCode.OK) body = document.RootElement.Clone();
+        }
+
+        return new UploadOutcome(response.StatusCode, body, raw);
+    }
+
+    private static async Task<string?> ReadReferenceAsync(HttpClient client, Guid userId)
+    {
+        using var response = await client.GetAsync($"/users/{userId}");
+        using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        return document.RootElement.GetProperty("profile").GetProperty("avatarReference").GetString();
+    }
+
+    private static async Task<LoginResult> CreateLoginAsync(HttpClient client)
+    {
+        const string password = "Quickstart!2026";
+        var email = $"avatar-{Guid.NewGuid():N}@example.test";
+        using var created = await client.PostAsJsonAsync("/users", new { email, password, firstName = "A", lastName = "B", displayName = "AB" });
+        Assert.AreEqual(HttpStatusCode.Created, created.StatusCode);
+        var userId = JsonDocument.Parse(await created.Content.ReadAsStringAsync()).RootElement.GetProperty("id").GetGuid();
+        var applicationCode = $"app-{Guid.NewGuid():N}";
+        using var application = await client.PostAsJsonAsync("/applications", new { code = applicationCode, name = "Application" });
+        var applicationId = JsonDocument.Parse(await application.Content.ReadAsStringAsync()).RootElement.GetProperty("id").GetGuid();
+        using var membership = await client.PostAsJsonAsync($"/applications/{applicationId}/memberships", new { userId });
+        using var login = await client.PostAsJsonAsync("/auth/login", new { applicationCode, email, password });
+        Assert.AreEqual(HttpStatusCode.OK, login.StatusCode);
+        var token = JsonDocument.Parse(await login.Content.ReadAsStringAsync()).RootElement.GetProperty("accessToken").GetString()!;
+        return new LoginResult(userId, token);
+    }
+
+    private sealed class ImageEnvironment : IDisposable
+    {
+        private readonly string? previous = Environment.GetEnvironmentVariable("ProfileImages__RootPath");
+
+        public ImageEnvironment()
+        {
+            Root = Path.Combine(Path.GetTempPath(), "gaussauth-avatar-tests-" + Guid.NewGuid().ToString("N"));
+            Environment.SetEnvironmentVariable("ProfileImages__RootPath", Root);
+        }
+
+        public string Root { get; }
+
+        public async Task<WebApplicationFactory<Program>> CreateFactoryAsync(Action<IServiceCollection>? configure = null)
+        {
+            var factory = new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
+                builder.ConfigureServices(services => configure?.Invoke(services)));
+            using var scope = factory.Services.CreateScope();
+            await scope.ServiceProvider.GetRequiredService<AuthenticationDbContext>().Database.MigrateAsync();
+            return factory;
+        }
+
+        public string[] StoredFiles() => Directory.Exists(Path.Combine(Root, "avatars"))
+            ? Directory.GetFiles(Path.Combine(Root, "avatars")).Select(Path.GetFileName).Where(name => ProfileImageReference.TryParse(name, out _)).OrderBy(name => name).ToArray()!
+            : [];
+
+        public void Dispose()
+        {
+            Environment.SetEnvironmentVariable("ProfileImages__RootPath", previous);
+            if (Directory.Exists(Root)) Directory.Delete(Root, recursive: true);
+        }
     }
 
     private static ProfileImagesOptions Load(Dictionary<string, string?> values, bool production)

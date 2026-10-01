@@ -40,11 +40,11 @@
 
 **Independent Test**: Authenticate a user, upload a valid image, replace it, remove it twice, and verify the profile reference and local files transition correctly without accepting another user ID.
 
-- [ ] T011 [US1] Add failing self-service upload/replacement/removal integration scenarios in `tests/GaussAuth.Foundation.Tests/profileImageTests.test.cs` for authenticated ownership, profile response/avatar URL, idempotent delete, old-file cleanup, and unrelated-file protection.
-- [ ] T012 [US1] Implement `ProfileAvatarService` in `src/GaussAuth.Application/Profiles/Avatars/` to validate/sanitize before its short profile transaction, compensate newly created files on promotion/persistence failure, commit the reference before retiring the old file, and emit safe observable cleanup failures.
-- [ ] T013 [US1] Add centrally cataloged `profile.avatar.updated`, `profile.avatar.removed`, and meaningful allow-listed rejected-upload events in `src/GaussAuth.Application/Security/` and integrate their safe recording in `src/GaussAuth.Application/Profiles/Avatars/`.
-- [ ] T014 [US1] Add `PUT /me/profile/avatar` and `DELETE /me/profile/avatar` multipart mappings in `src/GaussAuth.Api/Profiles/` that derive UserId only from valid bearer session, accept exactly one file part, map safe failures to 400/401/413/415/422, and never echo original filename or declared MIME.
-- [ ] T015 [US1] Register configurable `profile-image-write` rate limiting, multipart/request/header limits, and application services in `src/GaussAuth.Api/DependencyInjection/` and `src/GaussAuth.Api/Program.cs`.
+- [X] T011 [US1] Add failing self-service upload/replacement/removal integration scenarios in `tests/GaussAuth.Foundation.Tests/profileImageTests.test.cs` for authenticated ownership, profile response/avatar URL, idempotent delete, old-file cleanup, and unrelated-file protection.
+- [X] T012 [US1] Implement `ProfileAvatarService` in `src/GaussAuth.Application/Profiles/Avatars/` to validate/sanitize before its short profile transaction, compensate newly created files on promotion/persistence failure, commit the reference before retiring the old file, and emit safe observable cleanup failures.
+- [X] T013 [US1] Add centrally cataloged `profile.avatar.updated`, `profile.avatar.removed`, and meaningful allow-listed rejected-upload events in `src/GaussAuth.Application/Security/` and integrate their safe recording in `src/GaussAuth.Application/Profiles/Avatars/`.
+- [X] T014 [US1] Add `PUT /me/profile/avatar` and `DELETE /me/profile/avatar` multipart mappings in `src/GaussAuth.Api/Profiles/` that derive UserId only from valid bearer session, accept exactly one file part, map safe failures to 400/401/413/415/422, and never echo original filename or declared MIME.
+- [X] T015 [US1] Register configurable `profile-image-write` rate limiting, multipart/request/header limits, and application services in `src/GaussAuth.Api/DependencyInjection/` and `src/GaussAuth.Api/Program.cs`.
 
 **Checkpoint**: A user can safely create, replace, and remove their own avatar without profile/file divergence in normal and compensated failure paths.
 
@@ -56,9 +56,9 @@
 
 **Independent Test**: Upload an avatar, retrieve the returned opaque URL anonymously, and verify trusted media/headers; unknown, retired, malformed, and traversal references produce only safe 404 responses.
 
-- [ ] T016 [US2] Add failing public retrieval contract scenarios in `tests/GaussAuth.Foundation.Tests/profileImageTests.test.cs` for trusted JPEG/PNG/WebP type, inline/no-sniff headers, opaque cache behavior, unknown/retired/malformed references, and no path disclosure.
-- [ ] T017 [US2] Implement read-only known-reference lookup/streaming in `src/GaussAuth.Application/Profiles/Avatars/` and `src/GaussAuth.Infrastructure/ProfileImages/` using only parsed opaque references and trusted stored media type.
-- [ ] T018 [US2] Add public `GET /profile-images/{avatarReference}` in `src/GaussAuth.Api/Profiles/` with safe 404 normalization, trusted inline content disposition, configured versioned cache policy, and no static-file root exposure.
+- [X] T016 [US2] Add failing public retrieval contract scenarios in `tests/GaussAuth.Foundation.Tests/profileImageTests.test.cs` for trusted JPEG/PNG/WebP type, inline/no-sniff headers, opaque cache behavior, unknown/retired/malformed references, and no path disclosure.
+- [X] T017 [US2] Implement read-only known-reference lookup/streaming in `src/GaussAuth.Application/Profiles/Avatars/` and `src/GaussAuth.Infrastructure/ProfileImages/` using only parsed opaque references and trusted stored media type.
+- [X] T018 [US2] Add public `GET /profile-images/{avatarReference}` in `src/GaussAuth.Api/Profiles/` with safe 404 normalization, trusted inline content disposition, configured versioned cache policy, and no static-file root exposure.
 
 **Checkpoint**: Public retrieval serves only controlled avatar assets and never permits arbitrary local-file access.
 
