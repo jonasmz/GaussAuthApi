@@ -36,6 +36,13 @@ network and volume setup. Kubernetes and a production image are out of scope.
 
 ## Identity and EF Core persistence
 
+**Pinned foundation dependencies**: ASP.NET Core Identity EF stores, EF Core
+runtime, and EF Core Design 10.0.12; Npgsql's EF Core provider 10.0.3; local `dotnet-ef`
+10.0.12. The focused test project uses Microsoft.NET.Test.Sdk 18.10.0,
+MSTest framework and adapter 4.4.1, and Microsoft.AspNetCore.Mvc.Testing
+10.0.12. Package restore and build in the .NET 10 SDK container verify this
+combination.
+
 **Decision**: Put a roleless Identity user context in Infrastructure using
 `IdentityUser<Guid>` and `IdentityUserContext<IdentityUser<Guid>, Guid>`.
 Register Identity core and EF user stores, without role services, sign-in

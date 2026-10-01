@@ -23,20 +23,24 @@ cp .env.example .env
 ```
 
 Fill the placeholder development values in `.env`, including the database
-password. The implementation must ignore `.env` in Git and validate missing
-values without printing them. The development container itself is unchanged.
+password. Set `PROJECT_DIR` to the absolute repository path reported by `pwd`;
+that path must also be visible to the host Docker daemon for the SDK bind mount.
+The implementation must ignore `.env` in Git and validate missing values
+without printing them. The development container itself is unchanged.
 
 ## 2. Start and inspect PostgreSQL 17
 
 ```sh
-docker compose --env-file .env -f compose.dev.yml up -d postgres
+docker compose --env-file .env -f compose.dev.yml up -d --wait postgres
 docker compose --env-file .env -f compose.dev.yml ps
 docker compose --env-file .env -f compose.dev.yml run --rm sdk dotnet --version
+docker compose --env-file .env -f compose.dev.yml run --rm sdk bash -c 'exec 3<>/dev/tcp/postgres/5432'
 ```
 
 Expected: `postgres` reports healthy, its image is PostgreSQL 17, and the
 separate SDK container reports .NET 10. No host database port needs to be
-published when the SDK and database share the Compose network. If the
+published when the SDK and database share the Compose network. The final
+command succeeds only when PostgreSQL is reachable from the SDK. If the
 daemon/socket is unavailable, stop here and report that prerequisite; do
 not fall back to a host-installed database.
 
@@ -92,7 +96,7 @@ data before a fresh validation, run:
 
 ```sh
 docker compose --env-file .env -f compose.dev.yml down -v
-docker compose --env-file .env -f compose.dev.yml up -d postgres
+docker compose --env-file .env -f compose.dev.yml up -d --wait postgres
 ```
 
 Use `down -v` only when losing local development data is intended. No

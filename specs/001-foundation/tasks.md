@@ -37,9 +37,9 @@ convention without changing migration IDs or generated class identities.
 
 **Purpose**: Create the inspectable .NET 10 solution and test project.
 
-- [ ] T001 Create `GaussAuth.slnx` and `src/GaussAuth.Domain/GaussAuth.Domain.csproj`, `src/GaussAuth.Application/GaussAuth.Application.csproj`, `src/GaussAuth.Infrastructure/GaussAuth.Infrastructure.csproj`, and `src/GaussAuth.Api/GaussAuth.Api.csproj` targeting `net10.0` with nullable references enabled; add no placeholder domain entities or future feature slices.
-- [ ] T002 Set and verify project references in `src/GaussAuth.Application/GaussAuth.Application.csproj`, `src/GaussAuth.Infrastructure/GaussAuth.Infrastructure.csproj`, and `src/GaussAuth.Api/GaussAuth.Api.csproj`: Domain has no project/package dependencies, Application references Domain, Infrastructure references Application/Domain, and API references Application/Infrastructure; register all four in `GaussAuth.slnx`.
-- [ ] T003 Create `tests/GaussAuth.Foundation.Tests/GaussAuth.Foundation.Tests.csproj` with compatible Microsoft test tooling, MSTest, and `Microsoft.AspNetCore.Mvc.Testing`; add it to `GaussAuth.slnx` and reference the production assemblies needed for architecture and startup checks.
+- [X] T001 Create `GaussAuth.slnx` and `src/GaussAuth.Domain/GaussAuth.Domain.csproj`, `src/GaussAuth.Application/GaussAuth.Application.csproj`, `src/GaussAuth.Infrastructure/GaussAuth.Infrastructure.csproj`, and `src/GaussAuth.Api/GaussAuth.Api.csproj` targeting `net10.0` with nullable references enabled; add no placeholder domain entities or future feature slices.
+- [X] T002 Set and verify project references in `src/GaussAuth.Application/GaussAuth.Application.csproj`, `src/GaussAuth.Infrastructure/GaussAuth.Infrastructure.csproj`, and `src/GaussAuth.Api/GaussAuth.Api.csproj`: Domain has no project/package dependencies, Application references Domain, Infrastructure references Application/Domain, and API references Application/Infrastructure; register all four in `GaussAuth.slnx`.
+- [X] T003 Create `tests/GaussAuth.Foundation.Tests/GaussAuth.Foundation.Tests.csproj` with compatible Microsoft test tooling, MSTest, and `Microsoft.AspNetCore.Mvc.Testing`; add it to `GaussAuth.slnx` and reference the production assemblies needed for architecture and startup checks.
 
 **Checkpoint**: Solution/project boundaries and a focused test harness exist.
 
@@ -49,8 +49,8 @@ convention without changing migration IDs or generated class identities.
 
 **Purpose**: Pin only dependencies required by all subsequent validation.
 
-- [ ] T004 Add compatible, pinned EF Core 10, ASP.NET Core Identity EF store, and Npgsql EF Core 10 package references only to `src/GaussAuth.Infrastructure/GaussAuth.Infrastructure.csproj`; add EF design-time package where the selected target/startup tooling requires it; record the choices in `specs/001-foundation/research.md` without adding alternate providers or frameworks.
-- [ ] T005 Create `.config/dotnet-tools.json` with a pinned local `dotnet-ef` 10 tool and update root `.gitignore` to exclude `.env`, build outputs, and generated local artifacts while retaining version-controlled migrations; verify `specs/001-foundation/quickstart.md` uses the local tool path.
+- [X] T004 Add compatible, pinned EF Core 10, ASP.NET Core Identity EF store, and Npgsql EF Core 10 package references only to `src/GaussAuth.Infrastructure/GaussAuth.Infrastructure.csproj`; add EF design-time package where the selected target/startup tooling requires it; record the choices in `specs/001-foundation/research.md` without adding alternate providers or frameworks.
+- [X] T005 Create `.config/dotnet-tools.json` with a pinned local `dotnet-ef` 10 tool and update root `.gitignore` to exclude `.env`, build outputs, and generated local artifacts while retaining version-controlled migrations; verify `specs/001-foundation/quickstart.md` uses the local tool path.
 
 **Checkpoint**: Dependencies are governed and no user story needs a global tool install.
 
@@ -67,9 +67,9 @@ or .NET installation is required.
 
 ### Implementation for User Story 1
 
-- [ ] T006 [US1] Create `compose.dev.yml` with exactly the `postgres:17` and official .NET 10 `sdk` services, a private Compose network, PostgreSQL health check, repository mount usable by the host daemon, named development database volume, and no published PostgreSQL port; make the SDK service usable both for one-off commands and for running the API.
-- [ ] T007 [US1] Create placeholder-only `.env.example` and complete root `.gitignore` so a private `.env` supplies development-only PostgreSQL/database connection values; make missing values fail clearly without exposing them and keep secrets out of Compose files and images.
-- [ ] T008 [US1] Execute the service-lifecycle and .NET version scenarios in `specs/001-foundation/quickstart.md` from the existing development container; correct only the documented commands or `compose.dev.yml` as needed, verify the Docker-socket failure path reports its prerequisite, and stop/remove disposable containers after validation.
+- [X] T006 [US1] Create `compose.dev.yml` with exactly the `postgres:17` and official .NET 10 `sdk` services, a private Compose network, PostgreSQL health check, repository mount usable by the host daemon, named development database volume, and no published PostgreSQL port; make the SDK service usable both for one-off commands and for running the API.
+- [X] T007 [US1] Create placeholder-only `.env.example` and complete root `.gitignore` so a private `.env` supplies development-only PostgreSQL/database connection values; make missing values fail clearly without exposing them and keep secrets out of Compose files and images.
+- [X] T008 [US1] Execute the service-lifecycle and .NET version scenarios in `specs/001-foundation/quickstart.md` from the existing development container; correct only the documented commands or `compose.dev.yml` as needed, verify the Docker-socket failure path reports its prerequisite, and stop/remove disposable containers after validation.
 
 **Checkpoint**: US1 passes independently; its Docker setup is the MVP
 development capability. Do not start API or future services for this check.
