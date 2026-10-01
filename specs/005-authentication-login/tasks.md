@@ -136,15 +136,15 @@ No additional implementation tasks: the state-boundary checks under test here (F
 
 ### Tests for User Story 5
 
-- [ ] T032 [US5] Add test proving a successful login records a `LoginSucceeded` security event carrying only `userId`, `applicationId`, and outcome metadata in `tests/GaussAuth.Foundation.Tests/authenticationLoginTests.test.cs`.
-- [ ] T033 [US5] Add test proving a failed login records a `LoginFailed` security event, and a lockout-triggered rejection records an `AccountLockedOut` security event, with no password or password hash present in either in `tests/GaussAuth.Foundation.Tests/authenticationLoginTests.test.cs`.
+- [X] T032 [US5] Add test proving a successful login records a `LoginSucceeded` security event carrying only `userId`, `applicationId`, and outcome metadata in `tests/GaussAuth.Foundation.Tests/authenticationLoginTests.test.cs`.
+- [X] T033 [US5] Add test proving a failed login records a `LoginFailed` security event, and a lockout-triggered rejection records an `AccountLockedOut` security event, with no password or password hash present in either in `tests/GaussAuth.Foundation.Tests/authenticationLoginTests.test.cs`.
 
 ### Implementation for User Story 5
 
-- [ ] T034 [US5] Define `SecurityEventType` enum (`LoginSucceeded`, `LoginFailed`, `AccountLockedOut`) in `src/GaussAuth.Application/Security/securityEventType.enum.cs` and `ISecurityEventRecorder` with `Task RecordAsync(SecurityEventType type, Guid? userId, Guid? applicationId, CancellationToken cancellationToken)` in `src/GaussAuth.Application/Security/Ports/securityEventRecorder.interface.cs` (two files, one type each).
-- [ ] T035 [US5] Implement `LoggingSecurityEventRecorder` writing one structured log entry per call (event type, optional `userId`, optional `applicationId`) through standard `ILogger` abstractions, with no credential content, in `src/GaussAuth.Infrastructure/Security/loggingSecurityEventRecorder.service.cs`.
-- [ ] T036 [US5] Register `ISecurityEventRecorder` → `LoggingSecurityEventRecorder` with the existing scoped lifetime convention in `src/GaussAuth.Infrastructure/DependencyInjection/infrastructureServiceCollectionExtensions.extension.cs`.
-- [ ] T037 [US5] Inject `ISecurityEventRecorder` into `LoginService` and record `LoginSucceeded`, `LoginFailed`, or `AccountLockedOut` at the corresponding decision point using the internal failure reason already tracked on `LoginOperationResult` (T014), in `src/GaussAuth.Application/Login/loginService.service.cs`.
+- [X] T034 [US5] Define `SecurityEventType` enum (`LoginSucceeded`, `LoginFailed`, `AccountLockedOut`) in `src/GaussAuth.Application/Security/securityEventType.enum.cs` and `ISecurityEventRecorder` with `Task RecordAsync(SecurityEventType type, Guid? userId, Guid? applicationId, CancellationToken cancellationToken)` in `src/GaussAuth.Application/Security/Ports/securityEventRecorder.interface.cs` (two files, one type each).
+- [X] T035 [US5] Implement `LoggingSecurityEventRecorder` writing one structured log entry per call (event type, optional `userId`, optional `applicationId`) through standard `ILogger` abstractions, with no credential content, in `src/GaussAuth.Infrastructure/Security/loggingSecurityEventRecorder.service.cs`.
+- [X] T036 [US5] Register `ISecurityEventRecorder` → `LoggingSecurityEventRecorder` with the existing scoped lifetime convention in `src/GaussAuth.Infrastructure/DependencyInjection/infrastructureServiceCollectionExtensions.extension.cs`.
+- [X] T037 [US5] Inject `ISecurityEventRecorder` into `LoginService` and record `LoginSucceeded`, `LoginFailed`, or `AccountLockedOut` at the corresponding decision point using the internal failure reason already tracked on `LoginOperationResult` (T014), in `src/GaussAuth.Application/Login/loginService.service.cs`.
 
 **Checkpoint**: Authentication attempts are auditable through a minimal, swappable port, compatible with the complete `009-security-audit` subsystem later.
 
@@ -154,9 +154,9 @@ No additional implementation tasks: the state-boundary checks under test here (F
 
 **Purpose**: Validate architecture, safe contracts, and end-to-end behavior for the completed feature.
 
-- [ ] T038 Verify every new C# source file has exactly one top-level type and a `<name>.<type>.cs` filename (including `credentialVerificationOutcome.enum.cs`, `credentialVerificationService.interface.cs`, `securityEventType.enum.cs`, and `securityEventRecorder.interface.cs` as separate files); confirm the `Microsoft.Extensions.Identity` forbidden-reference check added in T010 passes for `GaussAuth.Domain` and `GaussAuth.Application`.
-- [ ] T039 Review `src/GaussAuth.Api/Login/`, `src/GaussAuth.Application/Login/`, `src/GaussAuth.Application/Security/`, and `src/GaussAuth.Infrastructure/Identity/` for exact field limits, the uniform safe failure contract, absence of password/credential content in logs/responses/exceptions, identifier/outcome-only logging, and absence of session, token, MFA, OAuth 2.0, or OpenID Connect code.
-- [ ] T040 Run the full Docker test suite and the API curl scenarios from `specs/005-authentication-login/quickstart.md`; correct only feature-005 artifacts and failures found.
+- [X] T038 Verify every new C# source file has exactly one top-level type and a `<name>.<type>.cs` filename (including `credentialVerificationOutcome.enum.cs`, `credentialVerificationService.interface.cs`, `securityEventType.enum.cs`, and `securityEventRecorder.interface.cs` as separate files); confirm the `Microsoft.Extensions.Identity` forbidden-reference check added in T010 passes for `GaussAuth.Domain` and `GaussAuth.Application`.
+- [X] T039 Review `src/GaussAuth.Api/Login/`, `src/GaussAuth.Application/Login/`, `src/GaussAuth.Application/Security/`, and `src/GaussAuth.Infrastructure/Identity/` for exact field limits, the uniform safe failure contract, absence of password/credential content in logs/responses/exceptions, identifier/outcome-only logging, and absence of session, token, MFA, OAuth 2.0, or OpenID Connect code.
+- [X] T040 Run the full Docker test suite and the API curl scenarios from `specs/005-authentication-login/quickstart.md`; correct only feature-005 artifacts and failures found.
 
 ## Dependencies and Execution Order
 

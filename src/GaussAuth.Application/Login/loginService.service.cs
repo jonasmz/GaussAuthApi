@@ -1,6 +1,8 @@
 using GaussAuth.Application.Applications.Ports;
 using GaussAuth.Application.Login.Ports;
 using GaussAuth.Application.Memberships.Ports;
+using GaussAuth.Application.Security;
+using GaussAuth.Application.Security.Ports;
 using GaussAuth.Application.Users.Ports;
 using Microsoft.Extensions.Logging;
 
@@ -12,6 +14,7 @@ public sealed class LoginService(
     IApplicationMembershipRepository memberships,
     ICredentialProvisioningService credentialProvisioning,
     ICredentialVerificationService credentialVerification,
+    ISecurityEventRecorder securityEvents,
     ILogger<LoginService> logger)
 {
     public async Task<LoginOperationResult> AuthenticateAsync(string applicationCode, string email, string password, CancellationToken ct)
@@ -20,54 +23,55 @@ public sealed class LoginService(
         var user = await users.GetByNormalizedEmailAsync(normalizedEmail, ct);
         if (user is null)
         {
-            logger.LogInformation("Login attempt failed with outcome {Outcome}.", "unknown-email");
-            return LoginOperationResult.Failure(LoginFailureReason.UnknownEmail);
+            return await FailAsync(LoginFailureReason.UnknownEmail, null, null, ct);
         }
 
         var application = await applications.GetByCodeAsync(applicationCode, ct);
         if (application is null)
         {
-            logger.LogInformation("Login attempt {UserId} failed with outcome {Outcome}.", user.Id, "unknown-application");
-            return LoginOperationResult.Failure(LoginFailureReason.UnknownApplication, user.Id);
+            return await FailAsync(LoginFailureReason.UnknownApplication, user.Id, null, ct);
         }
 
         if (!user.IsActive)
         {
-            logger.LogInformation("Login attempt {UserId} {ApplicationId} failed with outcome {Outcome}.", user.Id, application.Id, "inactive-user");
-            return LoginOperationResult.Failure(LoginFailureReason.InactiveUser, user.Id, application.Id);
+            return await FailAsync(LoginFailureReason.InactiveUser, user.Id, application.Id, ct);
         }
 
         if (!application.IsActive)
         {
-            logger.LogInformation("Login attempt {UserId} {ApplicationId} failed with outcome {Outcome}.", user.Id, application.Id, "inactive-application");
-            return LoginOperationResult.Failure(LoginFailureReason.InactiveApplication, user.Id, application.Id);
+            return await FailAsync(LoginFailureReason.InactiveApplication, user.Id, application.Id, ct);
         }
 
         var membership = await memberships.GetAsync(user.Id, application.Id, ct);
         if (membership is null)
         {
-            logger.LogInformation("Login attempt {UserId} {ApplicationId} failed with outcome {Outcome}.", user.Id, application.Id, "missing-membership");
-            return LoginOperationResult.Failure(LoginFailureReason.MissingMembership, user.Id, application.Id);
+            return await FailAsync(LoginFailureReason.MissingMembership, user.Id, application.Id, ct);
         }
 
         if (!membership.IsActive)
         {
-            logger.LogInformation("Login attempt {UserId} {ApplicationId} failed with outcome {Outcome}.", user.Id, application.Id, "inactive-membership");
-            return LoginOperationResult.Failure(LoginFailureReason.InactiveMembership, user.Id, application.Id);
+            return await FailAsync(LoginFailureReason.InactiveMembership, user.Id, application.Id, ct);
         }
 
         var credentialOutcome = await credentialVerification.VerifyPasswordAsync(user.Id, password, ct);
         switch (credentialOutcome)
         {
             case CredentialVerificationOutcome.LockedOut:
-                logger.LogInformation("Login attempt {UserId} {ApplicationId} failed with outcome {Outcome}.", user.Id, application.Id, "locked-out");
-                return LoginOperationResult.Failure(LoginFailureReason.LockedOut, user.Id, application.Id);
+                return await FailAsync(LoginFailureReason.LockedOut, user.Id, application.Id, ct);
             case CredentialVerificationOutcome.InvalidPassword:
-                logger.LogInformation("Login attempt {UserId} {ApplicationId} failed with outcome {Outcome}.", user.Id, application.Id, "invalid-password");
-                return LoginOperationResult.Failure(LoginFailureReason.InvalidPassword, user.Id, application.Id);
+                return await FailAsync(LoginFailureReason.InvalidPassword, user.Id, application.Id, ct);
         }
 
         logger.LogInformation("Login attempt {UserId} {ApplicationId} completed with outcome {Outcome}.", user.Id, application.Id, "success");
+        await securityEvents.RecordAsync(SecurityEventType.LoginSucceeded, user.Id, application.Id, ct);
         return LoginOperationResult.Success(user.Id, application.Id);
+    }
+
+    private async Task<LoginOperationResult> FailAsync(LoginFailureReason reason, Guid? userId, Guid? applicationId, CancellationToken ct)
+    {
+        logger.LogInformation("Login attempt {UserId} {ApplicationId} failed with outcome {Outcome}.", userId, applicationId, reason);
+        var eventType = reason == LoginFailureReason.LockedOut ? SecurityEventType.AccountLockedOut : SecurityEventType.LoginFailed;
+        await securityEvents.RecordAsync(eventType, userId, applicationId, ct);
+        return LoginOperationResult.Failure(reason, userId, applicationId);
     }
 }

@@ -1,6 +1,8 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
+using GaussAuth.Application.Security;
+using GaussAuth.Application.Security.Ports;
 using GaussAuth.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
@@ -310,6 +312,86 @@ public sealed class AuthenticationLoginTests
             AssertSameProblemShape(bodies[0], body);
         }
         Assert.AreEqual(HttpStatusCode.Unauthorized, lockout.StatusCode);
+    }
+
+    // T032: a successful login records a LoginSucceeded security event with only safe metadata.
+    [TestMethod]
+    public async Task Successful_login_records_login_succeeded_event()
+    {
+        var (factory, recorder) = await FactoryWithRecorderAsync();
+        using var _ = factory; using var client = factory.CreateClient();
+        var email = $"login-{Guid.NewGuid():N}@example.test";
+        var userId = await CreateUserAsync(client, email);
+        var (applicationId, applicationCode) = await CreateApplicationAsync(client);
+        await CreateMembershipAsync(client, userId, applicationId);
+
+        using var response = await client.PostAsJsonAsync("/auth/login", new { applicationCode, email, password = Password });
+        Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
+
+        var successEvent = recorder.Events.Single(e => e.Type == SecurityEventType.LoginSucceeded);
+        Assert.AreEqual(userId, successEvent.UserId);
+        Assert.AreEqual(applicationId, successEvent.ApplicationId);
+    }
+
+    // T033: a failed login records LoginFailed, and a lockout records AccountLockedOut; neither carries credential content.
+    [TestMethod]
+    public async Task Failed_and_locked_out_logins_record_safe_security_events()
+    {
+        var (factory, recorder) = await FactoryWithRecorderAsync(new Dictionary<string, string?>
+        {
+            ["Identity:Lockout:MaxFailedAccessAttempts"] = "2",
+            ["RateLimiting:Login:PermitLimit"] = "50"
+        });
+        using var _ = factory; using var client = factory.CreateClient();
+        var email = $"login-{Guid.NewGuid():N}@example.test";
+        var userId = await CreateUserAsync(client, email);
+        var (applicationId, applicationCode) = await CreateApplicationAsync(client);
+        await CreateMembershipAsync(client, userId, applicationId);
+
+        // First wrong attempt: under the threshold, so it is a plain failure (LoginFailed).
+        using var wrongPassword = await client.PostAsJsonAsync("/auth/login", new { applicationCode, email, password = "WrongPassword!2026" });
+        Assert.AreEqual(HttpStatusCode.Unauthorized, wrongPassword.StatusCode);
+
+        // Second wrong attempt: reaches the threshold, so Identity locks the account on this same attempt (AccountLockedOut).
+        using var lockedOut = await client.PostAsJsonAsync("/auth/login", new { applicationCode, email, password = "WrongPassword!2026" });
+        Assert.AreEqual(HttpStatusCode.Unauthorized, lockedOut.StatusCode);
+
+        var failedEvent = recorder.Events.First(e => e.Type == SecurityEventType.LoginFailed);
+        Assert.AreEqual(userId, failedEvent.UserId);
+        Assert.AreEqual(applicationId, failedEvent.ApplicationId);
+
+        var lockoutEvent = recorder.Events.Single(e => e.Type == SecurityEventType.AccountLockedOut);
+        Assert.AreEqual(userId, lockoutEvent.UserId);
+        Assert.AreEqual(applicationId, lockoutEvent.ApplicationId);
+
+        Assert.IsFalse(recorder.Events.Any(e => e.ToString()!.Contains(Password, StringComparison.OrdinalIgnoreCase)));
+    }
+
+    private sealed class RecordingSecurityEventRecorder : ISecurityEventRecorder
+    {
+        public List<(SecurityEventType Type, Guid? UserId, Guid? ApplicationId)> Events { get; } = [];
+
+        public Task RecordAsync(SecurityEventType type, Guid? userId, Guid? applicationId, CancellationToken cancellationToken)
+        {
+            Events.Add((type, userId, applicationId));
+            return Task.CompletedTask;
+        }
+    }
+
+    private static async Task<(WebApplicationFactory<Program> Factory, RecordingSecurityEventRecorder Recorder)> FactoryWithRecorderAsync(Dictionary<string, string?>? configOverrides = null)
+    {
+        foreach (var key in ManagedEnvironmentKeys)
+        {
+            Environment.SetEnvironmentVariable(key, configOverrides?.GetValueOrDefault(key.Replace("__", ":")));
+        }
+
+        var recorder = new RecordingSecurityEventRecorder();
+        var factory = new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
+            builder.ConfigureServices(services => services.AddSingleton<ISecurityEventRecorder>(recorder)));
+
+        using var scope = factory.Services.CreateScope();
+        await scope.ServiceProvider.GetRequiredService<AuthenticationDbContext>().Database.MigrateAsync();
+        return (factory, recorder);
     }
 
     private static async Task<string> LoginAsync(HttpClient client, (Guid Id, string Code) application, string email, string password)

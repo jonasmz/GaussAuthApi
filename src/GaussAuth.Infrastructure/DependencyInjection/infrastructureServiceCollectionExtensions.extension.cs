@@ -5,8 +5,10 @@ using GaussAuth.Application.Roles.Ports;
 using GaussAuth.Application.Permissions.Ports;
 using GaussAuth.Application.Authorization.Ports;
 using GaussAuth.Application.Login.Ports;
+using GaussAuth.Application.Security.Ports;
 using GaussAuth.Infrastructure.Identity;
 using GaussAuth.Infrastructure.Persistence;
+using GaussAuth.Infrastructure.Security;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -67,6 +69,7 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddScoped<IUserRoleRepository, UserRoleRepository>();
         services.AddScoped<ICredentialProvisioningService, IdentityCredentialProvisioningService>();
         services.AddScoped<ICredentialVerificationService, IdentityCredentialVerificationService>();
+        services.AddScoped<ISecurityEventRecorder, LoggingSecurityEventRecorder>();
 
         return services;
     }
