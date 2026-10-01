@@ -10,6 +10,8 @@ public sealed class MembershipOperationResult
     public static MembershipOperationResult Invalid() => new() { Failure = "invalid" };
     public static MembershipOperationResult UserNotFound() => new() { Failure = "user-not-found" };
     public static MembershipOperationResult ApplicationNotFound() => new() { Failure = "application-not-found" };
+    public static MembershipOperationResult MembershipNotFound() => new() { Failure = "membership-not-found" };
     public static MembershipOperationResult InactiveApplication() => new() { Failure = "inactive-application" };
+    public static MembershipOperationResult InactiveUser() => new() { Failure = "inactive-user" };
     public static MembershipOperationResult Duplicate() => new() { Failure = "duplicate" };
 }

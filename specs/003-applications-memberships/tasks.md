@@ -120,14 +120,14 @@ application prevents activation without cascading membership state changes.
 
 ### Tests for User Story 3
 
-- [ ] T028 [US3] Add integration tests for membership activation/deactivation, repeated idempotent transitions, safe `404`, and `409` activation failures for inactive user or application that leave the membership state unchanged in `tests/GaussAuth.Foundation.Tests/applicationMembershipsTests.test.cs`.
-- [ ] T029 [US3] Add integration tests for two memberships of one user, one-membership-only state changes, no cross-application inference, and parent deactivation preserving membership `IsActive` in `tests/GaussAuth.Foundation.Tests/applicationMembershipsTests.test.cs`.
+- [X] T028 [US3] Add integration tests for membership activation/deactivation, repeated idempotent transitions, safe `404`, and `409` activation failures for inactive user or application that leave the membership state unchanged in `tests/GaussAuth.Foundation.Tests/applicationMembershipsTests.test.cs`.
+- [X] T029 [US3] Add integration tests for two memberships of one user, one-membership-only state changes, no cross-application inference, and parent deactivation preserving membership `IsActive` in `tests/GaussAuth.Foundation.Tests/applicationMembershipsTests.test.cs`.
 
 ### Implementation for User Story 3
 
-- [ ] T030 [US3] Add activate-membership handler in `src/GaussAuth.Application/Memberships/ActivateMembership/activateMembership.handler.cs`; require existing membership/user/application and active user/application, return explicit inactive-parent conflicts, and leave membership unchanged on rejection.
-- [ ] T031 [US3] Add idempotent deactivate-membership handler in `src/GaussAuth.Application/Memberships/DeactivateMembership/deactivateMembership.handler.cs`; change only the selected membership and log ids/outcome without personal data.
-- [ ] T032 [US3] Add application-context activate/deactivate membership routes and safe result mapping to `src/GaussAuth.Api/Memberships/membershipsEndpoints.extension.cs`.
+- [X] T030 [US3] Add activation handling in `src/GaussAuth.Application/Memberships/membershipService.service.cs`; require existing membership/user/application and active user/application, return explicit inactive-parent conflicts, and leave membership unchanged on rejection.
+- [X] T031 [US3] Add idempotent deactivation handling in `src/GaussAuth.Application/Memberships/membershipService.service.cs`; change only the selected membership and log membership id/outcome without personal data.
+- [X] T032 [US3] Add application-context activate/deactivate membership routes and safe result mapping to `src/GaussAuth.Api/Memberships/membershipsEndpoints.extension.cs`.
 
 **Checkpoint**: All membership lifecycle and isolation rules are independently
 functional; effective eligibility is active user AND application AND
@@ -140,9 +140,9 @@ membership, without automatic parent-to-membership state cascades.
 **Purpose**: Verify the completed feature against its migration, architecture,
 security, and end-to-end acceptance criteria.
 
-- [ ] T033 Verify every new C# file has exactly one top-level type and its `<name>.<type>.cs` filename, and extend `tests/GaussAuth.Foundation.Tests/architectureTests.test.cs` only if an uncovered boundary requires an assertion.
-- [ ] T034 Review `src/GaussAuth.Api/Applications/`, `src/GaussAuth.Api/Memberships/`, and `src/GaussAuth.Application/` for explicit limits, trusted-caller-only scope, structured identifier/outcome logging, and responses that omit SQL, stack traces, EF state, and unnecessary personal data.
-- [ ] T035 Run the migration, application/membership curl scenarios, repeated migration check, and full Docker test suite from `specs/003-applications-memberships/quickstart.md`; correct only feature-003 artifacts and implementation failures found.
+- [X] T033 Verify every new C# file has exactly one top-level type and its `<name>.<type>.cs` filename; the existing architecture test covers this feature without needing an additional assertion.
+- [X] T034 Review `src/GaussAuth.Api/Applications/`, `src/GaussAuth.Api/Memberships/`, and `src/GaussAuth.Application/` for explicit limits, trusted-caller-only scope, structured identifier/outcome logging, and responses that omit SQL, stack traces, EF state, and unnecessary personal data.
+- [X] T035 Run the migration, application/membership curl scenarios, repeated migration check, and full Docker test suite from `specs/003-applications-memberships/quickstart.md`; correct only feature-003 artifacts and implementation failures found.
 
 ---
 
