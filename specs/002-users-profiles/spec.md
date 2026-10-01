@@ -173,6 +173,9 @@ confirm it returns to active state.
 - What happens when two profile-update requests for the same user are
   processed concurrently? The last successfully persisted write prevails;
   no stale-data conflict is detected or rejected in this feature.
+- What happens when user-creation requests exceed the rate limit from the
+  same caller? Further requests are rejected until the window resets; no
+  user, profile, or credential is created for a rejected request.
 
 ## Requirements *(mandatory)*
 
@@ -281,6 +284,15 @@ confirm it returns to active state.
   administrative or system callers in this feature. Enforcing request-level
   authentication/authorization for these operations belongs to a future
   authentication/authorization feature.
+- **FR-024**: Because user creation accepts no caller authentication (FR-023)
+  and establishes an initial credential (FR-009), it is an anonymous
+  credential operation and MUST be rate-limited, consistent with the
+  constitution's requirement that abuse-prone public or anonymous
+  credential operations use rate limiting. The limit MUST be configurable
+  rather than hard-coded, and exceeding it MUST reject the request without
+  creating a user, profile, or credential. Retrieval, profile update, and
+  activation/deactivation do not create a credential and are not required
+  to be rate-limited by this feature.
 
 ### Key Entities
 
@@ -324,6 +336,10 @@ confirm it returns to active state.
 - **SC-010**: A maintainer can begin `003-applications-memberships` using the
   established user/profile foundation without restructuring Domain,
   Application, or the persisted schema.
+- **SC-011**: User-creation requests from the same caller beyond the
+  configured limit are rejected without creating a user, profile, or
+  credential, and the limit can be changed through configuration without a
+  code change.
 
 ## Assumptions
 
@@ -352,3 +368,14 @@ confirm it returns to active state.
   credential representation are distinct but kept reconcilable; neither the
   Application layer nor API contracts expose Identity's persistence model
   directly.
+- User creation is rate-limited per caller with a configurable default of 5
+  requests per 60-second window (FR-024); only creation is rate-limited in
+  this feature because it is the sole operation that establishes a new
+  credential — retrieval, profile update, and activation/deactivation act on
+  an already-created identity and are left to the future authentication/
+  authorization feature's broader access-control design (consistent with
+  FR-023).
+- Request-body field length limits (see Key Entities/data-model) already
+  bound the size of every request this feature accepts; no additional
+  overall request-body-size configuration is introduced beyond ASP.NET
+  Core's existing platform default.

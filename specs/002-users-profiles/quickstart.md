@@ -74,6 +74,21 @@ docker compose --env-file .env -f compose.dev.yml exec -T sdk curl -sS -o /dev/n
   -X POST http://127.0.0.1:8080/users/USER_ID/activate
 ```
 
+```sh
+# Exceed the default rate limit (5 requests/60s) on POST /users with distinct emails.
+for i in 1 2 3 4 5 6; do
+  docker compose --env-file .env -f compose.dev.yml exec -T sdk curl -sS -o /dev/null -w '%{http_code}\n' \
+    -X POST http://127.0.0.1:8080/users \
+    -H 'Content-Type: application/json' \
+    -d "{\"email\":\"rate-limit-$i@example.dev\",\"password\":\"Quickstart!2026\",\"firstName\":\"Quick\",\"lastName\":\"Start\",\"displayName\":\"Quick Start\"}"
+done
+```
+
+Expected: the first five requests above succeed (`201`, counting against the
+same window as the earlier creation/duplicate calls), and the 6th returns
+`429 Too Many Requests` with a `Retry-After` header (FR-024). Wait for the
+configured window to elapse before creating further users in this guide.
+
 Expected: `201` on first creation with a `Location` header and a body
 containing no `password`/credential field; `409` on the duplicate-email
 re-submission (case/whitespace difference must still collide); `200` with

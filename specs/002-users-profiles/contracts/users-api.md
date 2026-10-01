@@ -3,10 +3,12 @@
 All routes are grouped under `/users`. None of these routes perform caller
 authentication or authorization in this feature (FR-023); they are reachable
 only by trusted administrative/system callers until a future authentication/
-authorization feature adds request-level access control. None of them query
-or expose anything beyond what is listed below — in particular, no password
-hash, security stamp, or other Identity credential internal ever appears in
-a response or log.
+authorization feature adds request-level access control. `POST /users` is
+the one exception to "no additional control": because it creates a
+credential with no caller authentication, it is rate-limited (FR-024, see
+below). None of the five routes query or expose anything beyond what is
+listed below — in particular, no password hash, security stamp, or other
+Identity credential internal ever appears in a response or log.
 
 ## Shared response shape: `UserResponse`
 
@@ -34,11 +36,15 @@ a response or log.
 
 Create a global user and its profile (FR-008/FR-009).
 
+This operation creates an Identity credential and enforces no caller
+authentication (FR-023), so it is rate-limited per caller (FR-024) — see
+"Rate limiting" below.
+
 **Request body**:
 
 ```json
 {
-  "email": "string (required, max 256)",
+  "email": "string (required, max 256, valid email format)",
   "password": "string (required, max 128; Identity's policy applies)",
   "firstName": "string (required, max 100)",
   "lastName": "string (required, max 100)",
@@ -51,9 +57,15 @@ Create a global user and its profile (FR-008/FR-009).
 | Condition | Response |
 |---|---|
 | Valid, unique normalized email | `201 Created`, `Location: /users/{id}`, body: `UserResponse`. |
-| Missing/invalid field, or password fails Identity's policy | `400 Bad Request`, `ValidationProblemDetails` (field-level errors). |
+| Missing/invalid field (including a malformed email), or password fails Identity's policy | `400 Bad Request`, `ValidationProblemDetails` (field-level errors). |
 | Normalized email already exists (including a concurrent race) | `409 Conflict`, generic Problem Details; does not reveal which field collided beyond "email". |
+| Caller exceeds the configured rate limit | `429 Too Many Requests` with a `Retry-After` header; no user, profile, or credential is created (FR-024). |
 | Unexpected failure | `500`, generic Problem Details via the existing safe exception handler; no partial user, profile, or credential row is left (one transaction, see `research.md`). |
+
+**Rate limiting**: A fixed-window limiter (default: 5 requests per 60
+seconds per caller IP, both configurable — see `research.md`'s "Rate
+limiting for anonymous credential creation") applies only to this route,
+since it is the sole operation in this feature that creates a credential.
 
 ## GET /users/{id}
 

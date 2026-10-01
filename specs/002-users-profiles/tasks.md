@@ -47,8 +47,11 @@ changing migration IDs or generated class identities, exactly as
 - [ ] T001 Verify no new NuGet package is required for this feature: confirm
   `Microsoft.AspNetCore.Identity.ILookupNormalizer` already resolves from the
   `AddIdentityCore` registration in
-  `src/GaussAuth.Infrastructure/DependencyInjection/infrastructureServiceCollectionExtensions.extension.cs`,
-  and confirm `tests/GaussAuth.Foundation.Tests/GaussAuth.Foundation.Tests.csproj`
+  `src/GaussAuth.Infrastructure/DependencyInjection/infrastructureServiceCollectionExtensions.extension.cs`;
+  confirm `Microsoft.AspNetCore.RateLimiting` (the fixed-window rate limiter
+  used in US1) ships in the ASP.NET Core shared framework already referenced
+  by `src/GaussAuth.Api/GaussAuth.Api.csproj` (`Microsoft.NET.Sdk.Web`); and
+  confirm `tests/GaussAuth.Foundation.Tests/GaussAuth.Foundation.Tests.csproj`
   already references all four production assemblies plus MSTest and
   `Microsoft.AspNetCore.Mvc.Testing` (per `research.md`'s "Test project
   placement" and "Email normalization" decisions). Do not add any package
@@ -181,12 +184,13 @@ response contract exist. Every user story below can now be implemented.
 ## Phase 3: User Story 1 - Provision a global user identity and profile (Priority: P1) 🎯 MVP
 
 **Goal**: Create a global user with a unique login email, an initial
-password, and a required profile in one consistent operation.
+password, and a required profile in one consistent, rate-limited operation.
 
 **Independent Test**: Submit a creation request with a unique email, a
 password, and required profile fields; confirm a user and profile exist
 with a stable identifier and that a second request for the same normalized
-email (including concurrently) is rejected.
+email (including concurrently) is rejected, and that exceeding the rate
+limit is rejected without creating anything.
 
 - [ ] T013 [US1] Add `tests/GaussAuth.Foundation.Tests/createUserTests.test.cs`
   using `Microsoft.AspNetCore.Mvc.Testing` against `POST /users`: (1) valid
@@ -194,12 +198,17 @@ email (including concurrently) is rejected.
   `displayName`) → `201 Created` with a `Location` header and a
   `UserResponse` body containing no password or credential-internal field;
   (2) an email differing only by case/whitespace from an existing user →
-  `409 Conflict`, no new user created; (3) missing/invalid field or a
-  password failing Identity's policy → `400` `ValidationProblemDetails`, no
-  partial user/profile/credential row persisted; (4) two concurrent
-  requests for the same normalized email → exactly one `201`, the other
-  `409`. Confirm these tests compile but fail (or do not yet exist as
-  routes) before T014-T020 are implemented.
+  `409 Conflict`, no new user created; (3) a malformed email (e.g.
+  `"not-an-email"`) → `400` `ValidationProblemDetails` identifying the email
+  field specifically (FR-006); (4) a missing required field or a password
+  failing Identity's policy → `400` `ValidationProblemDetails`, no partial
+  user/profile/credential row persisted; (5) two concurrent requests for the
+  same normalized email → exactly one `201`, the other `409`; (6) a caller
+  exceeding the configured rate limit (test-configured to a low permit
+  limit via `WithWebHostBuilder`/configuration override, per FR-024) →
+  `429 Too Many Requests` with a `Retry-After` header, no user created.
+  Confirm these tests compile but fail (or do not yet exist as routes)
+  before T014-T021 are implemented.
 - [ ] T014 [US1] Create
   `src/GaussAuth.Application/Users/CreateUser/createUser.command.cs` with a
   `CreateUserCommand` carrying the submitted (not yet normalized) email,
@@ -226,35 +235,55 @@ email (including concurrently) is rejected.
   `CreateUserResult` on any failure (duplicate detected by the persistence
   unique index counts as `DuplicateEmail()`, not an unhandled exception),
   commit and return `Success(user)` otherwise. No partial user, profile, or
-  credential row may survive a failed attempt (FR-008).
+  credential row may survive a failed attempt (FR-008). Log one structured
+  `ILogger` entry per invocation containing only the resulting user id and
+  outcome (e.g. "created" or "duplicate rejected") — never the email,
+  password, or password hash (FR-021, per `research.md`'s "Operation
+  logging" decision).
 - [ ] T017 [US1] Create `src/GaussAuth.Api/Users/createUserRequest.dto.cs`
   with Data Annotations matching `data-model.md`'s "Request/response field
-  limits" table: `Email` required, max length 256; `Password` required, max
-  length 128; `FirstName` required, max length 100; `LastName` required, max
-  length 100; `DisplayName` required, max length 100; `PhoneNumber`
-  optional, max length 32; `AvatarReference` optional, max length 2048.
-- [ ] T018 [US1] Create `src/GaussAuth.Api/Users/usersEndpoints.extension.cs`
+  limits" table: `Email` required, max length 256, `[EmailAddress]` format
+  validation (FR-006); `Password` required, max length 128; `FirstName`
+  required, max length 100; `LastName` required, max length 100;
+  `DisplayName` required, max length 100; `PhoneNumber` optional, max length
+  32; `AvatarReference` optional, max length 2048.
+- [ ] T018 [US1] Extend
+  `src/GaussAuth.Api/DependencyInjection/apiServiceCollectionExtensions.extension.cs`
+  to add `services.AddRateLimiter(...)` with a named fixed-window policy
+  `"user-creation"`, partitioned by remote IP address, reading
+  `RateLimiting:UserCreation:PermitLimit` (default `5`) and
+  `RateLimiting:UserCreation:WindowSeconds` (default `60`) from
+  `IConfiguration` rather than hard-coding them (FR-024, per `research.md`'s
+  "Rate limiting for anonymous credential creation" decision). Do not apply
+  this policy to any route in this task; only register it.
+- [ ] T019 [US1] Create `src/GaussAuth.Api/Users/usersEndpoints.extension.cs`
   with a `MapUsersEndpoints(this IEndpointRouteBuilder app)` extension
-  mapping `POST /users`: validate the request DTO (via
-  `TypedResults.ValidationProblem` on failure), dispatch `CreateUserCommand`
-  to its handler, and translate `CreateUserResult` to `201 Created` (with
-  `Location: /users/{id}` and a `UserResponse` body built from T011), `409`
-  (duplicate email), or `400` (`ValidationProblemDetails`), per
-  `contracts/users-api.md`.
-- [ ] T019 [US1] Edit `src/GaussAuth.Api/Program.cs` to call
+  mapping `POST /users` with `.RequireRateLimiting("user-creation")` (policy
+  from T018): validate the request DTO (via `TypedResults.ValidationProblem`
+  on failure), dispatch `CreateUserCommand` to its handler, and translate
+  `CreateUserResult` to `201 Created` (with `Location: /users/{id}` and a
+  `UserResponse` body built from T011), `409` (duplicate email), or `400`
+  (`ValidationProblemDetails`), per `contracts/users-api.md`. A request
+  rejected by the rate limiter is handled by the middleware itself
+  (`429 Too Many Requests` with `Retry-After`) and never reaches this
+  handler logic.
+- [ ] T020 [US1] Edit `src/GaussAuth.Api/Program.cs` to call
+  `app.UseRateLimiter();` (before endpoint mapping) and
   `app.MapUsersEndpoints();` alongside the existing `/health/live` mapping,
   keeping `Program.cs` a readable composition root with no declared
   top-level type.
-- [ ] T020 [US1] Extend
+- [ ] T021 [US1] Extend
   `src/GaussAuth.Api/DependencyInjection/applicationServiceCollectionExtensions.extension.cs`
   to register the `CreateUser` handler (scoped).
-- [ ] T021 [US1] Run
+- [ ] T022 [US1] Run
   `tests/GaussAuth.Foundation.Tests/createUserTests.test.cs` and the
-  corresponding `quickstart.md` section 4 "create" scenario; confirm all
-  four acceptance scenarios from spec User Story 1 pass.
+  corresponding `quickstart.md` section 4 "create" and rate-limit scenarios;
+  confirm all six acceptance scenarios from spec User Story 1 (including
+  FR-024's rate limit) pass.
 
 **Checkpoint**: US1 passes independently; a user and profile can be created,
-validated, and protected against duplicate/concurrent normalized email.
+validated (including email format), protected against duplicate/concurrent
+normalized email, and rate-limited per caller.
 
 ---
 
@@ -268,30 +297,32 @@ response exposes identity and profile fields while withholding credential
 internals; retrieve an unknown identifier and confirm a safe not-found
 result.
 
-- [ ] T022 [US2] Add
+- [ ] T023 [US2] Add
   `tests/GaussAuth.Foundation.Tests/userRetrievalTests.test.cs` against
   `GET /users/{id}`: an existing user returns `200 OK` with a `UserResponse`
   containing the identifier, login email, normalized email, active state,
   timestamps, and profile fields, and excludes password hashes, security
   stamps, and other internal credential details; an unknown identifier
   returns `404 Not Found` without revealing persistence internals. Confirm
-  this test compiles but fails before T023-T026 are implemented.
-- [ ] T023 [US2] Create
+  this test compiles but fails before T024-T027 are implemented.
+- [ ] T024 [US2] Create
   `src/GaussAuth.Application/Users/GetUser/getUser.query.cs` with a
   `GetUserQuery` carrying the requested `Guid` id.
-- [ ] T024 [US2] Create
+- [ ] T025 [US2] Create
   `src/GaussAuth.Application/Users/GetUser/getUser.handler.cs` calling
   `IUserRepository.GetByIdAsync` and returning the `User?` (null meaning
-  "not found", left to the API layer to translate to `404`).
-- [ ] T025 [US2] Extend
-  `src/GaussAuth.Api/Users/usersEndpoints.extension.cs` (from T018) with
+  "not found", left to the API layer to translate to `404`). Log one
+  structured `ILogger` entry per invocation containing only the requested
+  user id and whether it was found (FR-021).
+- [ ] T026 [US2] Extend
+  `src/GaussAuth.Api/Users/usersEndpoints.extension.cs` (from T019) with
   `GET /users/{id}`: dispatch `GetUserQuery`, return `200 OK` with a
   `UserResponse` (T011) when found, `404 Not Found` with generic Problem
   Details when not, per `contracts/users-api.md`.
-- [ ] T026 [US2] Extend
+- [ ] T027 [US2] Extend
   `src/GaussAuth.Api/DependencyInjection/applicationServiceCollectionExtensions.extension.cs`
   to register the `GetUser` handler (scoped).
-- [ ] T027 [US2] Run
+- [ ] T028 [US2] Run
   `tests/GaussAuth.Foundation.Tests/userRetrievalTests.test.cs` and the
   corresponding `quickstart.md` section 4 "retrieve" scenario; confirm both
   acceptance scenarios from spec User Story 2 pass.
@@ -310,7 +341,7 @@ email or credentials.
 values and confirm only the profile changes; attempt to change the login
 email through the same operation and confirm it is rejected.
 
-- [ ] T028 [US3] Add
+- [ ] T029 [US3] Add
   `tests/GaussAuth.Foundation.Tests/profileUpdateTests.test.cs` against
   `PUT /users/{id}/profile`: valid `firstName`/`lastName`/`displayName`
   (each required, max 100 chars per `data-model.md`), optional
@@ -324,38 +355,40 @@ email through the same operation and confirm it is rejected.
   user demonstrate last-write-wins (the second update's values persist,
   consistent with the "Concurrency and consistency" clarification — no
   `409` is produced for a second successful write). Confirm this test
-  compiles but fails before T029-T034 are implemented.
-- [ ] T029 [US3] Create
+  compiles but fails before T030-T035 are implemented.
+- [ ] T030 [US3] Create
   `src/GaussAuth.Application/Users/Profiles/updateProfile.command.cs` with
   an `UpdateProfileCommand` carrying the target `Guid` id and the permitted
   profile fields (`firstName`, `lastName`, `displayName`, `phoneNumber`,
   `avatarReference`) — no email field.
-- [ ] T030 [US3] Create
+- [ ] T031 [US3] Create
   `src/GaussAuth.Application/Users/Profiles/updateProfile.result.cs` with an
   `UpdateProfileResult` exposing `Success(User user)`, `NotFound()`, and
   `ValidationFailed(...)` outcomes.
-- [ ] T031 [US3] Create
+- [ ] T032 [US3] Create
   `src/GaussAuth.Application/Users/Profiles/updateProfile.handler.cs`:
   load the user via `IUserRepository.GetByIdAsync`; if null, return
   `NotFound()`; otherwise call `user.UpdateProfile(...)` (T002/T003) and
   `IUserRepository.SaveChangesAsync`, returning `Success(user)`. Never
-  touches `Email`/`NormalizedEmail`/credential state (FR-013).
-- [ ] T032 [US3] Create
+  touches `Email`/`NormalizedEmail`/credential state (FR-013). Log one
+  structured `ILogger` entry per invocation containing only the user id and
+  outcome (updated/not found) (FR-021).
+- [ ] T033 [US3] Create
   `src/GaussAuth.Api/Users/updateProfileRequest.dto.cs` with Data
   Annotations matching `data-model.md`: `FirstName` required, max length
   100; `LastName` required, max length 100; `DisplayName` required, max
   length 100; `PhoneNumber` optional, max length 32; `AvatarReference`
   optional, max length 2048. No `Email` property exists on this type.
-- [ ] T033 [US3] Extend
+- [ ] T034 [US3] Extend
   `src/GaussAuth.Api/Users/usersEndpoints.extension.cs` with
   `PUT /users/{id}/profile`: validate the request DTO, dispatch
   `UpdateProfileCommand`, translate `UpdateProfileResult` to `200 OK` (with
   the updated `UserResponse`), `404 Not Found`, or `400`
   `ValidationProblemDetails`, per `contracts/users-api.md`.
-- [ ] T034 [US3] Extend
+- [ ] T035 [US3] Extend
   `src/GaussAuth.Api/DependencyInjection/applicationServiceCollectionExtensions.extension.cs`
   to register the `UpdateProfile` handler (scoped).
-- [ ] T035 [US3] Run
+- [ ] T036 [US3] Run
   `tests/GaussAuth.Foundation.Tests/profileUpdateTests.test.cs` and the
   corresponding `quickstart.md` section 4 "update profile" scenario;
   confirm all three acceptance scenarios from spec User Story 3 pass.
@@ -376,7 +409,7 @@ changes while the record and profile remain intact and retrievable;
 reactivate it and confirm it returns to active state; repeating either
 transition is a safe no-op, not an error.
 
-- [ ] T036 [US4] Add
+- [ ] T037 [US4] Add
   `tests/GaussAuth.Foundation.Tests/userActivationTests.test.cs` against
   `POST /users/{id}/activate` and `POST /users/{id}/deactivate`: an active
   user deactivated → `200 OK` with `isActive: false` and `updatedAt`
@@ -386,26 +419,30 @@ transition is a safe no-op, not an error.
   inactive user reactivated → `200 OK` with `isActive: true`; reactivating
   it again → `200 OK`, unchanged, idempotent; an unknown identifier on
   either route → `404 Not Found`. Confirm this test compiles but fails
-  before T037-T040 are implemented.
-- [ ] T037 [US4] Create
+  before T038-T041 are implemented.
+- [ ] T038 [US4] Create
   `src/GaussAuth.Application/Users/ActivateUser/activateUser.handler.cs`:
   load the user via `IUserRepository.GetByIdAsync`; if null, signal
   not-found; otherwise call `user.Activate(now)` (T002, idempotent) and
   `IUserRepository.SaveChangesAsync`; return the (possibly unchanged) user.
-- [ ] T038 [US4] Create
+  Log one structured `ILogger` entry per invocation containing only the
+  user id and whether the state actually changed (FR-021).
+- [ ] T039 [US4] Create
   `src/GaussAuth.Application/Users/DeactivateUser/deactivateUser.handler.cs`:
-  same shape as T037 but calling `user.Deactivate(now)`. Must not perform
-  any physical deletion of the user or profile row (FR-014).
-- [ ] T039 [US4] Extend
+  same shape as T038 but calling `user.Deactivate(now)`. Must not perform
+  any physical deletion of the user or profile row (FR-014). Log one
+  structured `ILogger` entry per invocation containing only the user id and
+  whether the state actually changed (FR-021).
+- [ ] T040 [US4] Extend
   `src/GaussAuth.Api/Users/usersEndpoints.extension.cs` with
   `POST /users/{id}/activate` and `POST /users/{id}/deactivate`: dispatch to
   the corresponding handler, return `200 OK` with the current
   `UserResponse` on success (whether or not the state actually changed), or
   `404 Not Found` for an unknown identifier, per `contracts/users-api.md`.
-- [ ] T040 [US4] Extend
+- [ ] T041 [US4] Extend
   `src/GaussAuth.Api/DependencyInjection/applicationServiceCollectionExtensions.extension.cs`
   to register the `ActivateUser` and `DeactivateUser` handlers (scoped).
-- [ ] T041 [US4] Run
+- [ ] T042 [US4] Run
   `tests/GaussAuth.Foundation.Tests/userActivationTests.test.cs` and the
   corresponding `quickstart.md` section 4 "deactivate/activate" scenario;
   confirm all three acceptance scenarios from spec User Story 4 pass.
@@ -419,28 +456,32 @@ ready for Polish.
 
 **Purpose**: Validate the complete feature and remove accidental scope.
 
-- [ ] T042 Review every file touched by T002-T040 for the constitutional
+- [ ] T043 Review every file touched by T002-T041 for the constitutional
   reference direction (Domain has no EF Core/ASP.NET Core/Identity
   reference; Application depends only on Domain and its own ports;
   Infrastructure/API implement those ports), the one-type/filename
-  convention, explicit field length limits matching `data-model.md`, and
-  absence of caller authentication/authorization code (FR-023), rate
-  limiting, email-change support, or any application/membership/role/
-  permission/session scope; fix only concrete violations. `ArchitectureTests`
-  from `001-foundation` already enforces the reference-direction and
-  filename rules automatically — use it to confirm, not duplicate it.
-- [ ] T043 Run every command in `specs/002-users-profiles/quickstart.md`
+  convention, explicit field length and format limits matching
+  `data-model.md`, the `"user-creation"` rate-limit policy being applied to
+  `POST /users` only (not the other four routes, per `research.md`), and
+  absence of caller authentication/authorization code (FR-023),
+  email-change support, or any application/membership/role/permission/
+  session scope; fix only concrete violations. `ArchitectureTests` from
+  `001-foundation` already enforces the reference-direction and filename
+  rules automatically — use it to confirm, not duplicate it.
+- [ ] T044 Run every command in `specs/002-users-profiles/quickstart.md`
   from the existing development container, including the build, both
-  migrations (apply and reapply), starting the API, all five
-  `/users` scenarios from `contracts/users-api.md`, the full test run, and
-  the stop/recreate lifecycle; update `quickstart.md` to the verified
-  commands and expected outcomes.
-- [ ] T044 Review API responses and structured logs for the five new
+  migrations (apply and reapply), starting the API, all five `/users`
+  scenarios from `contracts/users-api.md`, the rate-limit scenario, the full
+  test run, and the stop/recreate lifecycle; update `quickstart.md` to the
+  verified commands and expected outcomes.
+- [ ] T045 Review API responses and structured logs for the five new
   routes for committed secrets, password/password-hash/security-stamp
   leakage, and unnecessary exposure of persistence or Identity internals
-  (FR-020/FR-021); confirm no full request payload containing a password is
-  logged; correct any finding.
-- [ ] T045 Perform the final clean build and full essential test run with
+  (FR-020/FR-021); confirm the log line added in T016/T025/T032/T038/T039
+  contains only a user id and outcome, never a password, hash, or security
+  stamp; confirm no full request payload containing a password is logged;
+  correct any finding.
+- [ ] T046 Perform the final clean build and full essential test run with
   `GaussAuth.slnx` from the SDK container; confirm exactly two migrations
   exist (`001-foundation`'s initial migration plus this feature's) and that
   the five routes match `contracts/users-api.md` exactly (no extra route);
@@ -457,18 +498,21 @@ ready for Polish.
 - T002-T003 (Domain) block T004-T009 (ports/Infrastructure depend on the
   entity shapes); T006 blocks T010 (migration needs the mapping); T010
   blocks T012 (schema test needs the migration applied).
-- T013 (tests) is written before T014-T020 (implementation) per the
-  story's TDD note; the same pattern repeats for T022, T028, and T036.
-- US2-US4 each reuse `usersEndpoints.extension.cs` (T018) and
-  `applicationServiceCollectionExtensions.extension.cs` (T020), extending
+- T013 (tests) is written before T014-T021 (implementation) per the
+  story's TDD note; the same pattern repeats for T023, T029, and T037.
+- T018 (rate-limiter policy registration) blocks T019 (mapping `POST
+  /users` with `.RequireRateLimiting(...)`), which in turn needs T020's
+  `app.UseRateLimiter()` call to take effect at runtime.
+- US2-US4 each reuse `usersEndpoints.extension.cs` (T019) and
+  `applicationServiceCollectionExtensions.extension.cs` (T021), extending
   rather than replacing them — later stories must not revert an earlier
   story's route or registration.
 
 ### User Story Dependencies
 
 - **US1**: Depends only on the Foundational phase; no other story
-  dependency. Independently proves creation, validation, and duplicate/
-  concurrent-email rejection.
+  dependency. Independently proves creation, validation (including email
+  format), duplicate/concurrent-email rejection, and rate limiting.
 - **US2**: Depends on the Foundational phase and reuses US1's
   `usersEndpoints.extension.cs`/DI-registration files, but has an
   independent retrieval contract and test; does not require US1's specific
@@ -505,13 +549,14 @@ agent example is supplied.
 ### MVP First (User Story 1 Only)
 
 1. Complete Setup and Foundational phases.
-2. Complete US1 and validate creation, validation, and duplicate/concurrent
-   normalized-email rejection independently.
+2. Complete US1 and validate creation, validation, duplicate/concurrent
+   normalized-email rejection, and rate limiting independently.
 3. Continue to US2, US3, and US4 only after the US1 checkpoint passes.
 
 ### Incremental Delivery
 
-1. US1 makes a global user with a profile creatable and persisted.
+1. US1 makes a global user with a profile creatable, persisted, and
+   rate-limited.
 2. US2 makes that user and profile readable without leaking credentials.
 3. US3 makes the profile safely editable without touching login identity.
 4. US4 makes the identity's active/inactive lifecycle controllable without
@@ -526,10 +571,10 @@ included.
 
 - Task IDs are strictly sequential and every story-phase task has its story
   label and a concrete path.
-- Testing is limited to the creation, duplicate-email, retrieval,
-  profile-update, activation/deactivation, and migration/persistence
-  behaviors identified in the specification; `ArchitectureTests` already
-  covers Domain/Application boundary protection for the new files without
-  any new test.
+- Testing is limited to the creation, duplicate-email, email-format,
+  rate-limit, retrieval, profile-update, activation/deactivation, and
+  migration/persistence behaviors identified in the specification;
+  `ArchitectureTests` already covers Domain/Application boundary protection
+  for the new files without any new test.
 - A single agent should finish each checkpoint before moving on;
   independent files alone do not authorize parallel execution.

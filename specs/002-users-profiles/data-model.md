@@ -106,17 +106,22 @@ exposes an inherited `DbSet<IdentityUser<Guid>> Users` mapped to table
 `UserProfiles` tables (plus their indexes/constraints) — no application,
 membership, role, permission, or session table, consistent with FR-016.
 
-## Request/response field limits (enforced at the API boundary, FR-019)
+## Request/response field limits (enforced at the API boundary, FR-006/FR-019)
 
-| Field | Required | Max length |
-|---|---|---|
-| Email | yes | 256 |
-| Password (creation only) | yes | 128 (presence + max length only; complexity is Identity's configured policy) |
-| FirstName | yes | 100 |
-| LastName | yes | 100 |
-| DisplayName | yes | 100 |
-| PhoneNumber | no | 32 |
-| AvatarReference | no | 2048 |
+| Field | Required | Max length | Format |
+|---|---|---|---|
+| Email | yes | 256 | Valid email address (`[EmailAddress]`); rejected otherwise (FR-006) |
+| Password (creation only) | yes | 128 | Presence + max length only; complexity is Identity's configured policy |
+| FirstName | yes | 100 | — |
+| LastName | yes | 100 | — |
+| DisplayName | yes | 100 | — |
+| PhoneNumber | no | 32 | — |
+| AvatarReference | no | 2048 | — |
+
+`POST /users` is additionally rate-limited per caller (FR-024); see
+`contracts/users-api.md` for the `429` response shape and
+`research.md`'s "Rate limiting for anonymous credential creation" for the
+configuration keys and defaults.
 
 ## Boundary map
 

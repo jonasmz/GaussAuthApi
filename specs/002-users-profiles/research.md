@@ -155,6 +155,32 @@ validated field-by-field and must reject an email change). Email-lookup
 retrieval (FR-011, "MAY") is not implemented in this feature; no caller
 needs it yet, and it can be added later without restructuring.
 
+## Operation logging
+
+**Decision**: Each handler (`CreateUser`, `GetUser`, `UpdateProfile`,
+`ActivateUser`, `DeactivateUser`) logs one structured `ILogger` entry per
+invocation using only non-sensitive fields — the user id and the outcome
+(e.g. "user {UserId} created", "user {UserId} activated",
+"duplicate email rejected for creation attempt") — via the standard
+`Microsoft.Extensions.Logging` abstraction already used throughout the
+solution. No field ever includes the email, password, password hash, or any
+Identity security stamp/token.
+
+**Rationale**: FR-021 requires that logging for these operations, if
+present, use the existing structured logging foundation and exclude
+sensitive values; adding a minimal, consistent log line per operation keeps
+these five routes operationally observable the same way `001-foundation`'s
+startup/error paths already are, without logging anything the constitution
+or FR-021 prohibits.
+
+**Alternatives considered**: Omitting operation logging entirely would
+leave these routes less observable than the rest of the solution for no
+stated reason. A dedicated audit-event subsystem is unnecessary: the
+constitution's mandatory audit-event list (login, lockout, password
+change/recovery/reset, session revocation, role/permission change) does not
+include user creation/activation in this feature, so plain structured
+logging is proportionate.
+
 ## Test project placement
 
 **Decision**: Add feature-specific test files to the existing
@@ -175,17 +201,61 @@ becomes unwieldy; that is not yet the case after one prior feature.
 ## Field length limits (explicit, per constitution Security constraint)
 
 **Decision**: Request DTOs enforce these explicit maximums (full rationale
-and field list in `data-model.md`): email 256 chars, password 128 chars
-(minimum presence-only here; Identity's configured `PasswordOptions` governs
-complexity at credential-creation time), first/last/display name 100 chars
-each, phone number 32 chars, avatar reference 2048 chars (URL-length
-headroom).
+and field list in `data-model.md`): email 256 chars **and valid email
+format** (`[EmailAddress]`), password 128 chars (minimum presence-only here;
+Identity's configured `PasswordOptions` governs complexity at
+credential-creation time), first/last/display name 100 chars each, phone
+number 32 chars, avatar reference 2048 chars (URL-length headroom). Overall
+request-body size is not given a feature-specific override: every field
+above is already length-bounded, so the resulting JSON body for any of the
+five routes is small and well within ASP.NET Core/Kestrel's platform
+default (30 MB); this is a deliberate choice, not an oversight, because
+introducing a separate, smaller body-size limit would add configuration
+surface without a concrete risk it mitigates beyond what the per-field
+limits already cover.
 
-**Rationale**: FR-019 and the constitution's "Endpoints MUST define
+**Rationale**: FR-006/FR-019 and the constitution's "Endpoints MUST define
 reasonable use-case limits... MUST NOT rely solely on framework defaults"
-both require explicit, reviewable limits rather than unlimited `string`
-fields.
+both require explicit, reviewable limits — including email format, not only
+length — rather than unlimited or format-unchecked `string` fields.
 
 **Alternatives considered**: Relying on PostgreSQL column length alone would
 turn a validation concern into a database exception, which FR-019
-explicitly disallows as the normal rejection path.
+explicitly disallows as the normal rejection path. A dedicated, smaller
+`RequestSizeLimit` per route was considered and rejected as unneeded
+complexity given the per-field limits already bound payload size.
+
+## Rate limiting for anonymous credential creation
+
+**Decision**: `POST /users` is rate-limited using ASP.NET Core's built-in
+`Microsoft.AspNetCore.RateLimiting` middleware (shared-framework, no new
+package) with a named fixed-window policy `"user-creation"`, partitioned by
+remote IP address. The permit limit and window are read from configuration
+(`RateLimiting:UserCreation:PermitLimit`, default `5`;
+`RateLimiting:UserCreation:WindowSeconds`, default `60`) rather than
+hard-coded, registered in
+`apiServiceCollectionExtensions.extension.cs`'s `AddApiServices(...)`, with
+`app.UseRateLimiter()` added to `Program.cs` before endpoint mapping and
+`.RequireRateLimiting("user-creation")` applied only to the `POST /users`
+route. A request rejected by the limiter returns the middleware's built-in
+`429 Too Many Requests` with a `Retry-After` header; no user, profile, or
+credential is created.
+
+**Rationale**: FR-024 and the constitution's "Abuse-prone public or
+anonymous endpoints MUST use rate limiting when implemented, including...
+anonymous credential operations" directly apply here: `POST /users` creates
+an Identity credential (FR-009) and enforces no caller authentication
+(FR-023), making it exactly the kind of anonymous credential operation the
+constitution requires to be rate-limited. Scoping the limiter to only this
+route (not retrieval/update/activation/deactivation) follows the
+constitution's own wording, which ties the requirement to operations that
+create or handle credentials/abuse-prone public access — the other four
+routes act on an already-created identity and carry no comparable
+credential-creation risk in this feature.
+
+**Alternatives considered**: Skipping rate limiting and relying on a
+deployment-level/network restriction (the position taken before this
+decision) would leave the constitutional MUST unenforced by anything this
+feature actually implements, which is not an acceptable substitute for an
+explicit control. A third-party rate-limiting library was rejected since
+the built-in middleware is sufficient and avoids an unjustified dependency.

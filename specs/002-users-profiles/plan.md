@@ -19,8 +19,11 @@ API adds five Minimal API routes under `/users`, reusing the Problem Details
 and safe-exception-handling foundation from `001-foundation`. User creation
 runs Identity credential provisioning and domain/profile persistence inside
 one database transaction so no partial state survives a mid-operation
-failure. No caller authentication, rate limiting, or email-change capability
-is added, per the feature's clarified scope.
+failure. Because user creation is an anonymous credential operation (no
+caller authentication, per FR-023), `POST /users` is rate-limited using
+ASP.NET Core's built-in rate-limiting middleware (FR-024), with a
+configurable permit limit and window. No caller authentication or
+email-change capability is added, per the feature's clarified scope.
 
 ## Technical Context
 
@@ -30,9 +33,12 @@ is added, per the feature's clarified scope.
 **Primary Dependencies**: ASP.NET Core Web API (Minimal APIs), ASP.NET Core
 Identity EF store, EF Core 10, Npgsql.EntityFrameworkCore.PostgreSQL 10 — all
 already pinned by `001-foundation`. `Microsoft.Extensions.Identity.Core`'s
-`ILookupNormalizer` is reused for email normalization. No new third-party
-package is introduced; validation uses built-in
-`System.ComponentModel.DataAnnotations` plus Minimal API's native
+`ILookupNormalizer` is reused for email normalization.
+`Microsoft.AspNetCore.RateLimiting` (part of the ASP.NET Core shared
+framework since .NET 7; no new package reference) provides the fixed-window
+limiter for `POST /users`. No new third-party package is introduced;
+validation uses built-in `System.ComponentModel.DataAnnotations`
+(including `[EmailAddress]` for email format) plus Minimal API's native
 `TypedResults.ValidationProblem`.
 
 **Storage**: PostgreSQL 17 via the existing `AuthenticationDbContext`,
@@ -56,11 +62,13 @@ unchanged from the foundation (no streaming, pagination, or bulk operation
 is in scope).
 
 **Constraints**: No new runtime dependency; no custom password hashing; no
-caller authentication/authorization in this feature (FR-023); login email
-immutable via profile update (FR-013); last-write-wins profile-update
-concurrency (clarified); idempotent activate/deactivate (clarified); every
-request DTO enforces an explicit field length limit (constitution Security
-constraint).
+caller authentication/authorization in this feature (FR-023); `POST /users`
+is rate-limited with a configurable permit limit/window (FR-024), since it
+is the only operation that creates a credential; login email immutable via
+profile update (FR-013); last-write-wins profile-update concurrency
+(clarified); idempotent activate/deactivate (clarified); every request DTO
+enforces an explicit field length limit, including email format validation
+(constitution Security constraint).
 
 **Scale/Scope**: One new migration, two new Domain types, five Application
 use cases, two Application ports, two Infrastructure adapters, five API
@@ -79,7 +87,7 @@ session table or endpoint.
 | Multi-application roles and least privilege | N/A (deferred) | No role, permission, application, or membership concept is touched by this feature; left to `003-applications-memberships` as scoped by the constitution. |
 | Fixed stack and migration governance | PASS | .NET 10, EF Core 10/Npgsql, PostgreSQL 17, ASP.NET Core Identity — all already pinned; one version-controlled migration adds only `Users`/`UserProfiles` schema. |
 | Container development rule | PASS | Reuses `compose.dev.yml`'s `postgres`/`sdk` services; no new container. |
-| Security, configuration, errors, and logging | PASS | Email/password handled only by Identity; Problem Details/safe exception handler extended, not replaced; structured logging excludes passwords/hashes/security stamps; explicit per-field length limits (see `data-model.md`). Caller authentication is explicitly out of scope per the spec's Clarifications session (FR-023) — these routes are not deployed as public endpoints; the real access boundary is a decision for the future authentication/authorization feature, consistent with the constitution's undecided-until-specified list. |
+| Security, configuration, errors, and logging | PASS | Email/password handled only by Identity; Problem Details/safe exception handler extended, not replaced; each handler logs its operation (user id and outcome only — never password, hash, or security stamp); explicit per-field length limits including email format (see `data-model.md`). Caller authentication is explicitly out of scope per the spec's Clarifications session (FR-023) — this is a real, intentional scope boundary for this feature (the future authentication/authorization feature owns the access boundary), not an assumption about deployment. Because this makes `POST /users` an anonymous credential operation, it is rate-limited per FR-024 using ASP.NET Core's built-in rate-limiting middleware with a configurable limit, satisfying the constitution's "abuse-prone public or anonymous endpoints MUST use rate limiting... including... anonymous credential operations" requirement; retrieval/update/activation/deactivation do not create a credential and are not rate-limited by this feature. |
 | Simplicity and dependency governance | PASS | No new package; two small ports (not a generic repository or mediator framework); a per-operation result type replaces exceptions for expected failures without introducing a generic result framework; existing test project is reused instead of adding a second one. |
 | Essential tests and C# file convention | PASS | Tests cover creation, duplicate-email rejection, retrieval, profile update, activation/deactivation, and migration/persistence; existing `ArchitectureTests` already enforce the one-type/filename rule and forbidden-reference checks across the unchanged project set. |
 | Spec-Kit workflow and agent rules | PASS | Plan follows the clarified spec; one sequential agent; tasks will derive from this plan. |
@@ -147,16 +155,17 @@ src/
     │   ├── updateProfileRequest.dto.cs
     │   └── userResponse.dto.cs
     ├── DependencyInjection/
-    │   └── applicationServiceCollectionExtensions.extension.cs     # Extended
-    └── Program.cs                                                  # Extended: MapUsersEndpoints()
+    │   ├── applicationServiceCollectionExtensions.extension.cs     # Extended
+    │   └── apiServiceCollectionExtensions.extension.cs              # Extended: AddRateLimiter "user-creation" policy
+    └── Program.cs                                                  # Extended: MapUsersEndpoints(), UseRateLimiter()
 
 tests/
 └── GaussAuth.Foundation.Tests/
+    ├── usersSchemaMigrationTests.test.cs
     ├── createUserTests.test.cs
     ├── userRetrievalTests.test.cs
     ├── profileUpdateTests.test.cs
-    ├── userActivationTests.test.cs
-    └── userPersistenceTests.test.cs
+    └── userActivationTests.test.cs
 ```
 
 **Structure Decision**: New Domain/Application content lives under a `Users/`
