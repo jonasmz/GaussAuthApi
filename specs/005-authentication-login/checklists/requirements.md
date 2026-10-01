@@ -31,4 +31,4 @@
 
 ## Notes
 
-- No [NEEDS CLARIFICATION] markers were needed: the candidate ambiguities named in the feature description (application identification by code vs. id, uniform failure semantics, lockout/rate-limit configuration ownership) each had a reasonable default already implied by prior features (003-applications-memberships, 004-roles-permissions) and are recorded in the spec's Assumptions section instead.
+- No [NEEDS CLARIFICATION] markers were needed. Two high-impact ambiguities were resolved through `/speckit-clarify` on 2026-10-01 (application identification by stable code only; lockout shares the uniform failure contract while rate limiting may use its own distinct response) and are recorded in the Clarifications section and reflected in the affected requirements/scenarios. Remaining candidate ambiguities from the feature description had reasonable defaults already implied by prior features and are recorded in the Assumptions section.

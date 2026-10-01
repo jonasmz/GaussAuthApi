@@ -8,6 +8,13 @@
 
 **Input**: User description: "Create feature `005-authentication-login` for the reusable generic Authentication and Authorization API."
 
+## Clarifications
+
+### Session 2026-10-01
+
+- Q: How should the login request identify the target application — stable code, stable identifier, or either? → A: Only the stable application code.
+- Q: Must a lockout rejection and a rate-limit rejection be externally indistinguishable from a normal invalid-credentials rejection? → A: Rate limiting may use its own distinct response (it is a separate HTTP-layer mechanism, consistent with the existing rate-limiting policies elsewhere in the API); account lockout shares the same uniform failure contract as the other credential/state rejections, since it is reached through the authentication use case itself.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Authenticate Into an Active Application (Priority: P1)
@@ -72,7 +79,8 @@ Repeated invalid login attempts against one account must eventually lock that ac
 1. **Given** repeated invalid password attempts against one account reach the configured lockout threshold, **When** a further login attempt is made with the correct password, **Then** authentication still fails because the account is locked out.
 2. **Given** a locked-out account, **When** lockout state is inspected internally, **Then** it is managed through the existing Identity lockout mechanism rather than a custom mechanism.
 3. **Given** login requests from one source exceed the configured rate limit within the configured window, **When** an additional request is submitted in that window, **Then** the request is rejected by rate limiting before credential validation occurs.
-4. **Given** a rate-limited or locked-out rejection, **When** the response is inspected, **Then** it remains a safe, non-revealing response consistent with other authentication failures where practical for the mechanism involved.
+4. **Given** a locked-out account's rejection, **When** the response is inspected, **Then** it is the same uniform, safe failure outcome used for other credential and state rejections in User Story 2, revealing nothing about the lockout.
+5. **Given** a rate-limited rejection, **When** the response is inspected, **Then** it may use a distinct, standard "too many requests" response, since rate limiting is a separate request-layer protection that rejects the request before the authentication use case runs.
 
 ---
 
@@ -105,18 +113,18 @@ Every meaningful authentication attempt produces an internal security event capt
 
 ### Functional Requirements
 
-- **FR-001**: System MUST accept a login request that specifies, at minimum, the target application context, an email, and a password.
+- **FR-001**: System MUST accept a login request that specifies, at minimum, the target application's stable code, an email, and a password.
 - **FR-002**: System MUST normalize the submitted email using the same normalization semantics already established for user identity in `002-users-profiles` before resolving the corresponding account.
 - **FR-003**: System MUST validate the submitted password against ASP.NET Core Identity's existing credential-verification capability and MUST NOT implement or substitute any custom password hashing or comparison logic.
 - **FR-004**: System MUST require, for authentication to succeed, that the user exists, the user is active, the target application exists, the target application is active, the user has an application membership for the target application, that membership is active, and the submitted password is valid; authentication MUST fail if any one of these conditions is not satisfied.
 - **FR-005**: System MUST NOT automatically reactivate an inactive user, an inactive application, or an inactive membership as a side effect of a login attempt.
 - **FR-006**: System MUST evaluate membership state independently per application; an active membership in one application MUST NOT permit authentication in a different application, and an inactive or missing membership in one application MUST NOT affect authentication in another application where the user holds an active membership.
-- **FR-007**: System MUST return a uniform, safe failure outcome for every expected rejection reason — including unknown email, incorrect password, inactive user, invalid or inactive application, and missing or inactive membership — such that the externally observable response does not reveal which specific condition caused the rejection.
+- **FR-007**: System MUST return a uniform, safe failure outcome for every expected rejection reason reached through the authentication use case — including unknown email, incorrect password, inactive user, invalid or inactive application, missing or inactive membership, and account lockout — such that the externally observable response does not reveal which specific condition caused the rejection. Rate limiting is excluded from this uniformity requirement because it rejects the request before the authentication use case runs (see FR-012).
 - **FR-008**: System MUST NOT log, persist outside existing Identity credential storage, return in any response, or include in any exception or telemetry the plaintext password submitted during a login attempt.
 - **FR-009**: System MUST produce, for a successful authentication, a result that includes at minimum the stable user identifier, the stable application identifier, and a successful outcome indicator, sufficient for a subsequent session-establishment feature to act upon.
 - **FR-010**: System MUST keep authentication and authorization as separate concerns; a successful login MUST establish identity and application/membership validity only, and MUST NOT be required to embed roles or effective permissions into the authentication result.
 - **FR-011**: System MUST apply ASP.NET Core Identity's account lockout behavior to the login flow, such that repeated invalid password attempts against one account can contribute to lockout, and MUST reject authentication for a currently locked-out account even when the submitted password is correct.
-- **FR-012**: System MUST apply rate limiting to the login endpoint, independent of Identity lockout, such that excessive login requests from one source within a configured window are rejected before reaching credential validation.
+- **FR-012**: System MUST apply rate limiting to the login endpoint, independent of Identity lockout, such that excessive login requests from one source within a configured window are rejected before reaching credential validation; this rejection MAY use a distinct, standard "too many requests" response rather than the uniform failure outcome required by FR-007, since it is a separate request-layer protection and not a credential or account-state decision.
 - **FR-013**: Lockout thresholds, lockout duration, and rate-limit thresholds and windows MUST be externally configurable rather than fixed in domain logic.
 - **FR-014**: System MUST record a security event for each meaningful authentication attempt outcome, at minimum successful login, failed login, and account lockout where practical, and these events MUST NOT contain the submitted password, a password hash, or any other authentication secret.
 - **FR-015**: System MUST validate login request input — including presence of application context, presence and basic format of the email, presence of the password, and reasonable maximum field lengths — and MUST reject invalid input without echoing the submitted password back to the caller.
@@ -135,7 +143,7 @@ Every meaningful authentication attempt produces an internal security event capt
 ### Measurable Outcomes
 
 - **SC-001**: A user with valid credentials, an active account, an active target application, and an active membership can authenticate successfully in a single request.
-- **SC-002**: 100% of tested rejection scenarios (unknown email, wrong password, inactive user, inactive or missing application, missing or inactive membership) return the same externally observable failure shape, with zero scenarios distinguishable from one another by an external caller.
+- **SC-002**: 100% of tested credential/account-state rejection scenarios (unknown email, wrong password, inactive user, inactive or missing application, missing or inactive membership, account lockout) return the same externally observable failure shape, with zero scenarios distinguishable from one another by an external caller; rate-limit rejections are excluded from this uniformity since they are a separate request-layer protection.
 - **SC-003**: 100% of tested successful and failed authentication attempts produce zero occurrences of the submitted password or any password-derived secret in logs, responses, or recorded security events.
 - **SC-004**: A user holding an active membership in one application and no active membership in a second application can authenticate in the first and is rejected in the second, in 100% of tested cases, with no cross-application leakage.
 - **SC-005**: An account that reaches the configured invalid-attempt threshold becomes unable to authenticate even with the correct password until lockout clears, in 100% of tested lockout scenarios.
@@ -145,7 +153,7 @@ Every meaningful authentication attempt produces an internal security event capt
 ## Assumptions
 
 - Email normalization reuses the identity-resolution semantics already established in `002-users-profiles`; no new normalization rule is introduced by this feature.
-- The application context in the login request may be satisfied by either the stable application identifier or the stable application code already defined in `003-applications-memberships`; the precise request shape is a planning-level detail, not a specification-level constraint, since both identifiers already uniquely resolve one application.
+- The login request identifies the target application exclusively by its stable application code, already defined in `003-applications-memberships`; the server resolves the corresponding application identifier internally and does not accept the raw application identifier as a login input.
 - "Safe, generic failure response" means the rejection reason is not distinguishable externally; it does not require the response body to be byte-for-byte identical across all failure types where incidental differences (such as standard HTTP status semantics) are themselves unavoidable artifacts of the underlying web framework rather than a disclosed cause. Internal logs and security events may still distinguish the cause for operators.
 - Lockout thresholds and rate-limit thresholds are operational configuration values owned by deployment configuration, not values this specification fixes.
 - Effective permissions from `004-roles-permissions` are not required in the login result for this feature to be considered complete; a future feature may choose to consult them for a clearly justified purpose without this specification mandating it.
