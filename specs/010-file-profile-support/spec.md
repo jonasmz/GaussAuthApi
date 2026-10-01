@@ -93,7 +93,7 @@ The service rejects unsupported, malformed, spoofed, oversized, or unsafe image 
 - **FR-015**: Meaningful avatar update, removal, and security-relevant rejection events MUST be auditable without image bytes, credentials, raw multipart content, or unnecessary filesystem details.
 - **FR-016**: Logs MUST be structured and limited to safe identifiers and operation results. External errors MUST not disclose physical paths, storage-root configuration, raw content, or internal exception types.
 - **FR-017**: Profile-file storage and profile metadata MUST be documented as coordinated backup/restore concerns. Development storage persistence must be deliberate and isolated to this project.
-- **FR-018**: The system MUST not introduce cloud storage, CDN, antivirus infrastructure, media processing, thumbnails, resizing, transcoding, generic storage management, or asynchronous workers.
+- **FR-018**: The system MUST not introduce cloud storage, CDN, antivirus infrastructure, thumbnails, resizing, generic media transformation beyond the required metadata-stripping re-encode, generic storage management, or asynchronous workers.
 
 ### Key Entities
 

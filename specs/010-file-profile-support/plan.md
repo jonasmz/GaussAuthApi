@@ -34,7 +34,7 @@ Provide one global profile avatar per user with authenticated self-service mutat
 
 **Constraints**: JPEG/PNG/WebP only; re-encode stripped metadata before final storage; no filesystem/HTTP dependency in Domain; no cloud storage, resizing, workers, or generic file subsystem
 
-**Scale/Scope**: One avatar reference per global user; public reads only through opaque current/previous references
+**Scale/Scope**: One avatar reference per global user; public reads only through the opaque current reference
 
 ## Constitution Check
 
