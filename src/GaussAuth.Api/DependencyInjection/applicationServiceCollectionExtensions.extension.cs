@@ -5,6 +5,9 @@ using GaussAuth.Application.Users.GetUser;
 using GaussAuth.Application.Users.Profiles;
 using GaussAuth.Application.Applications;
 using GaussAuth.Application.Memberships;
+using GaussAuth.Application.Roles;
+using GaussAuth.Application.Permissions;
+using GaussAuth.Application.Authorization;
 
 namespace GaussAuth.Api.DependencyInjection;
 
@@ -19,6 +22,10 @@ public static class ApplicationServiceCollectionExtensions
         services.AddScoped<DeactivateUserHandler>();
         services.AddScoped<ApplicationService>();
         services.AddScoped<MembershipService>();
+        services.AddScoped<RoleService>();
+        services.AddScoped<PermissionService>();
+        services.AddScoped<RolePermissionService>();
+        services.AddScoped<UserRoleService>();
         return services;
     }
 }
