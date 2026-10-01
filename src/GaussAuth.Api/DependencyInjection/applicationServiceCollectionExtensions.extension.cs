@@ -26,6 +26,7 @@ public static class ApplicationServiceCollectionExtensions
         services.AddScoped<PermissionService>();
         services.AddScoped<RolePermissionService>();
         services.AddScoped<UserRoleService>();
+        services.AddScoped<EffectivePermissionService>();
         return services;
     }
 }

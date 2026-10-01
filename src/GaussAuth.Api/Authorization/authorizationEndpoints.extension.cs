@@ -14,6 +14,7 @@ public static class AuthorizationEndpoints
         app.MapPost("/applications/{applicationId:guid}/users/{userId:guid}/roles/{roleId:guid}", AssignUserRoleAsync);
         app.MapPost("/applications/{applicationId:guid}/users/{userId:guid}/roles/{roleId:guid}/remove", RemoveUserRoleAsync);
         app.MapGet("/applications/{applicationId:guid}/users/{userId:guid}/roles", ListUserRolesAsync);
+        app.MapGet("/applications/{applicationId:guid}/users/{userId:guid}/effective-permissions", GetEffectivePermissionsAsync);
         return app;
     }
 
@@ -54,6 +55,17 @@ public static class AuthorizationEndpoints
 
     private static async Task<IResult> ListUserRolesAsync(Guid applicationId, Guid userId, string? cursor, int? limit, UserRoleService service, CancellationToken ct)
         => UserRolesPage(await service.ListAsync(applicationId, userId, cursor, limit, ct));
+
+    private static async Task<IResult> GetEffectivePermissionsAsync(Guid applicationId, Guid userId, EffectivePermissionService service, CancellationToken ct)
+    {
+        var page = await service.GetAsync(applicationId, userId, ct);
+        return page.Failure switch
+        {
+            "user-not-found" or "application-not-found" => NotFound(),
+            not null => TypedResults.BadRequest(),
+            _ => TypedResults.Ok(new EffectivePermissionListResponse(page.Items.Select(EffectivePermissionResponse.FromDomain).ToArray())),
+        };
+    }
 
     private static IResult RolePermissionsPage(AuthorizationPage<RolePermission> page) => page.Failure switch
     {

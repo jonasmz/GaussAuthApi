@@ -104,16 +104,16 @@ description: "Actionable implementation tasks for application-scoped roles and p
 
 ### Tests for User Story 3
 
-- [ ] T034 [US3] Add integration tests for effective permissions from active user/application/membership/UserRole/Role/RolePermission/Permission paths, duplicate elimination across multiple roles, canonical ordering, and empty result for a user with no qualifying assignment in `tests/GaussAuth.Foundation.Tests/effectivePermissionsTests.test.cs`.
-- [ ] T035 [US3] Add integration tests proving inactive user, application, membership, UserRole, role, RolePermission, and permission each independently exclude affected effective permissions while retaining historical records in `tests/GaussAuth.Foundation.Tests/effectivePermissionsTests.test.cs`.
-- [ ] T036 [US3] Add integration tests proving effective permissions queried for one application never include permissions or role grants from another application, including after membership reactivation in `tests/GaussAuth.Foundation.Tests/effectivePermissionsTests.test.cs`.
+- [X] T034 [US3] Add integration tests for effective permissions from active user/application/membership/UserRole/Role/RolePermission/Permission paths, duplicate elimination across multiple roles, canonical ordering, and empty result for a user with no qualifying assignment in `tests/GaussAuth.Foundation.Tests/effectivePermissionsTests.test.cs`.
+- [X] T035 [US3] Add integration tests proving inactive user, application, membership, UserRole, role, RolePermission, and permission each independently exclude affected effective permissions while retaining historical records in `tests/GaussAuth.Foundation.Tests/effectivePermissionsTests.test.cs`.
+- [X] T036 [US3] Add integration tests proving effective permissions queried for one application never include permissions or role grants from another application, including after membership reactivation in `tests/GaussAuth.Foundation.Tests/effectivePermissionsTests.test.cs`.
 
 ### Implementation for User Story 3
 
-- [ ] T037 [US3] Implement the single targeted active-state-filtered, application-scoped effective permission repository read with distinct permission identities/codes and ascending code order in `src/GaussAuth.Infrastructure/Persistence/userRoleRepository.repository.cs`.
-- [ ] T038 [US3] Implement effective-permission query handling in `src/GaussAuth.Application/Authorization/effectivePermissionService.service.cs`; return a safe not-found result for absent user/application and an empty set for inactive eligibility without modifying assignments.
-- [ ] T039 [US3] Create minimal effective-permission response DTOs exposing only permission id, code, and description in `src/GaussAuth.Api/Authorization/effectivePermissionResponse.dto.cs` and `effectivePermissionListResponse.dto.cs`.
-- [ ] T040 [US3] Register `EffectivePermissionService` in `src/GaussAuth.Api/DependencyInjection/applicationServiceCollectionExtensions.extension.cs` and implement `GET /applications/{applicationId}/users/{userId}/effective-permissions` with explicit context and safe `404` response mapping in `src/GaussAuth.Api/Authorization/authorizationEndpoints.extension.cs`.
+- [X] T037 [US3] Implement the single targeted active-state-filtered, application-scoped effective permission repository read with distinct permission identities/codes and ascending code order in `src/GaussAuth.Infrastructure/Persistence/userRoleRepository.repository.cs`.
+- [X] T038 [US3] Implement effective-permission query handling in `src/GaussAuth.Application/Authorization/effectivePermissionService.service.cs`; return a safe not-found result for absent user/application and an empty set for inactive eligibility without modifying assignments.
+- [X] T039 [US3] Create minimal effective-permission response DTOs exposing only permission id, code, and description in `src/GaussAuth.Api/Authorization/effectivePermissionResponse.dto.cs` and `effectivePermissionListResponse.dto.cs`.
+- [X] T040 [US3] Register `EffectivePermissionService` in `src/GaussAuth.Api/DependencyInjection/applicationServiceCollectionExtensions.extension.cs` and implement `GET /applications/{applicationId}/users/{userId}/effective-permissions` with explicit context and safe `404` response mapping in `src/GaussAuth.Api/Authorization/authorizationEndpoints.extension.cs`.
 
 **Checkpoint**: Effective authorization is unique, fully state-aware, and strictly application-isolated without runtime enforcement.
 
@@ -123,9 +123,9 @@ description: "Actionable implementation tasks for application-scoped roles and p
 
 **Purpose**: Validate persistence, architecture, safe contracts, and end-to-end behavior for the completed feature.
 
-- [ ] T041 Verify every new C# source file has exactly one top-level type and a `<name>.<type>.cs` filename; extend `tests/GaussAuth.Foundation.Tests/architectureTests.test.cs` only if the existing boundary assertion does not cover a new authorization dependency.
-- [ ] T042 Review `src/GaussAuth.Api/Roles/`, `src/GaussAuth.Api/Permissions/`, `src/GaussAuth.Api/Authorization/`, and `src/GaussAuth.Application/` for exact external limits, immutable identifiers, safe Problem Details, identifier/outcome-only logging, explicit application context, and absence of SQL, EF state, PII, IdentityRole reuse, login, tokens, sessions, or runtime enforcement.
-- [ ] T043 Run migration generation/application twice, API curl scenarios for roles/permissions/relationships/effective permissions, and the full Docker test suite from `specs/004-roles-permissions/quickstart.md`; correct only feature-004 artifacts and failures found.
+- [X] T041 Verify every new C# source file has exactly one top-level type and a `<name>.<type>.cs` filename; extend `tests/GaussAuth.Foundation.Tests/architectureTests.test.cs` only if the existing boundary assertion does not cover a new authorization dependency.
+- [X] T042 Review `src/GaussAuth.Api/Roles/`, `src/GaussAuth.Api/Permissions/`, `src/GaussAuth.Api/Authorization/`, and `src/GaussAuth.Application/` for exact external limits, immutable identifiers, safe Problem Details, identifier/outcome-only logging, explicit application context, and absence of SQL, EF state, PII, IdentityRole reuse, login, tokens, sessions, or runtime enforcement.
+- [X] T043 Run migration generation/application twice, API curl scenarios for roles/permissions/relationships/effective permissions, and the full Docker test suite from `specs/004-roles-permissions/quickstart.md`; correct only feature-004 artifacts and failures found.
 
 ## Dependencies and Execution Order
 
