@@ -3,6 +3,8 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
+using GaussAuth.Application.Security;
+using GaussAuth.Application.Security.Ports;
 using GaussAuth.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
@@ -128,6 +130,61 @@ public sealed class SessionsAccessTests
         Assert.AreEqual(HttpStatusCode.OK, thirdValidation.StatusCode);
     }
 
+    [TestMethod]
+    public async Task Eligibility_changes_block_existing_sessions_without_revoking_them()
+    {
+        using var factory = await FactoryAsync(); using var client = factory.CreateClient();
+        var login = await CreateLoginAsync(client);
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", login.AccessToken);
+        var transitions = new[]
+        {
+            ($"/users/{login.UserId}/deactivate", $"/users/{login.UserId}/activate"),
+            ($"/applications/{login.ApplicationId}/deactivate", $"/applications/{login.ApplicationId}/activate"),
+            ($"/applications/{login.ApplicationId}/memberships/{login.UserId}/deactivate", $"/applications/{login.ApplicationId}/memberships/{login.UserId}/activate")
+        };
+
+        foreach (var (deactivatePath, activatePath) in transitions)
+        {
+            using var deactivated = await client.PostAsync(deactivatePath, null);
+            Assert.AreEqual(HttpStatusCode.OK, deactivated.StatusCode);
+            using var validation = await client.PostAsJsonAsync("/auth/session/validate", new { applicationCode = login.ApplicationCode });
+            using var renewal = await client.PostAsync("/auth/session/renew", null);
+            Assert.AreEqual(HttpStatusCode.Unauthorized, validation.StatusCode);
+            Assert.AreEqual(HttpStatusCode.Unauthorized, renewal.StatusCode);
+            using var refusedLogin = await client.PostAsJsonAsync("/auth/login", new { applicationCode = login.ApplicationCode, email = login.Email, password = Password });
+            Assert.AreEqual(HttpStatusCode.Unauthorized, refusedLogin.StatusCode);
+            using var activated = await client.PostAsync(activatePath, null);
+            Assert.AreEqual(HttpStatusCode.OK, activated.StatusCode);
+            using var restored = await client.PostAsJsonAsync("/auth/session/validate", new { applicationCode = login.ApplicationCode });
+            Assert.AreEqual(HttpStatusCode.OK, restored.StatusCode);
+        }
+
+        using var scope = factory.Services.CreateScope();
+        var session = await scope.ServiceProvider.GetRequiredService<AuthenticationDbContext>().Sessions.SingleAsync(item => item.Id == login.SessionId);
+        Assert.IsNull(session.RevokedAt);
+    }
+
+    [TestMethod]
+    public async Task Session_lifecycle_events_are_safe_and_malformed_credentials_are_not_recorded()
+    {
+        var setup = await FactoryWithRecorderAsync();
+        using var factory = setup.Factory; using var client = factory.CreateClient();
+        var login = await CreateLoginAsync(client);
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", login.AccessToken);
+        using var renew = await client.PostAsync("/auth/session/renew", null);
+        using var logout = await client.PostAsync("/auth/logout", null);
+        using var revoked = await client.PostAsJsonAsync("/auth/session/validate", new { applicationCode = login.ApplicationCode });
+        var sessionEvents = setup.Recorder.Events.Where(item => item.SessionId == login.SessionId).Select(item => item.Type).ToList();
+        CollectionAssert.IsSubsetOf(new[] { SecurityEventType.SessionCreated, SecurityEventType.AccessRenewed, SecurityEventType.SessionRevoked, SecurityEventType.LogoutCompleted, SecurityEventType.AccessRejectedRevoked }, sessionEvents);
+        Assert.IsFalse(setup.Recorder.Events.Any(item => item.ToString()!.Contains(login.AccessToken, StringComparison.Ordinal) || item.ToString()!.Contains(Password, StringComparison.Ordinal)));
+
+        var before = setup.Recorder.Events.Count;
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", "malformed");
+        using var malformed = await client.PostAsJsonAsync("/auth/session/validate", new { applicationCode = login.ApplicationCode });
+        Assert.AreEqual(HttpStatusCode.Unauthorized, malformed.StatusCode);
+        Assert.AreEqual(before, setup.Recorder.Events.Count);
+    }
+
     private static async Task<LoginResult> CreateLoginAsync(HttpClient client)
     {
         var email = $"sessions-{Guid.NewGuid():N}@example.test";
@@ -137,7 +194,7 @@ public sealed class SessionsAccessTests
         using var response = await client.PostAsJsonAsync("/auth/login", new { applicationCode, email, password = Password, userId = Guid.NewGuid() });
         Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
         var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement;
-        return new LoginResult(response.Headers.CacheControl?.NoStore == true, userId, applicationId, applicationCode, body.GetProperty("sessionId").GetGuid(), body.GetProperty("accessToken").GetString()!, body.GetProperty("tokenType").GetString()!);
+        return new LoginResult(response.Headers.CacheControl?.NoStore == true, userId, applicationId, applicationCode, email, body.GetProperty("sessionId").GetGuid(), body.GetProperty("accessToken").GetString()!, body.GetProperty("tokenType").GetString()!);
     }
 
     private static async Task<LoginResult> LoginExistingAsync(HttpClient client, string applicationCode, string email)
@@ -145,7 +202,7 @@ public sealed class SessionsAccessTests
         using var response = await client.PostAsJsonAsync("/auth/login", new { applicationCode, email, password = Password });
         Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
         var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement;
-        return new LoginResult(response.Headers.CacheControl?.NoStore == true, body.GetProperty("userId").GetGuid(), body.GetProperty("applicationId").GetGuid(), applicationCode, body.GetProperty("sessionId").GetGuid(), body.GetProperty("accessToken").GetString()!, body.GetProperty("tokenType").GetString()!);
+        return new LoginResult(response.Headers.CacheControl?.NoStore == true, body.GetProperty("userId").GetGuid(), body.GetProperty("applicationId").GetGuid(), applicationCode, email, body.GetProperty("sessionId").GetGuid(), body.GetProperty("accessToken").GetString()!, body.GetProperty("tokenType").GetString()!);
     }
 
     private static JsonElement DecodeJson(string base64Url)
@@ -188,8 +245,33 @@ public sealed class SessionsAccessTests
         return factory;
     }
 
+    private static async Task<(WebApplicationFactory<Program> Factory, RecordingSecurityEventRecorder Recorder)> FactoryWithRecorderAsync()
+    {
+        foreach (var key in ManagedEnvironmentKeys) Environment.SetEnvironmentVariable(key, null);
+        var recorder = new RecordingSecurityEventRecorder();
+        var factory = new WebApplicationFactory<Program>().WithWebHostBuilder(builder => builder.ConfigureServices(services =>
+        {
+            services.RemoveAll<ISecurityEventRecorder>();
+            services.AddSingleton<ISecurityEventRecorder>(recorder);
+        }));
+        using var scope = factory.Services.CreateScope();
+        await scope.ServiceProvider.GetRequiredService<AuthenticationDbContext>().Database.MigrateAsync();
+        return (factory, recorder);
+    }
+
     private static readonly string[] ManagedEnvironmentKeys =
     ["RateLimiting__Login__PermitLimit", "Sessions__SessionLifetimeMinutes", "Sessions__AccessTokenLifetimeMinutes", "Sessions__Issuer", "RateLimiting__SigningKeys__PermitLimit", "RateLimiting__SigningKeys__WindowSeconds", "RateLimiting__SessionCredentials__PermitLimit", "RateLimiting__SessionCredentials__WindowSeconds"];
 
-    private sealed record LoginResult(bool CacheNoStore, Guid UserId, Guid ApplicationId, string ApplicationCode, Guid SessionId, string AccessToken, string TokenType);
+    private sealed record LoginResult(bool CacheNoStore, Guid UserId, Guid ApplicationId, string ApplicationCode, string Email, Guid SessionId, string AccessToken, string TokenType);
+
+    private sealed class RecordingSecurityEventRecorder : ISecurityEventRecorder
+    {
+        public List<(SecurityEventType Type, Guid? UserId, Guid? ApplicationId, Guid? SessionId)> Events { get; } = [];
+
+        public Task RecordAsync(SecurityEventType type, Guid? userId, Guid? applicationId, Guid? sessionId, CancellationToken cancellationToken)
+        {
+            Events.Add((type, userId, applicationId, sessionId));
+            return Task.CompletedTask;
+        }
+    }
 }
