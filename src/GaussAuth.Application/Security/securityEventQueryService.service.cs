@@ -46,7 +46,7 @@ public sealed class SecurityEventQueryService(SessionService sessions, IUserRole
         (query.ToUtc is null || query.ToUtc.Value.Offset == TimeSpan.Zero) &&
         (query.FromUtc is null || query.ToUtc is null || query.FromUtc <= query.ToUtc) &&
         (query.EventType is null || query.EventType.Length <= 128) &&
-        (query.Cursor is null || TryDecodeCursor(query.Cursor, out _));
+        (query.Cursor is null || query.Cursor.Length <= 256 && TryDecodeCursor(query.Cursor, out _));
 
     public static string EncodeCursor(SecurityEvent securityEvent) => Convert.ToBase64String(Encoding.UTF8.GetBytes($"{securityEvent.OccurredAtUtc.UtcTicks:N}:{securityEvent.Id:N}"));
 

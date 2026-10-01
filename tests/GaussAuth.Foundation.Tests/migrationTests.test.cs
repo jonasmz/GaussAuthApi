@@ -76,6 +76,20 @@ public sealed class MigrationTests
         Assert.IsTrue(indexes.Any(index => index.Contains("UNIQUE", StringComparison.Ordinal) &&
                                            index.Contains("NormalizedUserName", StringComparison.Ordinal)));
 
+        var securityEventIndexes = new List<string>();
+        await using (var securityIndexCommand = connection.CreateCommand())
+        {
+            securityIndexCommand.CommandText = "SELECT indexname FROM pg_indexes WHERE schemaname = 'public' AND tablename = 'SecurityEvents'";
+            await using var reader = await securityIndexCommand.ExecuteReaderAsync();
+            while (await reader.ReadAsync()) securityEventIndexes.Add(reader.GetString(0));
+        }
+        CollectionAssert.IsSubsetOf(new[]
+        {
+            "IX_SecurityEvents_OccurredAtUtc_Id", "IX_SecurityEvents_ApplicationId_OccurredAtUtc_Id",
+            "IX_SecurityEvents_UserId_OccurredAtUtc_Id", "IX_SecurityEvents_SessionId_OccurredAtUtc_Id",
+            "IX_SecurityEvents_EventType_OccurredAtUtc_Id"
+        }, securityEventIndexes);
+
         var columns = new Dictionary<string, (string Type, string Nullable)>();
         await using (var columnCommand = connection.CreateCommand())
         {

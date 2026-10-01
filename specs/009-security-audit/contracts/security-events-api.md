@@ -20,6 +20,8 @@ A valid bearer session is required. An application caller needs effective `audit
 
 Items are newest first and responses are `Cache-Control: no-store`. No free-form metadata or secret is returned.
 
+The API also returns `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`, and a safe correlation identifier. Query access is rate limited independently and all filters/cursors are bounded.
+
 ### Failures
 
 `400` invalid filter/range/cursor/page; `401` invalid session; `403` unauthorized scope; `429` audit-query limit. Failures do not disclose entity or reviewer existence.

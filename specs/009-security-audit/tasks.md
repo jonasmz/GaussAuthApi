@@ -70,10 +70,10 @@
 
 **Independent Test**: Send oversized/malformed sensitive input and representative failures, inspect headers/log/event data, and validate deployment documentation contains actual protections and limitations.
 
-- [ ] T019 [US3] Add API hardening middleware for `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`, built-in correlation propagation, and production HTTPS/HSTS behavior in `src/GaussAuth.Api/DependencyInjection/` and `src/GaussAuth.Api/Program.cs`; omit browser-only headers without API value.
-- [ ] T020 [US3] Add configurable request-body and input limits for public/sensitive credentials, password/recovery inputs, audit filters/cursors/page sizes, and authorization-context headers in `src/GaussAuth.Api/` and `src/GaussAuth.Application/` before unnecessary processing.
-- [ ] T021 [US3] Add architecture and integration checks in `tests/GaussAuth.Foundation.Tests/architectureTests.test.cs` and `securityAuditTests.test.cs` proving secrets/tokens/passwords/hashes/stamps/keys/connection data never enter SecurityEvents, logs, DTOs, or external errors and that structured logs resist user-controlled log injection.
-- [ ] T022 [US3] Finalize actual endpoint, rate-limit, lockout, session/revocation, consumer hash/rotation, audit retention, database least-privilege, HTTPS, header, and accepted-limitation guidance in `specs/009-security-audit/security-review.md`, `quickstart.md`, and `contracts/security-events-api.md`.
+- [X] T019 [US3] Add API hardening middleware for `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`, built-in correlation propagation, and production HTTPS/HSTS behavior in `src/GaussAuth.Api/DependencyInjection/` and `src/GaussAuth.Api/Program.cs`; omit browser-only headers without API value.
+- [X] T020 [US3] Add configurable request-body and input limits for public/sensitive credentials, password/recovery inputs, audit filters/cursors/page sizes, and authorization-context headers in `src/GaussAuth.Api/` and `src/GaussAuth.Application/` before unnecessary processing.
+- [X] T021 [US3] Add architecture and integration checks in `tests/GaussAuth.Foundation.Tests/architectureTests.test.cs` and `securityAuditTests.test.cs` proving secrets/tokens/passwords/hashes/stamps/keys/connection data never enter SecurityEvents, logs, DTOs, or external errors and that structured logs resist user-controlled log injection.
+- [X] T022 [US3] Finalize actual endpoint, rate-limit, lockout, session/revocation, consumer hash/rotation, audit retention, database least-privilege, HTTPS, header, and accepted-limitation guidance in `specs/009-security-audit/security-review.md`, `quickstart.md`, and `contracts/security-events-api.md`.
 
 **Checkpoint**: Operators have verified API-safe defaults and a concise, accurate security posture document.
 
@@ -81,9 +81,9 @@
 
 ## Phase 6: Polish and Validation
 
-- [ ] T023 Verify SecurityEvent migration/indexes and all existing critical uniqueness/referential constraints in `tests/GaussAuth.Foundation.Tests/migrationTests.test.cs` and `tests/GaussAuth.Foundation.Tests/securityAuditTests.test.cs`.
-- [ ] T024 Run `dotnet test GaussAuth.slnx` inside the SDK Docker container and execute every scenario in `specs/009-security-audit/quickstart.md`; correct only feature-009 artifacts.
-- [ ] T025 Perform a final source/config/log hygiene scan for feature-009 sensitive values and validate `git diff --check` against `specs/009-security-audit/`, `src/`, and `tests/`.
+- [X] T023 Verify SecurityEvent migration/indexes and all existing critical uniqueness/referential constraints in `tests/GaussAuth.Foundation.Tests/migrationTests.test.cs` and `tests/GaussAuth.Foundation.Tests/securityAuditTests.test.cs`.
+- [X] T024 Run `dotnet test GaussAuth.slnx` inside the SDK Docker container and execute every scenario in `specs/009-security-audit/quickstart.md`; correct only feature-009 artifacts.
+- [X] T025 Perform a final source/config/log hygiene scan for feature-009 sensitive values and validate `git diff --check` against `specs/009-security-audit/`, `src/`, and `tests/`.
 
 ## Dependencies & Execution Order
 

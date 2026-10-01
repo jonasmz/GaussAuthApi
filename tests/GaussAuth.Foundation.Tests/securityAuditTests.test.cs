@@ -73,4 +73,17 @@ public sealed class SecurityAuditTests
         using var mutation = await client.PostAsync("/security-events", null);
         Assert.AreEqual(HttpStatusCode.MethodNotAllowed, mutation.StatusCode);
     }
+
+    [TestMethod]
+    public async Task Api_returns_security_headers_and_safe_internal_error_shape()
+    {
+        using var factory = new WebApplicationFactory<Program>();
+        using var client = factory.CreateClient();
+        using var response = await client.GetAsync("/health/live");
+
+        Assert.AreEqual(HttpStatusCode.NoContent, response.StatusCode);
+        Assert.AreEqual("nosniff", response.Headers.GetValues("X-Content-Type-Options").Single());
+        Assert.AreEqual("no-referrer", response.Headers.GetValues("Referrer-Policy").Single());
+        Assert.IsTrue(response.Headers.Contains("X-Correlation-Id"));
+    }
 }
