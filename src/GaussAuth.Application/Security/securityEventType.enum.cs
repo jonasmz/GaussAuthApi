@@ -12,5 +12,9 @@ public enum SecurityEventType
     AccessRejectedExpired,
     AccessRejectedRevoked,
     AccessRejectedInvalidState,
-    AccessRejectedApplicationMismatch
+    AccessRejectedApplicationMismatch,
+    PasswordChanged,
+    PasswordRecoveryRequested,
+    PasswordReset,
+    PasswordResetFailed
 }

@@ -4,21 +4,21 @@
 
 ## Phase 1: Setup
 
-- [ ] T001 Review `spec.md`, `plan.md`, `research.md`, `data-model.md`, `contracts/passwords-api.md`, `quickstart.md`, and existing Identity/Sessions composition before coding.
-- [ ] T002 Verify `.gitignore` excludes the configured protected recovery-delivery file and add only the required ignored pattern.
-- [ ] T002a Add documented empty delivery-path configuration to `.env.example` and `compose.dev.yml`; no delivery file path or credential is committed.
+- [X] T001 Review `spec.md`, `plan.md`, `research.md`, `data-model.md`, `contracts/passwords-api.md`, `quickstart.md`, and existing Identity/Sessions composition before coding.
+- [X] T002 Verify `.gitignore` excludes the configured protected recovery-delivery file and add only the required ignored pattern.
+- [X] T002a Add documented empty delivery-path configuration to `.env.example` and `compose.dev.yml`; no delivery file path or credential is committed.
 
 ## Phase 2: Foundational
 
-- [ ] T003 Add password-management event values to `src/GaussAuth.Application/Security/securityEventType.enum.cs` and update existing recorder tests in `tests/GaussAuth.Foundation.Tests/`.
-- [ ] T004 Define focused Identity-facing password ports/results in `src/GaussAuth.Application/Passwords/Ports/` for change, recovery credential generation, reset, and safe outcomes; do not expose Identity types or tokens.
-- [ ] T005 Define `IRecoveryDelivery` in `src/GaussAuth.Application/Passwords/Ports/recoveryDelivery.interface.cs` and a delivery instruction type with user id and secret credential kept out of logs/events.
-- [ ] T006 Extend the Sessions Application boundary with an explicit per-user revoke-all operation in `src/GaussAuth.Application/Sessions/` and its port, preserving existing single-session behavior.
-- [ ] T007 Implement Identity password adapters in `src/GaussAuth.Infrastructure/Identity/` using framework change/reset/token/lockout APIs and map framework outcomes to safe Application results.
-- [ ] T008 Implement protected Development/Test file delivery in `src/GaussAuth.Infrastructure/Passwords/` and fail safely outside those environments without a configured delivery adapter.
-- [ ] T008a Add delivery-failure and protected-file exclusion tests in `tests/GaussAuth.Foundation.Tests/passwordManagementTests.test.cs`; failure keeps the public recovery response generic and never logs a credential.
-- [ ] T009 Register password adapters, delivery adapter, and session revoke-all service in `src/GaussAuth.Infrastructure/DependencyInjection/infrastructureServiceCollectionExtensions.extension.cs` and `src/GaussAuth.Api/DependencyInjection/applicationServiceCollectionExtensions.extension.cs`.
-- [ ] T010 Add configurable recovery/reset fixed-window policies in `src/GaussAuth.Api/DependencyInjection/apiServiceCollectionExtensions.extension.cs`.
+- [X] T003 Add password-management event values to `src/GaussAuth.Application/Security/securityEventType.enum.cs` and update existing recorder tests in `tests/GaussAuth.Foundation.Tests/`.
+- [X] T004 Define focused Identity-facing password ports/results in `src/GaussAuth.Application/Passwords/Ports/` for change, recovery credential generation, reset, and safe outcomes; do not expose Identity types or tokens.
+- [X] T005 Define `IRecoveryDelivery` in `src/GaussAuth.Application/Passwords/Ports/recoveryDelivery.interface.cs` and a delivery instruction type with user id and secret credential kept out of logs/events.
+- [X] T006 Extend the Sessions Application boundary with an explicit per-user revoke-all operation in `src/GaussAuth.Application/Sessions/` and its port, preserving existing single-session behavior.
+- [X] T007 Implement Identity password adapters in `src/GaussAuth.Infrastructure/Identity/` using framework change/reset/token/lockout APIs and map framework outcomes to safe Application results.
+- [X] T008 Implement protected Development/Test file delivery in `src/GaussAuth.Infrastructure/Passwords/` and fail safely outside those environments without a configured delivery adapter.
+- [X] T008a Add delivery-failure and protected-file exclusion tests in `tests/GaussAuth.Foundation.Tests/passwordManagementTests.test.cs`; failure keeps the public recovery response generic and never logs a credential.
+- [X] T009 Register password adapters, delivery adapter, and session revoke-all service in `src/GaussAuth.Infrastructure/DependencyInjection/infrastructureServiceCollectionExtensions.extension.cs` and `src/GaussAuth.Api/DependencyInjection/applicationServiceCollectionExtensions.extension.cs`.
+- [X] T010 Add configurable recovery/reset fixed-window policies in `src/GaussAuth.Api/DependencyInjection/apiServiceCollectionExtensions.extension.cs`.
 
 ## Phase 3: User Story 1 - Change My Password (P1) 🎯 MVP
 

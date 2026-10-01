@@ -27,6 +27,7 @@ services:
       ConnectionStrings__AuthenticationDatabase: Host=postgres;Port=5432;Database=${POSTGRES_DB:?Set POSTGRES_DB};Username=${POSTGRES_USER:?Set POSTGRES_USER};Password=${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}
       ASPNETCORE_ENVIRONMENT: Development
       Sessions__Signing__PrivateKeyPem: ${SESSIONS_SIGNING_KEY_PEM:-}
+      PasswordRecovery__DeliveryFile: ${PASSWORD_RECOVERY_DELIVERY_FILE:-}
     command: ["dotnet", "run", "--project", "src/GaussAuth.Api", "--urls", "http://0.0.0.0:8080"]
     networks:
       - foundation
