@@ -16,8 +16,8 @@ Publish one authoritative authorization-context operation for consuming APIs. It
 **Testing**: MSTest integration and architecture tests in the Docker SDK container
 **Target Platform**: Containerized Linux web API
 **Project Type**: Web service
-**Performance Goals**: Fresh authorization is prioritized; each context request performs current session and authorization lookup, with no cache.
-**Constraints**: User bearer credential and consumer service credential are separate header secrets and never logged; roles and permissions remain dynamic and application-scoped.
+**Performance Goals**: Fresh authorization is prioritized; each context request performs current session and authorization lookup, with no cache. The configurable authorization-context abuse backstop defaults to 600 requests per remote IP per 60-second fixed window.
+**Constraints**: User bearer credential and consumer service credential are separate header secrets and never logged; roles and permissions remain dynamic and application-scoped. Application code is limited to 64 characters and consumer service credential to 512 characters at the API boundary.
 **Scale/Scope**: One stable context contract, one service-credential validation boundary, dynamic authorization resolution, documentation, and essential integration coverage.
 
 ## Constitution Check
@@ -69,8 +69,9 @@ tests/GaussAuth.Foundation.Tests/
 1. `AuthorizationContextService` first validates the service credential for the declared application, then invokes the existing authoritative session validation with the user credential and application code.
 2. A focused consumer-credential port reads external configuration containing distinct current and optional retiring values per application. The Infrastructure adapter performs a platform constant-time comparison, rejects reuse across applications at startup, and never returns a secret.
 3. Focused current-role and effective-permission queries return only active application-scoped data. Permissions are deduplicated and roles contain only stable ID/name data.
-4. `POST /auth/authorization-context` receives bearer user credential, declared application code, and consumer service secret. Any invalid consumer or user-access condition produces the established safe unauthorized response.
-5. Rotation is configuration-only: accept a current and temporary retiring value for the same application, switch consumers, then remove the retiring value. No public contract, user credential, or application identity changes.
+4. `POST /auth/authorization-context` receives bearer user credential, declared application code (required, maximum 64 characters), and consumer service secret (required, maximum 512 characters). Any invalid consumer or user-access condition produces the established safe unauthorized response.
+5. The endpoint uses `RateLimiting:AuthorizationContext:PermitLimit` and `RateLimiting:AuthorizationContext:WindowSeconds`, defaulting to 600 requests per remote IP per 60-second fixed window.
+6. Rotation is configuration-only: accept a current and temporary retiring value for the same application, switch consumers, then remove the retiring value. No public contract, user credential, or application identity changes.
 
 ## Post-Design Constitution Check
 

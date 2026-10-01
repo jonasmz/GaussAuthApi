@@ -7,8 +7,8 @@
 | Header | Meaning |
 |---|---|
 | `Authorization` | `Bearer` user access credential; never log it. |
-| `X-GaussAuth-Application-Code` | Consumer's configured application code. |
-| `X-GaussAuth-Consumer-Secret` | Independent externally configured service credential for that application; never log or return it. |
+| `X-GaussAuth-Application-Code` | Consumer's configured application code; required, nonblank, maximum 64 characters. |
+| `X-GaussAuth-Consumer-Secret` | Independent externally configured service credential for that application; required, nonblank, maximum 512 characters; never log or return it. |
 
 ### Success: `200 OK`
 
@@ -30,6 +30,8 @@ Roles are current active assignments and permissions are current unique active c
 ### Failure: `401 Unauthorized`
 
 Missing/invalid consumer credential, wrong consumer application, invalid user credential, expired/revoked session, inactive state, or application mismatch return the established generic unauthorized result with `WWW-Authenticate: Bearer`. The response does not identify the failing check.
+
+Requests exceeding the configurable authorization-context limit return `429 Too Many Requests`. The default is 600 requests per remote IP in a 60-second fixed window.
 
 ### Consumer responsibilities
 

@@ -26,7 +26,7 @@
 - [ ] T005 Extend `src/GaussAuth.Application/Authorization/Ports/userRoleRepository.interface.cs` and `src/GaussAuth.Infrastructure/Persistence/userRoleRepository.repository.cs` with current active-role resolution scoped to `(UserId, ApplicationId)`; role records MUST expose stable ID/name only and exclude inactive assignment, membership, role, user, or application.
 - [ ] T006 Implement `ConfiguredConsumerCredentialValidator` in `src/GaussAuth.Infrastructure/AuthorizationContext/` using external `AuthorizationConsumers` configuration with one distinct current secret and optional retiring secret per Application code; reject cross-application use and configured secret reuse, use platform constant-time comparison, and never log or return secrets.
 - [ ] T007 Register the consumer credential validator and authorization-context service in `src/GaussAuth.Infrastructure/DependencyInjection/infrastructureServiceCollectionExtensions.extension.cs` and `src/GaussAuth.Api/DependencyInjection/applicationServiceCollectionExtensions.extension.cs`.
-- [ ] T008 Add configurable `authorization-context` credential-bearing rate limiting in `src/GaussAuth.Api/DependencyInjection/apiServiceCollectionExtensions.extension.cs`.
+- [ ] T008 Add configurable `authorization-context` credential-bearing rate limiting in `src/GaussAuth.Api/DependencyInjection/apiServiceCollectionExtensions.extension.cs` with `RateLimiting:AuthorizationContext:PermitLimit` default 600 and `WindowSeconds` default 60.
 
 **Checkpoint**: Consumer authentication, current role lookup, and safe contract results are available without exposing service credentials.
 
@@ -38,10 +38,10 @@
 
 **Independent Test**: A test consumer calls the contract for an active user/session and receives only the documented context fields; invalid, expired, revoked, and ineligible access is uniformly rejected.
 
-- [ ] T009 [US1] Add failing context integration scenarios in `tests/GaussAuth.Foundation.Tests/authorizationContractTests.test.cs` for valid identifiers/expirations, active roles, unique permissions, malformed/expired/revoked credential, inactive user/application/membership, and public-field minimization.
+- [ ] T009 [US1] Add failing context integration scenarios in `tests/GaussAuth.Foundation.Tests/authorizationContractTests.test.cs` for valid identifiers/expirations, active roles, unique permissions, malformed/expired/revoked credential, inactive user/application/membership, public-field minimization, required/nonblank maximum-64 application code, and required/nonblank maximum-512 consumer secret.
 - [ ] T010 [US1] Implement `AuthorizationContextService.ResolveAsync` in `src/GaussAuth.Application/AuthorizationContext/authorizationContextService.service.cs` by validating the consumer boundary, invoking authoritative `SessionService.ValidateAsync`, resolving active roles/effective permissions, and recording only identifier/result-category events.
 - [ ] T011 [US1] Add response DTOs and map `POST /auth/authorization-context` in `src/GaussAuth.Api/AuthorizationContext/authorizationContextEndpoints.extension.cs` and `src/GaussAuth.Api/AuthorizationContext/authorizationContextResponse.dto.cs`; require the bearer user credential plus `X-GaussAuth-Application-Code` and `X-GaussAuth-Consumer-Secret`, and return only the documented safe `200`/generic `401` shapes.
-- [ ] T012 [US1] Register authorization-context endpoints in `src/GaussAuth.Api/Program.cs` and verify the endpoint honors the `authorization-context` rate-limit policy.
+- [ ] T012 [US1] Register authorization-context endpoints in `src/GaussAuth.Api/Program.cs` and verify the endpoint honors the default 600-per-60-second and overridden `authorization-context` rate-limit policy.
 
 **Checkpoint**: A consumer can resolve an authoritative minimal context without querying Auth persistence.
 
@@ -100,12 +100,9 @@
 - US2 depends on US1 endpoint shape; US3 depends on US1 context data; US4 depends on the implemented contract.
 - Polish follows every selected story.
 
-## Parallel Opportunities
+## Execution Discipline
 
-- T003 and T004 can be prepared in parallel after T001, but must converge before T007.
-- T005 and T006 touch different boundaries and can proceed in parallel after T004.
-- Within US1, test preparation T009 may proceed while foundational work completes; implementation T010–T012 remains sequential.
-- T017 documentation/architecture preparation may proceed in parallel with US3 tests, but must be finalized after response shape is fixed.
+Execute tasks sequentially in their numbered order. The constitution requires one well-contextualized sequential implementation path; do not launch parallel work merely because files appear independent.
 
 ## Implementation Strategy
 
