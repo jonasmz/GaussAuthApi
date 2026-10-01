@@ -8,6 +8,26 @@
 
 **Input**: User description: "Implement the global user identity and reusable global profile model of the authentication service: administrative creation of a global user with a reusable profile, retrieval, permitted profile updates, activation/deactivation, unique normalized email, PostgreSQL/EF Core persistence, and ASP.NET Core Identity credential integration without coupling the Domain to Identity. Functional login remains out of scope."
 
+## Clarifications
+
+### Session 2026-10-01
+
+- Q: Should the user creation/update/activation endpoints require caller
+  authentication or authorization within this feature, given that login
+  itself is out of scope? → A: No caller authentication in this feature;
+  the endpoints are reachable only by trusted administrative/system
+  callers, and real access protection arrives with the future
+  authentication/authorization feature.
+- Q: When two requests update the same user's profile at nearly the same
+  time, should persistence detect and reject the update based on stale
+  data (optimistic concurrency), or should the last successful write simply
+  win? → A: Last write wins; no concurrency-token check is required.
+- Q: When activation is requested for an already-active user, or
+  deactivation for an already-inactive user, should the operation succeed
+  idempotently (no-op success), or be rejected as an invalid state
+  transition? → A: Idempotent success; repeating the same transition
+  returns success without additional effect.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Provision a global user identity and profile (Priority: P1)
@@ -123,7 +143,8 @@ confirm it returns to active state.
    the user's state returns to active.
 3. **Given** a user already in the requested state (already active or already
    inactive), **When** the same transition is requested again, **Then** the
-   operation does not produce an inconsistent or duplicated state change.
+   operation succeeds idempotently and returns the user already in that
+   state, without treating the repeat request as an invalid transition.
 
 ### Edge Cases
 
@@ -143,8 +164,15 @@ confirm it returns to active state.
   email? The request is rejected; email remains immutable through this
   operation in this feature.
 - How does the system handle deactivating an already-inactive user, or
-  reactivating an already-active user? The operation remains safe and does
-  not create an invalid or duplicated state transition.
+  reactivating an already-active user? The operation succeeds idempotently,
+  returning the user already in that state, rather than being treated as an
+  invalid state transition.
+- What happens when these operations are called without any caller
+  credential? They proceed under normal validation; this feature performs
+  no caller authentication or authorization check of its own.
+- What happens when two profile-update requests for the same user are
+  processed concurrently? The last successfully persisted write prevails;
+  no stale-data conflict is detected or rejected in this feature.
 
 ## Requirements *(mandatory)*
 
@@ -195,7 +223,10 @@ confirm it returns to active state.
   Identity infrastructure fields.
 - **FR-012**: The system MUST support updating the permitted profile fields
   (first name, last name, display name, phone number, avatar reference)
-  without altering credential infrastructure.
+  without altering credential infrastructure. Concurrent update requests to
+  the same profile MUST resolve with the last successfully persisted write
+  prevailing; this feature does not require detecting or rejecting updates
+  based on stale data.
 - **FR-013**: Login email MUST remain immutable through profile-update
   operations in this feature; changing login email, if ever required, MUST be
   treated as a separate, explicitly validated identity operation outside this
@@ -204,6 +235,9 @@ confirm it returns to active state.
   querying its current state. Deactivation MUST preserve the user and profile
   records without physical deletion and MUST mark the identity ineligible for
   future authentication; reactivation MUST restore the active state.
+  Requesting activation on an already-active user, or deactivation on an
+  already-inactive user, MUST succeed idempotently and MUST NOT be treated
+  as an invalid state transition.
 - **FR-015**: The system MUST NOT implement authentication lockout as a
   domain state in this feature; lockout remains part of the future
   authentication feature and Identity infrastructure.
@@ -227,9 +261,11 @@ confirm it returns to active state.
   and reasonable field values. Validation MUST NOT rely solely on database or
   persistence exceptions as the normal rejection path.
 - **FR-020**: The API MUST provide consistent failure responses for invalid
-  input, duplicate email, user not found, and invalid state transitions.
-  Responses MUST NOT reveal password hashes, database internals, SQL,
-  Identity internal details, stack traces, or sensitive configuration.
+  input, duplicate email, and user not found. Activation and deactivation
+  MUST NOT produce an invalid-state-transition failure in this feature, since
+  repeating the same transition succeeds idempotently. Responses MUST NOT
+  reveal password hashes, database internals, SQL, Identity internal
+  details, stack traces, or sensitive configuration.
 - **FR-021**: Logging for user and profile operations MUST use the existing
   structured logging foundation and MUST NOT record passwords, password
   hashes, Identity security stamps, secrets, or full request payloads that may
@@ -239,6 +275,12 @@ confirm it returns to active state.
   scoped roles or permissions, password recovery or reset, email confirmation,
   MFA, social login, OAuth 2.0/OpenID Connect, an administrative frontend,
   file upload or avatar storage, or business-specific profile data.
+- **FR-023**: This feature MUST NOT implement caller authentication or
+  authorization for the user creation, retrieval, update, or activation/
+  deactivation operations; these operations are reachable only by trusted
+  administrative or system callers in this feature. Enforcing request-level
+  authentication/authorization for these operations belongs to a future
+  authentication/authorization feature.
 
 ### Key Entities
 
