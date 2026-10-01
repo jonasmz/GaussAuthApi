@@ -12,7 +12,7 @@ state. All timestamps are UTC ISO-8601 values.
 | `POST /applications` | `{ "code": "resto-manager", "name": "Resto Manager" }` | `201` and `ApplicationResponse`; `Location: /applications/{id}` | `400` invalid input; `409` duplicate code. |
 | `GET /applications/{id:guid}` | — | `200` application | `404` application absent. |
 | `GET /applications/by-code/{code}` | — | `200` application | `404` application absent. |
-| `GET /applications` | — | `200` array of applications | — |
+| `GET /applications?limit={1..100}&cursor={opaque}` | Optional limit/cursor | `200` paged applications | `400` invalid limit/cursor. |
 | `POST /applications/{id:guid}/activate` | — | `200` application | `404` application absent. |
 | `POST /applications/{id:guid}/deactivate` | — | `200` application | `404` application absent. |
 
@@ -38,8 +38,8 @@ authorization decision.
 |---|---|---|---|
 | `POST /applications/{applicationId:guid}/memberships` | `{ "userId": "guid" }` | `201`, membership, `Location: /applications/{applicationId}/memberships/{userId}` | `400` invalid input; `404` user/application absent; `409` duplicate pair or inactive application. |
 | `GET /applications/{applicationId:guid}/memberships/{userId:guid}` | — | `200` membership | `404` absent context or membership. |
-| `GET /applications/{applicationId:guid}/memberships` | — | `200` application memberships | `404` application absent. |
-| `GET /users/{userId:guid}/memberships` | — | `200` user memberships | `404` user absent. |
+| `GET /applications/{applicationId:guid}/memberships?limit={1..100}&cursor={opaque}` | Optional limit/cursor | `200` paged application memberships | `400` invalid limit/cursor; `404` application absent. |
+| `GET /users/{userId:guid}/memberships?limit={1..100}&cursor={opaque}` | Optional limit/cursor | `200` paged user memberships | `400` invalid limit/cursor; `404` user absent. |
 | `POST /applications/{applicationId:guid}/memberships/{userId:guid}/activate` | — | `200` membership | `404` absent context/membership; `409` inactive user/application. |
 | `POST /applications/{applicationId:guid}/memberships/{userId:guid}/deactivate` | — | `200` membership | `404` absent context/membership. |
 
@@ -58,3 +58,15 @@ State transitions are idempotent. Parent application/user deactivation does
 not rewrite membership `isActive`; effective eligibility requires all three
 states to be active. No response offers roles, permissions, tokens, sessions,
 or application-specific profile data.
+
+## Paged list response
+
+All collection routes return this bounded envelope. `limit` defaults to 50 and
+cannot exceed 100. `nextCursor` is absent when the returned page is final.
+
+```json
+{
+  "items": [],
+  "nextCursor": "opaque-string-or-null"
+}
+```

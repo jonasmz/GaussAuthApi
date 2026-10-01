@@ -66,15 +66,15 @@ is rejected and repeated transitions are no-ops.
 ### Tests for User Story 1
 
 - [ ] T013 [US1] Add integration tests for successful application creation, lowercase/trim code normalization, `201` location, `400` invalid code/name, and sequential/concurrent duplicate-code `409` behavior in `tests/GaussAuth.Foundation.Tests/applicationsTests.test.cs`.
-- [ ] T014 [US1] Add integration tests for get-by-id, get-by-code, bounded application listing, activate/deactivate, idempotency, timestamp behavior, and safe `404` results in `tests/GaussAuth.Foundation.Tests/applicationsTests.test.cs`.
+- [ ] T014 [US1] Add integration tests for get-by-id, get-by-code, cursor/limit application listing (default 50; valid 1–100; invalid limit `400`), activate/deactivate, idempotency, timestamp behavior, and safe `404` results in `tests/GaussAuth.Foundation.Tests/applicationsTests.test.cs`.
 
 ### Implementation for User Story 1
 
 - [ ] T015 [US1] Add create-application command, focused result, and handler in `src/GaussAuth.Application/Applications/CreateApplication/createApplication.command.cs`, `createApplication.result.cs`, and `createApplication.handler.cs`; enforce code “3–64 ASCII letters/digits/single hyphens, begins/ends alphanumeric” after trim/lowercase and name “trimmed, 1–200 non-whitespace chars,” then log only application id/outcome.
-- [ ] T016 [US1] Add get-by-id/get-by-code queries and handlers in `src/GaussAuth.Application/Applications/GetApplication/` and list query/handler in `src/GaussAuth.Application/Applications/ListApplications/`, with no broad search/reporting behavior.
+- [ ] T016 [US1] Add get-by-id/get-by-code queries and handlers in `src/GaussAuth.Application/Applications/GetApplication/` and a cursor/limit list query/handler in `src/GaussAuth.Application/Applications/ListApplications/` (default 50, valid limit 1–100), with no broad search/reporting behavior.
 - [ ] T017 [US1] Add idempotent lifecycle handlers in `src/GaussAuth.Application/Applications/ActivateApplication/activateApplication.handler.cs` and `src/GaussAuth.Application/Applications/DeactivateApplication/deactivateApplication.handler.cs`; preserve historical records and never delete memberships.
 - [ ] T018 [US1] Create request/response DTOs with Data Annotations and safe domain mapping in `src/GaussAuth.Api/Applications/createApplicationRequest.dto.cs` and `src/GaussAuth.Api/Applications/applicationResponse.dto.cs`.
-- [ ] T019 [US1] Implement `POST /applications`, `GET /applications/{id:guid}`, `GET /applications/by-code/{code}`, `GET /applications`, and state routes with 400/404/409 Problem Details in `src/GaussAuth.Api/Applications/applicationsEndpoints.extension.cs`.
+- [ ] T019 [US1] Implement `POST /applications`, `GET /applications/{id:guid}`, `GET /applications/by-code/{code}`, paged `GET /applications`, and state routes with 400/404/409 Problem Details in `src/GaussAuth.Api/Applications/applicationsEndpoints.extension.cs`.
 - [ ] T020 [US1] Register application handlers in `src/GaussAuth.Api/DependencyInjection/applicationServiceCollectionExtensions.extension.cs` and map `MapApplicationsEndpoints()` in `src/GaussAuth.Api/program.entrypoint.cs` without adding caller authentication or a role model.
 
 **Checkpoint**: Application registration and lifecycle work independently and
@@ -99,9 +99,9 @@ and inactive-user rules produce the specified safe outcomes.
 ### Implementation for User Story 2
 
 - [ ] T023 [US2] Add create-membership command, result, and handler in `src/GaussAuth.Application/Memberships/CreateMembership/createMembership.command.cs`, `createMembership.result.cs`, and `createMembership.handler.cs`; load the existing global User and Application, reject inactive application, create active only when user is active, and never create a missing parent.
-- [ ] T024 [US2] Add pair retrieval query/handler in `src/GaussAuth.Application/Memberships/GetMembership/` and user/application list queries/handlers in `src/GaussAuth.Application/Memberships/ListMemberships/`; user/application list results must retain both ids and must not claim cross-application eligibility.
+- [ ] T024 [US2] Add pair retrieval query/handler in `src/GaussAuth.Application/Memberships/GetMembership/` and cursor/limit user/application list queries/handlers in `src/GaussAuth.Application/Memberships/ListMemberships/` (default 50, valid limit 1–100); results must retain both ids and must not claim cross-application eligibility.
 - [ ] T025 [US2] Create membership request/response DTOs in `src/GaussAuth.Api/Memberships/createMembershipRequest.dto.cs` and `src/GaussAuth.Api/Memberships/applicationMembershipResponse.dto.cs`; require non-empty `userId` and expose only ids, state, and timestamps.
-- [ ] T026 [US2] Implement explicit-context membership create, pair retrieval, application list, and user list routes with 400/404/409 contracts in `src/GaussAuth.Api/Memberships/membershipsEndpoints.extension.cs`.
+- [ ] T026 [US2] Implement explicit-context membership create, pair retrieval, and paged application/user list routes with 400/404/409 contracts in `src/GaussAuth.Api/Memberships/membershipsEndpoints.extension.cs`.
 - [ ] T027 [US2] Register membership handlers in `src/GaussAuth.Api/DependencyInjection/applicationServiceCollectionExtensions.extension.cs` and map `MapMembershipsEndpoints()` in `src/GaussAuth.Api/program.entrypoint.cs`.
 
 **Checkpoint**: Membership creation is persistent, unique, referentially
@@ -120,7 +120,7 @@ application prevents activation without cascading membership state changes.
 
 ### Tests for User Story 3
 
-- [ ] T028 [US3] Add integration tests for membership activation/deactivation, repeated idempotent transitions, safe `404`, and `409` activation failures for inactive user or application in `tests/GaussAuth.Foundation.Tests/applicationMembershipsTests.test.cs`.
+- [ ] T028 [US3] Add integration tests for membership activation/deactivation, repeated idempotent transitions, safe `404`, and `409` activation failures for inactive user or application that leave the membership state unchanged in `tests/GaussAuth.Foundation.Tests/applicationMembershipsTests.test.cs`.
 - [ ] T029 [US3] Add integration tests for two memberships of one user, one-membership-only state changes, no cross-application inference, and parent deactivation preserving membership `IsActive` in `tests/GaussAuth.Foundation.Tests/applicationMembershipsTests.test.cs`.
 
 ### Implementation for User Story 3

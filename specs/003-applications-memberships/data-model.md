@@ -69,6 +69,8 @@ and foreign keys.
 | Application `name` | Yes | Trimmed, 1–200 non-whitespace chars. |
 | Route/user/application ids | Yes where route requires | Valid non-empty GUID. |
 | Membership body `userId` | Yes | Valid non-empty GUID. |
+| Listing `limit` | No | Integer 1–100; default defined by the API contract. |
+| Listing `cursor` | No | Opaque continuation token returned by a prior listing. |
 | Request payload | Yes | Small fixed DTOs only; reject missing/invalid fields before state changes. |
 
 ## Application and port boundary

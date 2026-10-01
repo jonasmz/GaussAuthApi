@@ -104,7 +104,8 @@ the selected one changed.
    **When** activation is requested, **Then** that membership becomes active.
 2. **Given** a membership whose user or application is inactive, **When**
    activation is requested, **Then** the request is rejected and the
-   membership remains inactive.
+   membership state remains unchanged; an already-inactive membership remains
+   inactive and a previously active membership remains active but ineligible.
 3. **Given** an active membership, **When** deactivation is requested,
    **Then** it becomes inactive while the user, application, and historical
    membership record remain unchanged.
@@ -183,8 +184,8 @@ the selected one changed.
 - **FR-011**: Activating a membership MUST require that the membership,
   associated user, and associated application all exist and that both user and
   application are active. A rejected activation MUST leave the membership
-  inactive. Repeating activation of an already-active membership succeeds
-  idempotently only while the user and application are active.
+  state unchanged. Repeating activation of an already-active membership
+  succeeds idempotently only while the user and application are active.
 - **FR-012**: Deactivating a membership MUST preserve the relationship and
   MUST NOT change the global user's state, the application's state, or any
   membership in another application. Repeating deactivation succeeds
@@ -204,8 +205,10 @@ the selected one changed.
   application from the user's identity or membership in another application.
 - **FR-015**: External input MUST be validated for required values, identifier
   format, application-code format and length, display-name length, and
-  reasonable request limits. Validation failures MUST not partially change
-  state.
+  reasonable request limits. Every collection listing MUST accept an optional
+  opaque cursor and a `limit` from 1 through 100, return no more than that
+  limit, and reject an invalid limit. Validation failures MUST not partially
+  change state.
 - **FR-016**: The system MUST return consistent safe outcomes for invalid
   input, application not found, user not found, membership not found,
   duplicate application code, duplicate membership, and disallowed activation
@@ -257,8 +260,8 @@ the selected one changed.
   membership in one application does not report that user as an active member
   of any other application without a separate active membership there.
 - **SC-005**: In 100% of activation trials involving an inactive user or
-  inactive application, the membership remains inactive and no unrelated
-  record changes.
+  inactive application, the membership state remains unchanged and no
+  unrelated record changes.
 - **SC-006**: All defined invalid, duplicate, and not-found cases produce a
   consistent safe outcome with no internal diagnostic or sensitive data in the
   response.
