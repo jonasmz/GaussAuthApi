@@ -1,0 +1,70 @@
+using System.ComponentModel.DataAnnotations;
+using GaussAuth.Application.Users.CreateUser;
+using Microsoft.AspNetCore.Mvc;
+
+namespace GaussAuth.Api.Users;
+
+public static class UsersEndpoints
+{
+    public static IEndpointRouteBuilder MapUsersEndpoints(this IEndpointRouteBuilder app)
+    {
+        app.MapPost("/users", CreateUserAsync).RequireRateLimiting("user-creation");
+
+        return app;
+    }
+
+    private static async Task<IResult> CreateUserAsync(
+        CreateUserRequest request,
+        CreateUserHandler handler,
+        CancellationToken cancellationToken)
+    {
+        if (HasValidationErrors(request, out var validationErrors))
+        {
+            return TypedResults.ValidationProblem(validationErrors);
+        }
+
+        var command = new CreateUserCommand(
+            request.Email,
+            request.Password,
+            request.FirstName,
+            request.LastName,
+            request.DisplayName,
+            request.PhoneNumber,
+            request.AvatarReference);
+
+        var result = await handler.HandleAsync(command, cancellationToken);
+
+        if (result.User is not null)
+        {
+            var response = UserResponse.FromDomain(result.User);
+            return TypedResults.Created($"/users/{response.Id}", response);
+        }
+
+        if (result.IsDuplicateEmail)
+        {
+            return TypedResults.Conflict(new ProblemDetails
+            {
+                Status = StatusCodes.Status409Conflict,
+                Title = "A user with this email already exists."
+            });
+        }
+
+        return TypedResults.ValidationProblem(
+            result.ValidationErrors ?? new Dictionary<string, string[]>());
+    }
+
+    private static bool HasValidationErrors(object request, out Dictionary<string, string[]> errors)
+    {
+        var context = new ValidationContext(request);
+        var results = new List<ValidationResult>();
+        var isValid = Validator.TryValidateObject(request, context, results, validateAllProperties: true);
+
+        errors = results
+            .SelectMany(result => (result.MemberNames.Any() ? result.MemberNames : [string.Empty])
+                .Select(member => (member, message: result.ErrorMessage ?? string.Empty)))
+            .GroupBy(pair => pair.member)
+            .ToDictionary(group => group.Key, group => group.Select(pair => pair.message).ToArray());
+
+        return !isValid;
+    }
+}

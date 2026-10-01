@@ -197,7 +197,7 @@ with a stable identifier and that a second request for the same normalized
 email (including concurrently) is rejected, and that exceeding the rate
 limit is rejected without creating anything.
 
-- [ ] T013 [US1] Add `tests/GaussAuth.Foundation.Tests/createUserTests.test.cs`
+- [X] T013 [US1] Add `tests/GaussAuth.Foundation.Tests/createUserTests.test.cs`
   using `Microsoft.AspNetCore.Mvc.Testing` against `POST /users`: (1) valid
   email + password + required profile fields (`firstName`, `lastName`,
   `displayName`) → `201 Created` with a `Location` header and a
@@ -214,19 +214,19 @@ limit is rejected without creating anything.
   `429 Too Many Requests` with a `Retry-After` header, no user created.
   Confirm these tests compile but fail (or do not yet exist as routes)
   before T014-T021 are implemented.
-- [ ] T014 [US1] Create
+- [X] T014 [US1] Create
   `src/GaussAuth.Application/Users/CreateUser/createUser.command.cs` with a
   `CreateUserCommand` carrying the submitted (not yet normalized) email,
   password, and profile fields (`firstName`, `lastName`, `displayName`,
   `phoneNumber`, `avatarReference`).
-- [ ] T015 [US1] Create
+- [X] T015 [US1] Create
   `src/GaussAuth.Application/Users/CreateUser/createUser.result.cs` with a
   `CreateUserResult` exposing named outcomes: `Success(User user)`,
   `DuplicateEmail()`, `ValidationFailed(IReadOnlyDictionary<string,
   string[]> errors)` — a small, operation-specific type, not a generic
   result framework (per `research.md`'s "Expected-failure modeling"
   decision).
-- [ ] T016 [US1] Create
+- [X] T016 [US1] Create
   `src/GaussAuth.Application/Users/CreateUser/createUser.handler.cs`
   implementing the flow from `research.md`'s "Transaction strategy for user
   creation": normalize the email via
@@ -245,14 +245,35 @@ limit is rejected without creating anything.
   outcome (e.g. "created" or "duplicate rejected") — never the email,
   password, or password hash (FR-021, per `research.md`'s "Operation
   logging" decision).
-- [ ] T017 [US1] Create `src/GaussAuth.Api/Users/createUserRequest.dto.cs`
+
+  **Implementation corrections found while building this task**:
+  (1) Opening the transaction directly on `AuthenticationDbContext` from
+  Application would violate FR-017; `IUserRepository` was instead extended
+  with `BeginTransactionAsync` returning a small `IUserRepositoryTransaction`
+  port (`CommitAsync`/`RollbackAsync`/`DisposeAsync`), implemented in
+  Infrastructure as a thin adapter over EF Core's `IDbContextTransaction` —
+  Application never references EF Core. (2) The submitted email MUST be
+  trimmed (`.Trim()`) before normalizing/comparing: the default Identity
+  normalizer uppercases but does not strip surrounding whitespace, so an
+  untrimmed duplicate would silently normalize to a different value and
+  evade both the app-level and persistence-level uniqueness checks. (3) A
+  concurrent duplicate is not always caught by the `Users.NormalizedEmail`
+  unique index — `UserManager.CreateAsync` runs its own pre-insert
+  uniqueness validation against `AspNetUsers` first and can fail with
+  `IdentityError` codes `DuplicateEmail`/`DuplicateUserName` before any
+  index violation occurs; `CredentialProvisioningResult` gained an
+  `IsDuplicateEmail` flag (alongside a `DbUpdateException`/`PostgresException`
+  catch on `EmailIndex`/`UserNameIndex` as a race-window fallback) so the
+  handler maps this path to `DuplicateEmail()` (409), not
+  `ValidationFailed()` (400).
+- [X] T017 [US1] Create `src/GaussAuth.Api/Users/createUserRequest.dto.cs`
   with Data Annotations matching `data-model.md`'s "Request/response field
   limits" table: `Email` required, max length 256, `[EmailAddress]` format
   validation (FR-006); `Password` required, max length 128; `FirstName`
   required, max length 100; `LastName` required, max length 100;
   `DisplayName` required, max length 100; `PhoneNumber` optional, max length
   32; `AvatarReference` optional, max length 2048.
-- [ ] T018 [US1] Extend
+- [X] T018 [US1] Extend
   `src/GaussAuth.Api/DependencyInjection/apiServiceCollectionExtensions.extension.cs`
   to add `services.AddRateLimiter(...)` with a named fixed-window policy
   `"user-creation"`, partitioned by remote IP address, reading
@@ -261,7 +282,7 @@ limit is rejected without creating anything.
   `IConfiguration` rather than hard-coding them (FR-024, per `research.md`'s
   "Rate limiting for anonymous credential creation" decision). Do not apply
   this policy to any route in this task; only register it.
-- [ ] T019 [US1] Create `src/GaussAuth.Api/Users/usersEndpoints.extension.cs`
+- [X] T019 [US1] Create `src/GaussAuth.Api/Users/usersEndpoints.extension.cs`
   with a `MapUsersEndpoints(this IEndpointRouteBuilder app)` extension
   mapping `POST /users` with `.RequireRateLimiting("user-creation")` (policy
   from T018): validate the request DTO (via `TypedResults.ValidationProblem`
@@ -272,15 +293,15 @@ limit is rejected without creating anything.
   rejected by the rate limiter is handled by the middleware itself
   (`429 Too Many Requests` with `Retry-After`) and never reaches this
   handler logic.
-- [ ] T020 [US1] Edit `src/GaussAuth.Api/Program.cs` to call
+- [X] T020 [US1] Edit `src/GaussAuth.Api/Program.cs` to call
   `app.UseRateLimiter();` (before endpoint mapping) and
   `app.MapUsersEndpoints();` alongside the existing `/health/live` mapping,
   keeping `Program.cs` a readable composition root with no declared
   top-level type.
-- [ ] T021 [US1] Extend
+- [X] T021 [US1] Extend
   `src/GaussAuth.Api/DependencyInjection/applicationServiceCollectionExtensions.extension.cs`
   to register the `CreateUser` handler (scoped).
-- [ ] T022 [US1] Run
+- [X] T022 [US1] Run
   `tests/GaussAuth.Foundation.Tests/createUserTests.test.cs` and the
   corresponding `quickstart.md` section 4 "create" and rate-limit scenarios;
   confirm all six acceptance scenarios from spec User Story 1 (including

@@ -1,6 +1,7 @@
 using GaussAuth.Application.Users.Ports;
 using GaussAuth.Domain.Users;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 
 namespace GaussAuth.Infrastructure.Persistence;
 
@@ -19,4 +20,27 @@ public sealed class UserRepository(AuthenticationDbContext context) : IUserRepos
 
     public Task SaveChangesAsync(CancellationToken cancellationToken) =>
         context.SaveChangesAsync(cancellationToken);
+
+    public async Task<bool> TrySaveChangesAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            await context.SaveChangesAsync(cancellationToken);
+            return true;
+        }
+        catch (DbUpdateException exception) when (IsNormalizedEmailUniqueViolation(exception))
+        {
+            return false;
+        }
+    }
+
+    private static bool IsNormalizedEmailUniqueViolation(DbUpdateException exception) =>
+        exception.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation } postgresException &&
+        postgresException.ConstraintName is "IX_Users_NormalizedEmail";
+
+    public async Task<IUserRepositoryTransaction> BeginTransactionAsync(CancellationToken cancellationToken)
+    {
+        var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
+        return new EfUserRepositoryTransaction(transaction);
+    }
 }

@@ -54,27 +54,88 @@ with the ubiquitous language used in the spec and plan.
 
 ## Transaction strategy for user creation
 
-**Decision**: `CreateUserHandler` opens one EF Core transaction on
-`AuthenticationDbContext` (`Database.BeginTransactionAsync`) that spans: (1)
+**Decision**: `CreateUserHandler` opens one transaction via
+`IUserRepository.BeginTransactionAsync()` — a small Application-owned port
+returning `IUserRepositoryTransaction` (`CommitAsync`/`RollbackAsync`/
+`IAsyncDisposable`) — spanning: (1)
 `ICredentialProvisioningService.CreateCredentialAsync` (wraps
-`UserManager.CreateAsync`, which writes through the same `DbContext`
-instance because `AddEntityFrameworkStores<AuthenticationDbContext>` shares
-it per-request/per-scope), (2) adding the Domain `User` (with its owned
-`UserProfile`) via `IUserRepository.AddAsync`, and (3)
-`IUserRepository.SaveChangesAsync`. A failure at any step rolls back the
-whole transaction, leaving no partial user/credential/profile row.
+`UserManager.CreateAsync`, which writes through the same
+`AuthenticationDbContext` instance because
+`AddEntityFrameworkStores<AuthenticationDbContext>` shares it per-request/
+per-scope), (2) adding the Domain `User` (with its owned `UserProfile`) via
+`IUserRepository.AddAsync`, and (3) `IUserRepository.TrySaveChangesAsync`.
+A failure at any step rolls back the whole transaction, leaving no partial
+user/credential/profile row. Infrastructure's `UserRepository` implements
+`BeginTransactionAsync` by wrapping EF Core's `Database.BeginTransactionAsync`
+behind a thin `EfUserRepositoryTransaction` adapter.
 
 **Rationale**: Directly satisfies FR-008's "must not leave a partial
-user/profile state if persistence fails" using only EF Core's own
-transaction API — no additional unit-of-work abstraction or third-party
-library is needed because everything already shares one `DbContext`/
-connection per request scope.
+user/profile state if persistence fails." The first draft of this decision
+had `CreateUserHandler` call `AuthenticationDbContext.Database
+.BeginTransactionAsync` directly — found during `/speckit-implement` to
+violate FR-017 (Application depending on a concrete EF Core type). The
+fix is a two-method port (`BeginTransactionAsync` plus the small
+`IUserRepositoryTransaction` interface) rather than a generic unit-of-work
+abstraction: it is scoped to exactly the one operation that needs it, and
+Infrastructure's adapter is a few lines wrapping the EF Core type Application
+must never see.
 
 **Alternatives considered**: A two-phase "create credential, then create
 domain row, with manual compensation on failure" would reintroduce the
 partial-state risk the requirement explicitly forbids. A distributed/outbox
 pattern is unwarranted complexity for a single-database, single-transaction
+operation. A full generic unit-of-work/repository framework spanning every
+future aggregate would be speculative given only one transactional operation
+exists in this feature.
+
+## Duplicate-email detection across two uniqueness layers
+
+**Finding (discovered during `/speckit-implement`)**: A concurrent duplicate
+creation is not reliably caught by the `Users.NormalizedEmail` unique index
+alone. `UserManager.CreateAsync` performs its own pre-insert uniqueness
+validation against `AspNetUsers` (via the registered `IUserValidator`) and
+returns a failed `IdentityResult` with error codes `DuplicateEmail`/
+`DuplicateUserName` *before* either request reaches the `Users` table insert;
+only a narrower race window would instead surface as a Postgres unique
+violation on `AspNetUsers`' own `EmailIndex`/`UserNameIndex`.
+
+**Decision**: `CredentialProvisioningResult` carries an `IsDuplicateEmail`
+flag alongside `Succeeded`/`Errors`. `IdentityCredentialProvisioningService`
+sets it both when `UserManager.CreateAsync` returns `DuplicateEmail`/
+`DuplicateUserName` error codes and when a `DbUpdateException` wraps a
+`PostgresException` unique violation on `EmailIndex`/`UserNameIndex`.
+`CreateUserHandler` checks this flag before treating any other credential
+failure as `ValidationFailed`, mapping it to `CreateUserResult.DuplicateEmail()`
+(409) instead of a generic 400 — consistent with FR-007's "concurrent
+creation requests... cannot both succeed" and the API contract's `409` row.
+
+**Alternatives considered**: Relying solely on the `Users.NormalizedEmail`
+index (the original plan) under-detects this specific race because Identity's
+own validator intercepts it first; relying solely on Identity's error codes
+would under-detect the rarer true index-violation race. Checking both closes
+the gap without adding a new dependency.
+
+## Email trimming before normalization
+
+**Finding (discovered during `/speckit-implement`)**: ASP.NET Core Identity's
+default `ILookupNormalizer` (`UpperInvariantLookupNormalizer`) uppercases but
+does **not** trim surrounding whitespace. An email submitted with leading/
+trailing spaces therefore normalizes to a *different* value than the same
+email without them, silently defeating the "case, surrounding whitespace...
+differences MUST NOT allow duplicate login identities" requirement (FR-006).
+
+**Decision**: `CreateUserHandler` trims the submitted email
+(`command.Email.Trim()`) once, at the top of the handler, before calling
+`NormalizeEmail`, checking `ExistsByNormalizedEmailAsync`, or passing it to
+`CreateCredentialAsync`/`User.Create` — so the trimmed value is the single
+source of truth used everywhere an email is read or written for this
 operation.
+
+**Alternatives considered**: Trimming only in the DTO/API layer would leave
+Application exposed to the same bug for any other caller of
+`CreateUserHandler` (tests, a future internal caller); trimming is a
+normalization concern the Application layer should own, not a presentation
+concern.
 
 ## Email normalization
 
@@ -180,6 +241,19 @@ constitution's mandatory audit-event list (login, lockout, password
 change/recovery/reset, session revocation, role/permission change) does not
 include user creation/activation in this feature, so plain structured
 logging is proportionate.
+
+**Implementation note (discovered during `/speckit-implement`)**: Using
+`ILogger<T>` from Application requires a package reference to
+`Microsoft.Extensions.Logging.Abstractions` — a first-party, dependency-free
+.NET BCL abstraction, not a third-party or framework package. `001-foundation`'s
+`ArchitectureTests` originally asserted zero `PackageReference` entries on
+`GaussAuth.Application.csproj` (trivially true while Application had no code
+yet); that assertion was loosened to allow exactly this one package by name,
+while still failing on anything else (EF Core, ASP.NET Core, Npgsql, or any
+other package). This is consistent with the constitution's "native .NET
+capabilities SHOULD be preferred" and "Logging MUST be structured and use
+standard .NET abstractions" guidance, and does not relax the Domain-isolation
+or Infrastructure/API-isolation checks in the same test.
 
 ## Test project placement
 

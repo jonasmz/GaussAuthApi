@@ -21,7 +21,11 @@ public sealed class ArchitectureTests
             .Select(reference => Path.GetFileName((string?)reference.Attribute("Include")))
             .ToArray();
         CollectionAssert.AreEquivalent(new[] { "GaussAuth.Domain.csproj" }, applicationReferences);
-        Assert.IsEmpty(applicationProject.Descendants("PackageReference"));
+
+        var applicationPackages = applicationProject.Descendants("PackageReference")
+            .Select(reference => (string?)reference.Attribute("Include"))
+            .ToArray();
+        CollectionAssert.AreEquivalent(new[] { "Microsoft.Extensions.Logging.Abstractions" }, applicationPackages);
 
         var forbidden = new[]
         {

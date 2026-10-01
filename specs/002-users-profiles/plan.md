@@ -36,10 +36,14 @@ already pinned by `001-foundation`. `Microsoft.Extensions.Identity.Core`'s
 `ILookupNormalizer` is reused for email normalization.
 `Microsoft.AspNetCore.RateLimiting` (part of the ASP.NET Core shared
 framework since .NET 7; no new package reference) provides the fixed-window
-limiter for `POST /users`. No new third-party package is introduced;
-validation uses built-in `System.ComponentModel.DataAnnotations`
-(including `[EmailAddress]` for email format) plus Minimal API's native
-`TypedResults.ValidationProblem`.
+limiter for `POST /users`. `Microsoft.Extensions.Logging.Abstractions` is
+added as the one new package reference, scoped to Application only, so
+handlers can log through `ILogger<T>` (see `research.md`'s "Operation
+logging" implementation note); it is a first-party, dependency-free .NET
+abstraction, not a third-party or framework package. No other new package
+is introduced; validation uses built-in
+`System.ComponentModel.DataAnnotations` (including `[EmailAddress]` for
+email format) plus Minimal API's native `TypedResults.ValidationProblem`.
 
 **Storage**: PostgreSQL 17 via the existing `AuthenticationDbContext`,
 extended with two new tables (`Users`, `UserProfiles`) related to the
@@ -88,7 +92,7 @@ session table or endpoint.
 | Fixed stack and migration governance | PASS | .NET 10, EF Core 10/Npgsql, PostgreSQL 17, ASP.NET Core Identity — all already pinned; one version-controlled migration adds only `Users`/`UserProfiles` schema. |
 | Container development rule | PASS | Reuses `compose.dev.yml`'s `postgres`/`sdk` services; no new container. |
 | Security, configuration, errors, and logging | PASS | Email/password handled only by Identity; Problem Details/safe exception handler extended, not replaced; each handler logs its operation (user id and outcome only — never password, hash, or security stamp); explicit per-field length limits including email format (see `data-model.md`). Caller authentication is explicitly out of scope per the spec's Clarifications session (FR-023) — this is a real, intentional scope boundary for this feature (the future authentication/authorization feature owns the access boundary), not an assumption about deployment. Because this makes `POST /users` an anonymous credential operation, it is rate-limited per FR-024 using ASP.NET Core's built-in rate-limiting middleware with a configurable limit, satisfying the constitution's "abuse-prone public or anonymous endpoints MUST use rate limiting... including... anonymous credential operations" requirement; retrieval/update/activation/deactivation do not create a credential and are not rate-limited by this feature. |
-| Simplicity and dependency governance | PASS | No new package; two small ports (not a generic repository or mediator framework); a per-operation result type replaces exceptions for expected failures without introducing a generic result framework; existing test project is reused instead of adding a second one. |
+| Simplicity and dependency governance | PASS | One new package (`Microsoft.Extensions.Logging.Abstractions`, first-party/dependency-free, Application-only, for `ILogger<T>`); two small ports (not a generic repository or mediator framework); a per-operation result type replaces exceptions for expected failures without introducing a generic result framework; existing test project is reused instead of adding a second one. |
 | Essential tests and C# file convention | PASS | Tests cover creation, duplicate-email rejection, retrieval, profile update, activation/deactivation, and migration/persistence; existing `ArchitectureTests` already enforce the one-type/filename rule and forbidden-reference checks across the unchanged project set. |
 | Spec-Kit workflow and agent rules | PASS | Plan follows the clarified spec; one sequential agent; tasks will derive from this plan. |
 
@@ -123,7 +127,9 @@ src/
 │   └── Users/
 │       ├── Ports/
 │       │   ├── userRepository.interface.cs
-│       │   └── credentialProvisioningService.interface.cs
+│       │   ├── userRepositoryTransaction.interface.cs  # IUserRepositoryTransaction (see research.md)
+│       │   ├── credentialProvisioningService.interface.cs
+│       │   └── credentialProvisioningResult.result.cs
 │       ├── CreateUser/
 │       │   ├── createUser.command.cs
 │       │   ├── createUser.result.cs
@@ -143,7 +149,8 @@ src/
 │   ├── Persistence/
 │   │   ├── authenticationDbContext.context.cs   # Extended: DomainUsers/UserProfiles DbSets
 │   │   ├── Migrations/                          # + one new migration (Users/UserProfiles)
-│   │   └── userRepository.repository.cs
+│   │   ├── userRepository.repository.cs
+│   │   └── efUserRepositoryTransaction.adapter.cs  # Wraps IDbContextTransaction
 │   ├── Identity/
 │   │   └── identityCredentialProvisioningService.service.cs
 │   └── DependencyInjection/
@@ -153,7 +160,8 @@ src/
     │   ├── usersEndpoints.extension.cs
     │   ├── createUserRequest.dto.cs
     │   ├── updateProfileRequest.dto.cs
-    │   └── userResponse.dto.cs
+    │   ├── userResponse.dto.cs
+    │   └── userProfileResponse.dto.cs  # Split from userResponse.dto.cs (one-type-per-file)
     ├── DependencyInjection/
     │   ├── applicationServiceCollectionExtensions.extension.cs     # Extended
     │   └── apiServiceCollectionExtensions.extension.cs              # Extended: AddRateLimiter "user-creation" policy
