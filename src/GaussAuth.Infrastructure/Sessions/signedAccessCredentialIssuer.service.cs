@@ -6,7 +6,7 @@ namespace GaussAuth.Infrastructure.Sessions;
 
 public sealed class SignedAccessCredentialIssuer(AccessCredentialSigningKey signingKey, string issuer) : IAccessCredentialIssuer
 {
-    private static readonly JsonWebTokenHandler Handler = new();
+    private static readonly JsonWebTokenHandler Handler = new() { SetDefaultTimesOnTokenCreation = false };
 
     public string Issue(AccessCredentialClaims claims) => Handler.CreateToken(new SecurityTokenDescriptor
     {

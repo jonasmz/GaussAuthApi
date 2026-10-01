@@ -9,6 +9,8 @@ using GaussAuth.Application.Roles;
 using GaussAuth.Application.Permissions;
 using GaussAuth.Application.Authorization;
 using GaussAuth.Application.Login;
+using GaussAuth.Application.Sessions;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace GaussAuth.Api.DependencyInjection;
 
@@ -29,6 +31,8 @@ public static class ApplicationServiceCollectionExtensions
         services.AddScoped<UserRoleService>();
         services.AddScoped<EffectivePermissionService>();
         services.AddScoped<LoginService>();
+        services.TryAddSingleton(TimeProvider.System);
+        services.AddScoped<SessionService>();
         return services;
     }
 }

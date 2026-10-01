@@ -6,6 +6,7 @@ using GaussAuth.Api.Roles;
 using GaussAuth.Api.Permissions;
 using GaussAuth.Api.Authorization;
 using GaussAuth.Api.Login;
+using GaussAuth.Api.Sessions;
 using GaussAuth.Infrastructure.DependencyInjection;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -27,5 +28,6 @@ app.MapRolesEndpoints();
 app.MapPermissionsEndpoints();
 app.MapAuthorizationEndpoints();
 app.MapLoginEndpoints();
+app.MapSessionsEndpoints();
 
 app.Run();
