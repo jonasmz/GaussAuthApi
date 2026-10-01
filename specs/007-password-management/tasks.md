@@ -6,6 +6,7 @@
 
 - [ ] T001 Review `spec.md`, `plan.md`, `research.md`, `data-model.md`, `contracts/passwords-api.md`, `quickstart.md`, and existing Identity/Sessions composition before coding.
 - [ ] T002 Verify `.gitignore` excludes the configured protected recovery-delivery file and add only the required ignored pattern.
+- [ ] T002a Add documented empty delivery-path configuration to `.env.example` and `compose.dev.yml`; no delivery file path or credential is committed.
 
 ## Phase 2: Foundational
 
@@ -15,6 +16,7 @@
 - [ ] T006 Extend the Sessions Application boundary with an explicit per-user revoke-all operation in `src/GaussAuth.Application/Sessions/` and its port, preserving existing single-session behavior.
 - [ ] T007 Implement Identity password adapters in `src/GaussAuth.Infrastructure/Identity/` using framework change/reset/token/lockout APIs and map framework outcomes to safe Application results.
 - [ ] T008 Implement protected Development/Test file delivery in `src/GaussAuth.Infrastructure/Passwords/` and fail safely outside those environments without a configured delivery adapter.
+- [ ] T008a Add delivery-failure and protected-file exclusion tests in `tests/GaussAuth.Foundation.Tests/passwordManagementTests.test.cs`; failure keeps the public recovery response generic and never logs a credential.
 - [ ] T009 Register password adapters, delivery adapter, and session revoke-all service in `src/GaussAuth.Infrastructure/DependencyInjection/infrastructureServiceCollectionExtensions.extension.cs` and `src/GaussAuth.Api/DependencyInjection/applicationServiceCollectionExtensions.extension.cs`.
 - [ ] T010 Add configurable recovery/reset fixed-window policies in `src/GaussAuth.Api/DependencyInjection/apiServiceCollectionExtensions.extension.cs`.
 
@@ -24,7 +26,7 @@
 
 **Independent Test**: Change password through the API; old password and old session fail, new password succeeds, and all user sessions are revoked.
 
-- [ ] T011 [US1] Add change-password integration scenarios in `tests/GaussAuth.Foundation.Tests/passwordManagementTests.test.cs` for success, wrong current password, policy rejection, inactive user, and revoke-all behavior.
+- [ ] T011 [US1] Add change-password integration scenarios in `tests/GaussAuth.Foundation.Tests/passwordManagementTests.test.cs` for success, wrong current password, policy rejection, inactive user, revoke-all behavior, and unchanged memberships/roles/permissions/application data.
 - [ ] T012 [US1] Implement `PasswordManagementService.ChangeAsync` in `src/GaussAuth.Application/Passwords/passwordManagementService.service.cs` using trusted session context, current-password verification, safe outcomes, revoke-all, and events.
 - [ ] T013 [US1] Create change request DTO and map `POST /auth/password/change` in `src/GaussAuth.Api/Passwords/` with required/max-128 fields, bearer validation, safe responses, and no target user id.
 - [ ] T014 [US1] Register password endpoints from `src/GaussAuth.Api/Program.cs` and run the full Docker test suite.
@@ -45,7 +47,7 @@
 
 **Independent Test**: Valid reset makes old password fail, new password work, and sessions fail; invalid/reused credentials have identical safe failure and change nothing.
 
-- [ ] T018 [US3] Add reset integration scenarios in `tests/GaussAuth.Foundation.Tests/passwordManagementTests.test.cs` for valid, invalid/reused, inactive, policy failure, lockout clear, revoke-all, and reset rate limit.
+- [ ] T018 [US3] Add reset integration scenarios in `tests/GaussAuth.Foundation.Tests/passwordManagementTests.test.cs` for valid, invalid/reused, inactive, policy failure, lockout clear, revoke-all, reset rate limit, and unchanged memberships/roles/permissions/application data.
 - [ ] T019 [US3] Implement `PasswordManagementService.ResetAsync` in `src/GaussAuth.Application/Passwords/passwordManagementService.service.cs` with safe failure mapping, lockout clear only after success, revoke-all, and events.
 - [ ] T020 [US3] Create reset DTO and map `POST /auth/password/reset` in `src/GaussAuth.Api/Passwords/` with required/max 256 email, 4096 credential, 128 password; generic safe `400`; reset rate limiting.
 

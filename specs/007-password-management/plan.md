@@ -12,11 +12,6 @@ Add password change, recovery, reset, protected development/test delivery, publi
 
 ## Technical Context
 
-<!--
-  ACTION REQUIRED: Replace the content in this section with the technical details
-  for the project. The structure here is presented in advisory capacity to guide
-  the iteration process.
--->
 
 **Language/Version**: C# / .NET 10
 
@@ -30,11 +25,11 @@ Add password change, recovery, reset, protected development/test delivery, publi
 
 **Project Type**: ASP.NET Core web service
 
-**Performance Goals**: [domain-specific, e.g., 1000 req/s, 10k lines/sec, 60 fps or NEEDS CLARIFICATION]
+**Performance Goals**: No throughput target; public operations remain rate limited and complete within normal API request timeouts.
 
-**Constraints**: [domain-specific, e.g., <200ms p95, <100MB memory, offline-capable or NEEDS CLARIFICATION]
+**Constraints**: No custom crypto or password persistence; secrets never log; all sessions revoke after successful credential change.
 
-**Scale/Scope**: [domain-specific, e.g., 10k users, 1M LOC, 50 screens or NEEDS CLARIFICATION]
+**Scale/Scope**: Three API operations, protected development/test delivery, and no production email-provider selection.
 
 ## Constitution Check
 
@@ -47,7 +42,7 @@ All gates PASS: password management is bounded-service scope; Domain stays infra
 ### Documentation (this feature)
 
 ```text
-specs/[###-feature]/
+specs/007-password-management/
 ├── plan.md              # This file ($speckit-plan command output)
 ├── research.md          # Phase 0 output ($speckit-plan command)
 ├── data-model.md        # Phase 1 output ($speckit-plan command)
@@ -57,57 +52,20 @@ specs/[###-feature]/
 ```
 
 ### Source Code (repository root)
-<!--
-  ACTION REQUIRED: Replace the placeholder tree below with the concrete layout
-  for this feature. Delete unused options and expand the chosen structure with
-  real paths (e.g., apps/admin, packages/something). The delivered plan must
-  not include Option labels.
--->
 
 ```text
-# [REMOVE IF UNUSED] Option 1: Single project (DEFAULT)
-src/
-├── models/
-├── services/
-├── cli/
-└── lib/
-
-tests/
-├── contract/
-├── integration/
-└── unit/
-
-# [REMOVE IF UNUSED] Option 2: Web application (when "frontend" + "backend" detected)
-backend/
-├── src/
-│   ├── models/
-│   ├── services/
-│   └── api/
-└── tests/
-
-frontend/
-├── src/
-│   ├── components/
-│   ├── pages/
-│   └── services/
-└── tests/
-
-# [REMOVE IF UNUSED] Option 3: Mobile + API (when "iOS/Android" detected)
-api/
-└── [same as backend above]
-
-ios/ or android/
-└── [platform-specific structure: feature modules, UI flows, platform tests]
+src/GaussAuth.Application/{Passwords,Sessions}/
+src/GaussAuth.Infrastructure/{Identity,Passwords}/
+src/GaussAuth.Api/Passwords/
+tests/GaussAuth.Foundation.Tests/passwordManagementTests.test.cs
 ```
 
-**Structure Decision**: [Document the selected structure and reference the real
-directories captured above]
+**Structure Decision**: Existing vertical slices are extended without new projects.
+
+**Concrete structure**: `GaussAuth.Application/Passwords` owns `PasswordManagementService` and focused ports; `GaussAuth.Application/Sessions` exposes a per-user revoke-all use case; `GaussAuth.Infrastructure/Identity` implements Identity credential operations; `GaussAuth.Infrastructure/Passwords` implements protected delivery; `GaussAuth.Api/Passwords` maps the three routes; `tests/GaussAuth.Foundation.Tests/passwordManagementTests.test.cs` covers all flows.
+
+**Session boundary**: expose `RevokeAllForUserAsync(Guid userId, CancellationToken)` from the Sessions Application service/port. It loads matching sessions, revokes only those not already revoked, saves once, and emits the established session-revocation events. Password code depends on this boundary, never on `ISessionRepository`.
 
 ## Complexity Tracking
 
-> **Fill ONLY if Constitution Check has violations that must be justified**
-
-| Violation | Why Needed | Simpler Alternative Rejected Because |
-|-----------|------------|-------------------------------------|
-| [e.g., 4th project] | [current need] | [why 3 projects insufficient] |
-| [e.g., Repository pattern] | [specific problem] | [why direct DB access insufficient] |
+None.
