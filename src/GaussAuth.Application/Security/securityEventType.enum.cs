@@ -19,4 +19,8 @@ public enum SecurityEventType
     PasswordResetFailed,
     AuthorizationContextResolved,
     AuthorizationContextRejected
+    ,UserActivated, UserDeactivated, ApplicationActivated, ApplicationDeactivated,
+    MembershipCreated, MembershipActivated, MembershipDeactivated,
+    RoleCreated, RoleActivated, RoleDeactivated, PermissionCreated, PermissionActivated, PermissionDeactivated,
+    RoleAssigned, RoleRemoved, PermissionAssigned, PermissionRemoved, ConsumerAuthenticationFailed
 }

@@ -11,6 +11,7 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
+using Microsoft.AspNetCore.Identity;
 
 namespace GaussAuth.Foundation.Tests;
 
@@ -24,9 +25,9 @@ public sealed class AuthorizationContractTests
     {
         var validator = CreateValidator(new Dictionary<string, string?>
         {
-            ["AuthorizationConsumers:orders:CurrentSecret"] = "orders-current-secret",
-            ["AuthorizationConsumers:orders:RetiringSecret"] = "orders-retiring-secret",
-            ["AuthorizationConsumers:billing:CurrentSecret"] = "billing-current-secret"
+            ["AuthorizationConsumers:orders:CurrentSecretHash"] = Hash("orders-current-secret"),
+            ["AuthorizationConsumers:orders:RetiringSecretHash"] = Hash("orders-retiring-secret"),
+            ["AuthorizationConsumers:billing:CurrentSecretHash"] = Hash("billing-current-secret")
         });
 
         Assert.IsTrue((await validator.ValidateAsync("orders", "orders-current-secret", CancellationToken.None)).IsValid);
@@ -36,19 +37,18 @@ public sealed class AuthorizationContractTests
 
         var afterRetiringCredentialRemoval = CreateValidator(new Dictionary<string, string?>
         {
-            ["AuthorizationConsumers:orders:CurrentSecret"] = "orders-current-secret"
+            ["AuthorizationConsumers:orders:CurrentSecretHash"] = Hash("orders-current-secret")
         });
         Assert.IsTrue((await afterRetiringCredentialRemoval.ValidateAsync("orders", "orders-current-secret", CancellationToken.None)).IsValid);
         Assert.IsFalse((await afterRetiringCredentialRemoval.ValidateAsync("orders", "orders-retiring-secret", CancellationToken.None)).IsValid);
     }
 
     [TestMethod]
-    public void Consumer_configuration_rejects_secret_reuse_without_exposing_the_secret()
+    public void Consumer_configuration_rejects_legacy_plaintext_without_exposing_it()
     {
         var exception = Assert.ThrowsExactly<InvalidOperationException>(() => CreateValidator(new Dictionary<string, string?>
         {
-            ["AuthorizationConsumers:orders:CurrentSecret"] = "shared-secret",
-            ["AuthorizationConsumers:billing:CurrentSecret"] = "shared-secret"
+            ["AuthorizationConsumers:orders:CurrentSecret"] = "shared-secret"
         }));
 
         Assert.IsFalse(exception.Message.Contains("shared-secret", StringComparison.Ordinal));
@@ -59,7 +59,7 @@ public sealed class AuthorizationContractTests
     {
         var exception = Assert.ThrowsExactly<InvalidOperationException>(() => CreateValidator(new Dictionary<string, string?>
         {
-            ["AuthorizationConsumers:orders:CurrentSecret"] = " "
+            ["AuthorizationConsumers:orders:CurrentSecretHash"] = " "
         }));
 
         Assert.AreEqual("Authorization consumer configuration is invalid.", exception.Message);
@@ -288,7 +288,13 @@ public sealed class AuthorizationContractTests
         }
         foreach (var value in values.Where(item => item.Key.StartsWith("AuthorizationConsumers:", StringComparison.Ordinal)))
         {
-            Environment.SetEnvironmentVariable(value.Key.Replace(":", "__"), value.Value);
+            var key = value.Key.EndsWith(":CurrentSecret", StringComparison.Ordinal)
+                ? value.Key[..^"CurrentSecret".Length] + "CurrentSecretHash"
+                : value.Key;
+            var configured = value.Key.EndsWith(":CurrentSecret", StringComparison.Ordinal) && value.Value is not null
+                ? Hash(value.Value)
+                : value.Value;
+            Environment.SetEnvironmentVariable(key.Replace(":", "__"), configured);
         }
 
         var factory = new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
@@ -401,4 +407,6 @@ public sealed class AuthorizationContractTests
 
     private static ConfiguredConsumerCredentialValidator CreateValidator(IReadOnlyDictionary<string, string?> values) =>
         new(new ConfigurationBuilder().AddInMemoryCollection(values).Build());
+
+    private static string Hash(string secret) => new PasswordHasher<string>().HashPassword("test-consumer", secret);
 }

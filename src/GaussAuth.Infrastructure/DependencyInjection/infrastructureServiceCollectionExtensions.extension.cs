@@ -7,6 +7,7 @@ using GaussAuth.Application.Authorization.Ports;
 using GaussAuth.Application.AuthorizationContext.Ports;
 using GaussAuth.Application.Login.Ports;
 using GaussAuth.Application.Security.Ports;
+using GaussAuth.Application.Security;
 using GaussAuth.Application.Sessions;
 using GaussAuth.Application.Sessions.Ports;
 using GaussAuth.Infrastructure.Sessions;
@@ -103,7 +104,12 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddScoped<ICredentialVerificationService, IdentityCredentialVerificationService>();
         services.AddScoped<IPasswordCredentialService, IdentityPasswordCredentialService>();
         services.AddScoped<IRecoveryDelivery, ProtectedFileRecoveryDelivery>();
-        services.AddScoped<ISecurityEventRecorder, LoggingSecurityEventRecorder>();
+        services.AddSingleton(SecurityAuditRetentionPolicy.Load(configuration));
+        services.AddSingleton<SecurityEventCatalog>();
+        services.AddScoped<ISecurityEventRepository, SecurityEventRepository>();
+        services.AddScoped<ISecurityEventQueryRepository, SecurityEventQueryRepository>();
+        services.AddSingleton<IGlobalAuditReviewerPolicy, ConfiguredGlobalAuditReviewerPolicy>();
+        services.AddScoped<ISecurityEventRecorder, PersistedSecurityEventRecorder>();
 
         return services;
     }

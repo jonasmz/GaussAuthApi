@@ -1,6 +1,5 @@
-using System.Security.Cryptography;
-using System.Text;
 using GaussAuth.Application.AuthorizationContext.Ports;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.Configuration;
 
 namespace GaussAuth.Infrastructure.AuthorizationContext;
@@ -9,12 +8,11 @@ public sealed class ConfiguredConsumerCredentialValidator : IConsumerCredentialV
 {
     private const int MaximumApplicationCodeLength = 64;
     private const int MaximumCredentialLength = 512;
-    private readonly IReadOnlyDictionary<string, IReadOnlyList<byte[]>> credentialsByApplication;
+    private readonly IReadOnlyDictionary<string, IReadOnlyList<string>> hashesByApplication;
 
     public ConfiguredConsumerCredentialValidator(IConfiguration configuration)
     {
-        var credentials = new Dictionary<string, IReadOnlyList<byte[]>>(StringComparer.OrdinalIgnoreCase);
-        var configuredSecrets = new HashSet<string>(StringComparer.Ordinal);
+        var hashes = new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var consumer in configuration.GetSection("AuthorizationConsumers").GetChildren())
         {
@@ -24,32 +22,29 @@ public sealed class ConfiguredConsumerCredentialValidator : IConsumerCredentialV
                 throw new InvalidOperationException("Authorization consumer configuration is invalid.");
             }
 
-            var currentSecret = consumer["CurrentSecret"];
-            if (string.IsNullOrWhiteSpace(currentSecret) || currentSecret.Length > MaximumCredentialLength)
+            if (!string.IsNullOrWhiteSpace(consumer["CurrentSecret"]) || !string.IsNullOrWhiteSpace(consumer["RetiringSecret"]))
             {
                 throw new InvalidOperationException("Authorization consumer configuration is invalid.");
             }
 
-            var secrets = new List<string> { currentSecret };
-            var retiringSecret = consumer["RetiringSecret"];
-            if (!string.IsNullOrWhiteSpace(retiringSecret))
+            var currentHash = consumer["CurrentSecretHash"];
+            if (string.IsNullOrWhiteSpace(currentHash) || currentHash.Length > MaximumCredentialLength)
+                throw new InvalidOperationException("Authorization consumer configuration is invalid.");
+
+            var consumerHashes = new List<string> { currentHash };
+            var retiringHash = consumer["RetiringSecretHash"];
+            if (!string.IsNullOrWhiteSpace(retiringHash))
             {
-                if (retiringSecret.Length > MaximumCredentialLength || secrets.Contains(retiringSecret, StringComparer.Ordinal))
-                {
+                if (retiringHash.Length > MaximumCredentialLength || consumerHashes.Contains(retiringHash, StringComparer.Ordinal))
                     throw new InvalidOperationException("Authorization consumer configuration is invalid.");
-                }
-
-                secrets.Add(retiringSecret);
+                consumerHashes.Add(retiringHash);
             }
 
-            if (!credentials.TryAdd(applicationCode, secrets.Select(secret => Encoding.UTF8.GetBytes(secret)).ToArray()) ||
-                secrets.Any(secret => !configuredSecrets.Add(secret)))
-            {
+            if (!hashes.TryAdd(applicationCode, consumerHashes))
                 throw new InvalidOperationException("Authorization consumer configuration is invalid.");
-            }
         }
 
-        credentialsByApplication = credentials;
+        hashesByApplication = hashes;
     }
 
     public Task<ConsumerCredentialValidationResult> ValidateAsync(string applicationCode, string serviceCredential, CancellationToken cancellationToken)
@@ -57,13 +52,13 @@ public sealed class ConfiguredConsumerCredentialValidator : IConsumerCredentialV
         cancellationToken.ThrowIfCancellationRequested();
         if (string.IsNullOrWhiteSpace(applicationCode) || applicationCode.Length > MaximumApplicationCodeLength ||
             string.IsNullOrWhiteSpace(serviceCredential) || serviceCredential.Length > MaximumCredentialLength ||
-            !credentialsByApplication.TryGetValue(applicationCode.Trim(), out var credentials))
+            !hashesByApplication.TryGetValue(applicationCode.Trim(), out var hashes))
         {
             return Task.FromResult(ConsumerCredentialValidationResult.Failure());
         }
 
-        var presentedCredential = Encoding.UTF8.GetBytes(serviceCredential);
-        var valid = credentials.Any(credential => CryptographicOperations.FixedTimeEquals(credential, presentedCredential));
+        var hasher = new PasswordHasher<string>();
+        var valid = hashes.Any(hash => hasher.VerifyHashedPassword(applicationCode, hash, serviceCredential) != PasswordVerificationResult.Failed);
         return Task.FromResult(valid ? ConsumerCredentialValidationResult.Success() : ConsumerCredentialValidationResult.Failure());
     }
 }

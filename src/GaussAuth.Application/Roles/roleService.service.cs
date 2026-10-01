@@ -1,11 +1,13 @@
 using GaussAuth.Application.Applications.Ports;
 using GaussAuth.Application.Roles.Ports;
+using GaussAuth.Application.Security;
+using GaussAuth.Application.Security.Ports;
 using GaussAuth.Domain.Roles;
 using Microsoft.Extensions.Logging;
 
 namespace GaussAuth.Application.Roles;
 
-public sealed class RoleService(IRoleRepository roles, IApplicationRepository applications, ILogger<RoleService> logger)
+public sealed class RoleService(IRoleRepository roles, IApplicationRepository applications, ISecurityEventRecorder securityEvents, ILogger<RoleService> logger)
 {
     public async Task<RoleOperationResult> CreateAsync(Guid applicationId, string name, string? description, CancellationToken ct)
     {
@@ -19,6 +21,7 @@ public sealed class RoleService(IRoleRepository roles, IApplicationRepository ap
         var role = Role.Create(Guid.NewGuid(), applicationId, trimmedName, normalizedName, description, DateTimeOffset.UtcNow);
         await roles.AddAsync(role, ct);
         if (!await roles.TrySaveChangesAsync(ct)) return RoleOperationResult.Duplicate();
+        await securityEvents.RecordAsync(SecurityEventType.RoleCreated, null, applicationId, null, ct);
         logger.LogInformation("Role {RoleId} created.", role.Id);
         return RoleOperationResult.Success(role);
     }
@@ -40,6 +43,7 @@ public sealed class RoleService(IRoleRepository roles, IApplicationRepository ap
         var role = await roles.GetByIdAndApplicationAsync(roleId, applicationId, ct); if (role is null) return RoleOperationResult.RoleNotFound();
         role.UpdateDescription(description, DateTimeOffset.UtcNow);
         await roles.SaveChangesAsync(ct);
+        await securityEvents.RecordAsync(SecurityEventType.RoleActivated, null, applicationId, null, ct);
         logger.LogInformation("Role {RoleId} description updated.", role.Id);
         return RoleOperationResult.Success(role);
     }
@@ -51,6 +55,7 @@ public sealed class RoleService(IRoleRepository roles, IApplicationRepository ap
         if (!application.IsActive) return RoleOperationResult.InactiveApplication();
         role.Activate(DateTimeOffset.UtcNow);
         await roles.SaveChangesAsync(ct);
+        await securityEvents.RecordAsync(SecurityEventType.RoleDeactivated, null, applicationId, null, ct);
         logger.LogInformation("Role {RoleId} lifecycle transition completed with outcome {Outcome}.", role.Id, "activated");
         return RoleOperationResult.Success(role);
     }

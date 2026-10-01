@@ -29,6 +29,7 @@ public sealed class AuthorizationContextService(
         var consumer = await consumerCredentials.ValidateAsync(applicationCode, serviceCredential, cancellationToken);
         if (!consumer.IsValid)
         {
+            await securityEvents.RecordAsync(SecurityEventType.ConsumerAuthenticationFailed, null, null, null, cancellationToken);
             await securityEvents.RecordAsync(SecurityEventType.AuthorizationContextRejected, null, null, null, cancellationToken);
             return AuthorizationContextResolutionResult.Failure();
         }

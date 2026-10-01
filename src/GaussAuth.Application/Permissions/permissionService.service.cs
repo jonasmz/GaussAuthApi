@@ -1,12 +1,14 @@
 using System.Text.RegularExpressions;
 using GaussAuth.Application.Applications.Ports;
 using GaussAuth.Application.Permissions.Ports;
+using GaussAuth.Application.Security;
+using GaussAuth.Application.Security.Ports;
 using DomainPermission = GaussAuth.Domain.Permissions.Permission;
 using Microsoft.Extensions.Logging;
 
 namespace GaussAuth.Application.Permissions;
 
-public sealed class PermissionService(IPermissionRepository permissions, IApplicationRepository applications, ILogger<PermissionService> logger)
+public sealed class PermissionService(IPermissionRepository permissions, IApplicationRepository applications, ISecurityEventRecorder securityEvents, ILogger<PermissionService> logger)
 {
     private static readonly Regex CodePattern = new("^[a-z0-9]+(?:-[a-z0-9]+)*(?:\\.[a-z0-9]+(?:-[a-z0-9]+)*)*$", RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
@@ -21,6 +23,7 @@ public sealed class PermissionService(IPermissionRepository permissions, IApplic
         var permission = DomainPermission.Create(Guid.NewGuid(), applicationId, normalizedCode, description, DateTimeOffset.UtcNow);
         await permissions.AddAsync(permission, ct);
         if (!await permissions.TrySaveChangesAsync(ct)) return PermissionOperationResult.Duplicate();
+        await securityEvents.RecordAsync(SecurityEventType.PermissionCreated, null, applicationId, null, ct);
         logger.LogInformation("Permission {PermissionId} created.", permission.Id);
         return PermissionOperationResult.Success(permission);
     }
@@ -42,6 +45,7 @@ public sealed class PermissionService(IPermissionRepository permissions, IApplic
         var permission = await permissions.GetByIdAndApplicationAsync(permissionId, applicationId, ct); if (permission is null) return PermissionOperationResult.PermissionNotFound();
         permission.UpdateDescription(description, DateTimeOffset.UtcNow);
         await permissions.SaveChangesAsync(ct);
+        await securityEvents.RecordAsync(SecurityEventType.PermissionActivated, null, applicationId, null, ct);
         logger.LogInformation("Permission {PermissionId} description updated.", permission.Id);
         return PermissionOperationResult.Success(permission);
     }
@@ -53,6 +57,7 @@ public sealed class PermissionService(IPermissionRepository permissions, IApplic
         if (!application.IsActive) return PermissionOperationResult.InactiveApplication();
         permission.Activate(DateTimeOffset.UtcNow);
         await permissions.SaveChangesAsync(ct);
+        await securityEvents.RecordAsync(SecurityEventType.PermissionDeactivated, null, applicationId, null, ct);
         logger.LogInformation("Permission {PermissionId} lifecycle transition completed with outcome {Outcome}.", permission.Id, "activated");
         return PermissionOperationResult.Success(permission);
     }

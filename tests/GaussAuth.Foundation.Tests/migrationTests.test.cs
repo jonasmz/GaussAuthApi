@@ -28,7 +28,7 @@ public sealed class MigrationTests
 
         await db.Database.MigrateAsync();
         await db.Database.MigrateAsync();
-        Assert.AreEqual(5, (await db.Database.GetAppliedMigrationsAsync()).Count());
+        Assert.AreEqual(6, (await db.Database.GetAppliedMigrationsAsync()).Count());
         Assert.IsEmpty(await db.Database.GetPendingMigrationsAsync());
 
         var connection = db.Database.GetDbConnection();
@@ -56,7 +56,7 @@ public sealed class MigrationTests
         {
             "AspNetUsers", "AspNetUserClaims", "AspNetUserLogins",
             "AspNetUserTokens", "__EFMigrationsHistory", "Users", "UserProfiles",
-            "Applications", "ApplicationMemberships", "Roles", "Permissions", "RolePermissions", "UserRoles", "Sessions"
+            "Applications", "ApplicationMemberships", "Roles", "Permissions", "RolePermissions", "UserRoles", "Sessions", "SecurityEvents"
         };
         CollectionAssert.AreEquivalent(expectedTables, tables.ToArray());
 
@@ -75,6 +75,20 @@ public sealed class MigrationTests
                                            index.Contains("NormalizedEmail", StringComparison.Ordinal)));
         Assert.IsTrue(indexes.Any(index => index.Contains("UNIQUE", StringComparison.Ordinal) &&
                                            index.Contains("NormalizedUserName", StringComparison.Ordinal)));
+
+        var securityEventIndexes = new List<string>();
+        await using (var securityIndexCommand = connection.CreateCommand())
+        {
+            securityIndexCommand.CommandText = "SELECT indexname FROM pg_indexes WHERE schemaname = 'public' AND tablename = 'SecurityEvents'";
+            await using var reader = await securityIndexCommand.ExecuteReaderAsync();
+            while (await reader.ReadAsync()) securityEventIndexes.Add(reader.GetString(0));
+        }
+        CollectionAssert.IsSubsetOf(new[]
+        {
+            "IX_SecurityEvents_OccurredAtUtc_Id", "IX_SecurityEvents_ApplicationId_OccurredAtUtc_Id",
+            "IX_SecurityEvents_UserId_OccurredAtUtc_Id", "IX_SecurityEvents_SessionId_OccurredAtUtc_Id",
+            "IX_SecurityEvents_EventType_OccurredAtUtc_Id"
+        }, securityEventIndexes);
 
         var columns = new Dictionary<string, (string Type, string Nullable)>();
         await using (var columnCommand = connection.CreateCommand())
