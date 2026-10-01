@@ -76,6 +76,30 @@ public sealed class ArchitectureTests
         }
     }
 
+    [TestMethod]
+    public void Domain_and_application_source_do_not_depend_on_identity_implementations()
+    {
+        var root = FindRepositoryRoot();
+        var forbidden = new[]
+        {
+            "Microsoft.AspNetCore.Identity", "UserManager<", "IdentityUser", "SignInManager<",
+            "PasswordHasher<", "IUserPasswordStore", "IUserTwoFactorTokenProvider"
+        };
+
+        foreach (var tree in new[] { "src/GaussAuth.Domain", "src/GaussAuth.Application" })
+        {
+            foreach (var path in Directory.EnumerateFiles(Path.Combine(root, tree), "*.cs", SearchOption.AllDirectories))
+            {
+                var source = File.ReadAllText(path);
+                foreach (var reference in forbidden)
+                {
+                    Assert.IsFalse(source.Contains(reference, StringComparison.Ordinal),
+                        $"{Path.GetRelativePath(root, path)} must not depend on {reference}.");
+                }
+            }
+        }
+    }
+
     private static string FindRepositoryRoot()
     {
         for (var directory = new DirectoryInfo(AppContext.BaseDirectory);

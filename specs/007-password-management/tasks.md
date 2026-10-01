@@ -58,8 +58,8 @@
 
 ## Phase 7: Polish
 
-- [ ] T023 Verify Domain/Application Identity-reference restrictions in `tests/GaussAuth.Foundation.Tests/architectureTests.test.cs`, one-top-level-type naming, and no credential/hash/token in versioned files.
-- [ ] T024 Run `dotnet test GaussAuth.slnx` in the SDK container and execute `specs/007-password-management/quickstart.md`; correct only feature-007 artifacts.
+- [X] T023 Verify Domain/Application Identity-reference restrictions in `tests/GaussAuth.Foundation.Tests/architectureTests.test.cs`, one-top-level-type naming, and no credential/hash/token in versioned files.
+- [X] T024 Run `dotnet test GaussAuth.slnx` in the SDK container and execute `specs/007-password-management/quickstart.md`; correct only feature-007 artifacts.
 
 ## Dependencies & Execution Order
 
