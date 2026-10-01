@@ -1,14 +1,14 @@
-# Implementation Plan: [FEATURE]
+# Implementation Plan: Password Management
 
-**Branch**: `[###-feature-name]` | **Date**: [DATE] | **Spec**: [link]
+**Branch**: `007-password-management` | **Date**: 2026-10-01 | **Spec**: [spec.md](spec.md)
 
-**Input**: Feature specification from `/specs/[###-feature-name]/spec.md`
+**Input**: Feature specification from `specs/007-password-management/spec.md`
 
 **Note**: This template is filled in by the `$speckit-plan` command; its definition describes the execution workflow.
 
 ## Summary
 
-[Extract from feature spec: primary requirement + technical approach from research]
+Add password change, recovery, reset, protected development/test delivery, public rate limits, safe events, and revoke-all session policy through focused Application ports over existing Identity and Sessions capabilities.
 
 ## Technical Context
 
@@ -18,17 +18,17 @@
   the iteration process.
 -->
 
-**Language/Version**: [e.g., Python 3.11, Swift 5.9, Rust 1.75 or NEEDS CLARIFICATION]
+**Language/Version**: C# / .NET 10
 
-**Primary Dependencies**: [e.g., FastAPI, UIKit, LLVM or NEEDS CLARIFICATION]
+**Primary Dependencies**: ASP.NET Core Identity, EF Core, Minimal APIs, existing rate limiter
 
-**Storage**: [if applicable, e.g., PostgreSQL, CoreData, files or N/A]
+**Storage**: Existing PostgreSQL Identity tables and `Sessions`; protected local file only for Development/Test delivery
 
-**Testing**: [e.g., pytest, XCTest, cargo test or NEEDS CLARIFICATION]
+**Testing**: MSTest integration tests in the SDK container
 
-**Target Platform**: [e.g., Linux server, iOS 15+, WASM or NEEDS CLARIFICATION]
+**Target Platform**: Linux Docker API service
 
-**Project Type**: [e.g., library/cli/web-service/mobile-app/compiler/desktop-app or NEEDS CLARIFICATION]
+**Project Type**: ASP.NET Core web service
 
 **Performance Goals**: [domain-specific, e.g., 1000 req/s, 10k lines/sec, 60 fps or NEEDS CLARIFICATION]
 
@@ -40,7 +40,7 @@
 
 *GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
 
-[Gates determined based on constitution file]
+All gates PASS: password management is bounded-service scope; Domain stays infrastructure-free; Identity and file delivery remain Infrastructure; all sessions revoke through the existing model; no custom cryptography, provider, queue, or new persistence is added.
 
 ## Project Structure
 
