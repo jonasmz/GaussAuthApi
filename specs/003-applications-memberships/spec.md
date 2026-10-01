@@ -8,6 +8,12 @@
 
 **Input**: User description: "Create feature 003-applications-memberships for the reusable generic Authentication and Authorization API."
 
+## Clarifications
+
+### Session 2026-10-01
+
+- Q: When a user or application is deactivated, should its existing active memberships be automatically changed to inactive? → A: Keep existing membership states unchanged; deactivation only makes them ineligible until the user/application is active again.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Register and manage a consuming application (Priority: P1)
@@ -116,7 +122,11 @@ the selected one changed.
   user identifier, application identifier, or state change is rejected before
   any record changes.
 - An inactive application remains retrievable and retains its memberships;
-  deactivation never deletes users or memberships.
+  deactivation never deletes users or memberships and does not change their
+  membership states.
+- Deactivating a user does not change any membership state. A membership is
+  eligible only when its own state, its user's state, and its application's
+  state are all active.
 - Deactivating one membership never deactivates its global user, its
   application, or any other membership.
 - A request for an unknown application, user, or membership returns a safe
@@ -179,6 +189,11 @@ the selected one changed.
   MUST NOT change the global user's state, the application's state, or any
   membership in another application. Repeating deactivation succeeds
   idempotently.
+- **FR-012a**: Deactivating a user or application MUST NOT automatically
+  change the state of any existing membership. Membership eligibility requires
+  the membership, its user, and its application all to be active; reactivating
+  a user or application restores only that entity's state and does not alter
+  its memberships.
 - **FR-013**: Application code uniqueness and user/application membership
   uniqueness MUST be enforced authoritatively by persistent storage as well
   as checked by the service, so concurrent requests cannot create duplicates.
@@ -263,7 +278,9 @@ the selected one changed.
   relationship; it requires a later successful activation after both the user
   and application are active.
 - Existing memberships remain stored when a user or application becomes
-  inactive. This feature does not define future session or authentication
+  inactive, and their membership state is not changed automatically. A later
+  access decision must require active user, active application, and active
+  membership. This feature does not define future session or authentication
   consequences beyond preventing membership activation while either is
   inactive.
 - Listing is limited to operating and validating this feature: applications,
