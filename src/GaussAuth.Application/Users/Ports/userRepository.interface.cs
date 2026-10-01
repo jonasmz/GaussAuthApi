@@ -10,6 +10,8 @@ public interface IUserRepository
 
     Task<User?> GetByIdAsync(Guid id, CancellationToken cancellationToken);
 
+    Task<User?> GetByNormalizedEmailAsync(string normalizedEmail, CancellationToken cancellationToken);
+
     Task SaveChangesAsync(CancellationToken cancellationToken);
 
     /// <summary>

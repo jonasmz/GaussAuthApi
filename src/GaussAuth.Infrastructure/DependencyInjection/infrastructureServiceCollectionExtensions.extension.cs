@@ -4,6 +4,7 @@ using GaussAuth.Application.Memberships.Ports;
 using GaussAuth.Application.Roles.Ports;
 using GaussAuth.Application.Permissions.Ports;
 using GaussAuth.Application.Authorization.Ports;
+using GaussAuth.Application.Login.Ports;
 using GaussAuth.Infrastructure.Identity;
 using GaussAuth.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Identity;
@@ -42,9 +43,11 @@ public static class InfrastructureServiceCollectionExtensions
         }
 
         services.AddDbContext<AuthenticationDbContext>(options => options.UseNpgsql(connection));
+        services.AddAuthentication();
         services.AddIdentityCore<IdentityUser<Guid>>(options =>
                 options.Stores.SchemaVersion = IdentitySchemaVersions.Version2)
-            .AddEntityFrameworkStores<AuthenticationDbContext>();
+            .AddEntityFrameworkStores<AuthenticationDbContext>()
+            .AddSignInManager();
 
         services.AddScoped<IUserRepository, UserRepository>();
         services.AddScoped<IApplicationRepository, ApplicationRepository>();
@@ -54,6 +57,7 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddScoped<IRolePermissionRepository, RolePermissionRepository>();
         services.AddScoped<IUserRoleRepository, UserRoleRepository>();
         services.AddScoped<ICredentialProvisioningService, IdentityCredentialProvisioningService>();
+        services.AddScoped<ICredentialVerificationService, IdentityCredentialVerificationService>();
 
         return services;
     }

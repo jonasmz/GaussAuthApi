@@ -18,6 +18,11 @@ public sealed class UserRepository(AuthenticationDbContext context) : IUserRepos
             .Include(user => user.Profile)
             .SingleOrDefaultAsync(user => user.Id == id, cancellationToken);
 
+    public Task<User?> GetByNormalizedEmailAsync(string normalizedEmail, CancellationToken cancellationToken) =>
+        context.DomainUsers
+            .Include(user => user.Profile)
+            .SingleOrDefaultAsync(user => user.NormalizedEmail == normalizedEmail, cancellationToken);
+
     public Task SaveChangesAsync(CancellationToken cancellationToken) =>
         context.SaveChangesAsync(cancellationToken);
 
