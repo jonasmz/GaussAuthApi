@@ -36,7 +36,7 @@ public sealed class UserRoleService(
             if (existing.IsActive) return AuthorizationOperationResult.DuplicateActive();
             existing.Activate(DateTimeOffset.UtcNow);
             await userRoles.SaveChangesAsync(ct);
-            await securityEvents.RecordAsync(SecurityEventType.RoleAssigned, userId, applicationId, null, ct);
+            await securityEvents.RecordAsync(SecurityEventType.RoleAssigned, userId, applicationId, null, "user-role", existing.Id, ct);
             logger.LogInformation("UserRole {UserRoleId} lifecycle transition completed with outcome {Outcome}.", existing.Id, "reactivated");
             return AuthorizationOperationResult.SuccessUserRole(existing, created: false);
         }
@@ -44,7 +44,7 @@ public sealed class UserRoleService(
         var userRole = UserRole.Create(Guid.NewGuid(), applicationId, userId, roleId, DateTimeOffset.UtcNow);
         await userRoles.AddAsync(userRole, ct);
         if (!await userRoles.TrySaveChangesAsync(ct)) return AuthorizationOperationResult.DuplicateActive();
-        await securityEvents.RecordAsync(SecurityEventType.RoleAssigned, userId, applicationId, null, ct);
+        await securityEvents.RecordAsync(SecurityEventType.RoleAssigned, userId, applicationId, null, "user-role", userRole.Id, ct);
         logger.LogInformation("UserRole {UserRoleId} created.", userRole.Id);
         return AuthorizationOperationResult.SuccessUserRole(userRole, created: true);
     }
@@ -53,9 +53,10 @@ public sealed class UserRoleService(
     {
         var existing = await userRoles.GetAsync(userId, roleId, applicationId, ct);
         if (existing is null) return AuthorizationOperationResult.RelationshipNotFound();
+        var wasActive = existing.IsActive;
         existing.Deactivate(DateTimeOffset.UtcNow);
         await userRoles.SaveChangesAsync(ct);
-        await securityEvents.RecordAsync(SecurityEventType.RoleRemoved, userId, applicationId, null, ct);
+        if (wasActive) await securityEvents.RecordAsync(SecurityEventType.RoleRemoved, userId, applicationId, null, "user-role", existing.Id, ct);
         logger.LogInformation("UserRole {UserRoleId} lifecycle transition completed with outcome {Outcome}.", existing.Id, "deactivated");
         return AuthorizationOperationResult.SuccessUserRole(existing, created: false);
     }

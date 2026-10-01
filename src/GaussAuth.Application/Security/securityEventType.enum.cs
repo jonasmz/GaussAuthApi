@@ -23,5 +23,7 @@ public enum SecurityEventType
     MembershipCreated, MembershipActivated, MembershipDeactivated,
     RoleCreated, RoleActivated, RoleDeactivated, PermissionCreated, PermissionActivated, PermissionDeactivated,
     RoleAssigned, RoleRemoved, PermissionAssigned, PermissionRemoved, ConsumerAuthenticationFailed,
-    AvatarUpdated, AvatarRemoved, AvatarUploadRejected
+    AvatarUpdated, AvatarRemoved, AvatarUploadRejected,
+    ApplicationRegistered, UserCreated, RoleUpdated, PermissionUpdated,
+    ConsumerCredentialGenerated, ConsumerCredentialRotated, ConsumerCredentialPreviousRetired, AdministrativeAccessDenied
 }

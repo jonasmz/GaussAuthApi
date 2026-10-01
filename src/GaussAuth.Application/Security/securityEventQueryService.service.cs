@@ -1,4 +1,5 @@
 using System.Text;
+using GaussAuth.Application.Administration.Ports;
 using GaussAuth.Application.Authorization.Ports;
 using GaussAuth.Application.Security.Ports;
 using GaussAuth.Application.Sessions;
@@ -7,7 +8,7 @@ using GaussAuth.Domain.Security;
 namespace GaussAuth.Application.Security;
 
 public sealed class SecurityEventQueryService(SessionService sessions, IUserRoleRepository userRoles,
-    IGlobalAuditReviewerPolicy globalReviewers, ISecurityEventQueryRepository repository)
+    IGlobalAdministratorPolicy globalAdministrators, ISecurityEventQueryRepository repository)
 {
     private const string AuditReadPermission = "audit.events.read";
 
@@ -33,7 +34,7 @@ public sealed class SecurityEventQueryService(SessionService sessions, IUserRole
 
     private async Task<AuthorizedAuditScope?> ResolveScopeAsync(Guid userId, Guid applicationId, CancellationToken cancellationToken)
     {
-        if (globalReviewers.IsGlobalReviewer(userId)) return AuthorizedAuditScope.Global();
+        if (globalAdministrators.IsGlobalAdministrator(userId)) return AuthorizedAuditScope.Global();
         var permissions = await userRoles.GetEffectivePermissionsAsync(userId, applicationId, cancellationToken);
         return permissions.Any(permission => string.Equals(permission.Code, AuditReadPermission, StringComparison.Ordinal))
             ? AuthorizedAuditScope.Application(applicationId)

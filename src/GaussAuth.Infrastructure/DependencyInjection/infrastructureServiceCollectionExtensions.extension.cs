@@ -1,3 +1,5 @@
+using GaussAuth.Application.Administration.Ports;
+using GaussAuth.Infrastructure.Administration;
 using GaussAuth.Application.Users.Ports;
 using GaussAuth.Application.Applications.Ports;
 using GaussAuth.Application.Memberships.Ports;
@@ -112,7 +114,7 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddSingleton<SecurityEventCatalog>();
         services.AddScoped<ISecurityEventRepository, SecurityEventRepository>();
         services.AddScoped<ISecurityEventQueryRepository, SecurityEventQueryRepository>();
-        services.AddSingleton<IGlobalAuditReviewerPolicy, ConfiguredGlobalAuditReviewerPolicy>();
+        services.AddSingleton<IGlobalAdministratorPolicy>(new ConfiguredGlobalAdministratorPolicy(configuration));
         services.AddScoped<ISecurityEventRecorder, PersistedSecurityEventRecorder>();
 
         var profileImages = ProfileImagesOptions.Load(configuration, environment);

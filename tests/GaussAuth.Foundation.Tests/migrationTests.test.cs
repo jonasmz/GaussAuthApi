@@ -28,7 +28,7 @@ public sealed class MigrationTests
 
         await db.Database.MigrateAsync();
         await db.Database.MigrateAsync();
-        Assert.AreEqual(6, (await db.Database.GetAppliedMigrationsAsync()).Count());
+        Assert.AreEqual(7, (await db.Database.GetAppliedMigrationsAsync()).Count());
         Assert.IsEmpty(await db.Database.GetPendingMigrationsAsync());
 
         var connection = db.Database.GetDbConnection();

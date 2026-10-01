@@ -137,6 +137,7 @@ public sealed class AuthenticationDbContext(DbContextOptions<AuthenticationDbCon
             securityEvent.HasIndex(x => new { x.UserId, x.OccurredAtUtc, x.Id }).HasDatabaseName("IX_SecurityEvents_UserId_OccurredAtUtc_Id");
             securityEvent.HasIndex(x => new { x.SessionId, x.OccurredAtUtc, x.Id }).HasDatabaseName("IX_SecurityEvents_SessionId_OccurredAtUtc_Id");
             securityEvent.HasIndex(x => new { x.EventType, x.OccurredAtUtc, x.Id }).HasDatabaseName("IX_SecurityEvents_EventType_OccurredAtUtc_Id");
+            securityEvent.HasIndex(x => new { x.ActorUserId, x.OccurredAtUtc, x.Id }).HasDatabaseName("IX_SecurityEvents_ActorUserId_OccurredAtUtc_Id");
         });
     }
 }

@@ -33,7 +33,7 @@ public sealed class RolePermissionService(
             if (existing.IsActive) return AuthorizationOperationResult.DuplicateActive();
             existing.Activate(DateTimeOffset.UtcNow);
             await rolePermissions.SaveChangesAsync(ct);
-            await securityEvents.RecordAsync(SecurityEventType.PermissionAssigned, null, applicationId, null, ct);
+            await securityEvents.RecordAsync(SecurityEventType.PermissionAssigned, null, applicationId, null, "role-permission", existing.Id, ct);
             logger.LogInformation("RolePermission {RolePermissionId} lifecycle transition completed with outcome {Outcome}.", existing.Id, "reactivated");
             return AuthorizationOperationResult.SuccessRolePermission(existing, created: false);
         }
@@ -41,7 +41,7 @@ public sealed class RolePermissionService(
         var rolePermission = RolePermission.Create(Guid.NewGuid(), applicationId, roleId, permissionId, DateTimeOffset.UtcNow);
         await rolePermissions.AddAsync(rolePermission, ct);
         if (!await rolePermissions.TrySaveChangesAsync(ct)) return AuthorizationOperationResult.DuplicateActive();
-        await securityEvents.RecordAsync(SecurityEventType.PermissionAssigned, null, applicationId, null, ct);
+        await securityEvents.RecordAsync(SecurityEventType.PermissionAssigned, null, applicationId, null, "role-permission", rolePermission.Id, ct);
         logger.LogInformation("RolePermission {RolePermissionId} created.", rolePermission.Id);
         return AuthorizationOperationResult.SuccessRolePermission(rolePermission, created: true);
     }
@@ -50,9 +50,10 @@ public sealed class RolePermissionService(
     {
         var existing = await rolePermissions.GetAsync(roleId, permissionId, ct);
         if (existing is null || existing.ApplicationId != applicationId) return AuthorizationOperationResult.RelationshipNotFound();
+        var wasActive = existing.IsActive;
         existing.Deactivate(DateTimeOffset.UtcNow);
         await rolePermissions.SaveChangesAsync(ct);
-        await securityEvents.RecordAsync(SecurityEventType.PermissionRemoved, null, applicationId, null, ct);
+        if (wasActive) await securityEvents.RecordAsync(SecurityEventType.PermissionRemoved, null, applicationId, null, "role-permission", existing.Id, ct);
         logger.LogInformation("RolePermission {RolePermissionId} lifecycle transition completed with outcome {Outcome}.", existing.Id, "deactivated");
         return AuthorizationOperationResult.SuccessRolePermission(existing, created: false);
     }

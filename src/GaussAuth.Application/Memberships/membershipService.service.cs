@@ -20,7 +20,7 @@ public sealed class MembershipService(IApplicationMembershipRepository membershi
         var membership = ApplicationMembership.Create(Guid.NewGuid(), userId, applicationId, user.IsActive, DateTimeOffset.UtcNow);
         await memberships.AddAsync(membership, ct);
         if (!await memberships.TrySaveChangesAsync(ct)) return MembershipOperationResult.Duplicate();
-        await securityEvents.RecordAsync(SecurityEventType.MembershipCreated, userId, applicationId, null, ct);
+        await securityEvents.RecordAsync(SecurityEventType.MembershipCreated, userId, applicationId, null, "membership", membership.Id, ct);
         logger.LogInformation("Membership {MembershipId} created.", membership.Id);
         return MembershipOperationResult.Success(membership);
     }
@@ -33,9 +33,10 @@ public sealed class MembershipService(IApplicationMembershipRepository membershi
         var application = await applications.GetByIdAsync(applicationId, ct); if (application is null) return MembershipOperationResult.ApplicationNotFound();
         if (!user.IsActive) return MembershipOperationResult.InactiveUser();
         if (!application.IsActive) return MembershipOperationResult.InactiveApplication();
+        var wasActive = membership.IsActive;
         membership.Activate(DateTimeOffset.UtcNow);
         await memberships.TrySaveChangesAsync(ct);
-        await securityEvents.RecordAsync(SecurityEventType.MembershipActivated, userId, applicationId, null, ct);
+        if (!wasActive) await securityEvents.RecordAsync(SecurityEventType.MembershipActivated, userId, applicationId, null, "membership", membership.Id, ct);
         logger.LogInformation("Membership {MembershipId} lifecycle transition completed with outcome {Outcome}.", membership.Id, "activated");
         return MembershipOperationResult.Success(membership);
     }
@@ -44,9 +45,10 @@ public sealed class MembershipService(IApplicationMembershipRepository membershi
     {
         if (userId == Guid.Empty || applicationId == Guid.Empty) return MembershipOperationResult.Invalid();
         var membership = await memberships.GetAsync(userId, applicationId, ct); if (membership is null) return MembershipOperationResult.MembershipNotFound();
+        var wasActive = membership.IsActive;
         membership.Deactivate(DateTimeOffset.UtcNow);
         await memberships.TrySaveChangesAsync(ct);
-        await securityEvents.RecordAsync(SecurityEventType.MembershipDeactivated, userId, applicationId, null, ct);
+        if (wasActive) await securityEvents.RecordAsync(SecurityEventType.MembershipDeactivated, userId, applicationId, null, "membership", membership.Id, ct);
         logger.LogInformation("Membership {MembershipId} lifecycle transition completed with outcome {Outcome}.", membership.Id, "deactivated");
         return MembershipOperationResult.Success(membership);
     }
