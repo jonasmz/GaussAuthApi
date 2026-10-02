@@ -15,6 +15,11 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Logging;
+using Microsoft.AspNetCore.Identity;
+using GaussAuth.Application.Security;
+using GaussAuth.Application.Security.Ports;
+using GaussAuth.Application.Applications;
 
 namespace GaussAuth.Foundation.Tests;
 
@@ -954,6 +959,347 @@ public sealed class AdministrationTests
     {
         AssertStartupFails("Administration__MaxBulkSessionRevocation", "0");
         AssertStartupFails("Administration__MaxBulkSessionRevocation", "10001");
+    }
+
+    private static async Task<HttpStatusCode> ContextStatusAsync(WebApplicationFactory<Program> factory, AdministratorClient session, string applicationCode, string secret)
+    {
+        using var client = factory.CreateClient();
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/auth/authorization-context");
+        request.Headers.Authorization = new("Bearer", session.AccessToken);
+        request.Headers.Add("X-GaussAuth-Application-Code", applicationCode);
+        request.Headers.Add("X-GaussAuth-Consumer-Secret", secret);
+        using var response = await client.SendAsync(request);
+        return response.StatusCode;
+    }
+
+    private static async Task<string> SecretFromAsync(HttpResponseMessage response) =>
+        JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement.GetProperty("secret").GetString()!;
+
+    [TestMethod]
+    public async Task Consumer_secret_lifecycle_shows_the_value_once_and_keeps_the_previous_until_retired()
+    {
+        var logs = new CapturingLoggerProvider();
+        var policy = new TestGlobalAdministratorPolicy();
+        using var factory = (await MigratedFactoryAsync(policy)).WithWebHostBuilder(builder => builder.ConfigureServices(services => services.AddLogging(logging => logging.AddProvider(logs))));
+        using var global = await factory.CreateGlobalAdministratorAsync(policy);
+        var (applicationA, codeA) = await factory.CreateApplicationAsync();
+        var (applicationB, codeB) = await factory.CreateApplicationAsync();
+        using var memberA = await NewMemberSessionAsync(factory, applicationA, codeA);
+        using var memberB = await NewMemberSessionAsync(factory, applicationB, codeB);
+        var route = $"/admin/applications/{applicationA}/consumer-secret";
+
+        using var before = await global.Client.GetAsync(route);
+        Assert.IsFalse(JsonDocument.Parse(await before.Content.ReadAsStringAsync()).RootElement.GetProperty("exists").GetBoolean());
+
+        using var generated = await global.Client.PostAsync(route, null);
+        Assert.AreEqual(HttpStatusCode.Created, generated.StatusCode);
+        Assert.IsTrue(generated.Headers.CacheControl?.NoStore);
+        var first = await SecretFromAsync(generated);
+        Assert.IsGreaterThanOrEqualTo(40, first.Length);
+        Assert.AreEqual(HttpStatusCode.OK, await ContextStatusAsync(factory, memberA, codeA, first));
+        using var generatedAgain = await global.Client.PostAsync(route, null);
+        Assert.AreEqual(HttpStatusCode.Conflict, generatedAgain.StatusCode);
+
+        using var rotated = await global.Client.PostAsync(route + "/rotate", null);
+        Assert.AreEqual(HttpStatusCode.OK, rotated.StatusCode);
+        Assert.IsTrue(rotated.Headers.CacheControl?.NoStore);
+        var second = await SecretFromAsync(rotated);
+        Assert.AreNotEqual(first, second);
+        Assert.AreEqual(HttpStatusCode.OK, await ContextStatusAsync(factory, memberA, codeA, first));
+        Assert.AreEqual(HttpStatusCode.OK, await ContextStatusAsync(factory, memberA, codeA, second));
+
+        // The secret of Application A neither authenticates for B nor changes B's state.
+        Assert.AreEqual(HttpStatusCode.Unauthorized, await ContextStatusAsync(factory, memberB, codeB, second));
+        using var metadataB = await global.Client.GetAsync($"/admin/applications/{applicationB}/consumer-secret");
+        Assert.IsFalse(JsonDocument.Parse(await metadataB.Content.ReadAsStringAsync()).RootElement.GetProperty("exists").GetBoolean());
+
+        using var retired = await global.Client.PostAsync(route + "/retire-previous", null);
+        Assert.AreEqual(HttpStatusCode.OK, retired.StatusCode);
+        Assert.AreEqual(HttpStatusCode.Unauthorized, await ContextStatusAsync(factory, memberA, codeA, first));
+        Assert.AreEqual(HttpStatusCode.OK, await ContextStatusAsync(factory, memberA, codeA, second));
+        using var retiredAgain = await global.Client.PostAsync(route + "/retire-previous", null);
+        Assert.AreEqual(HttpStatusCode.OK, retiredAgain.StatusCode);
+
+        using var metadata = await global.Client.GetAsync(route);
+        var metadataBody = await metadata.Content.ReadAsStringAsync();
+        var root = JsonDocument.Parse(metadataBody).RootElement;
+        CollectionAssert.AreEquivalent(new[] { "exists", "source", "createdAtUtc", "rotatedAtUtc", "hasRetiring" }, root.EnumerateObject().Select(item => item.Name).ToArray());
+        Assert.AreEqual("managed", root.GetProperty("source").GetString());
+        Assert.IsFalse(root.GetProperty("hasRetiring").GetBoolean());
+        Assert.IsTrue(metadata.Headers.CacheControl?.NoStore);
+        Assert.AreEqual(HttpStatusCode.OK, retired.StatusCode);
+        var retiredBody = await retired.Content.ReadAsStringAsync();
+
+        // Authorization: only global administrators, and a missing Application is a 404.
+        using var applicationAdmin = await factory.CreateApplicationAdministratorAsync(applicationA, codeA, AccessModelPermissions);
+        using var forbidden = await applicationAdmin.Client.PostAsync(route + "/rotate", null);
+        using var forbiddenRead = await applicationAdmin.Client.GetAsync(route);
+        using var anonymous = factory.CreateClient();
+        using var unauthenticated = await anonymous.PostAsync(route, null);
+        using var missing = await global.Client.PostAsync($"/admin/applications/{Guid.NewGuid()}/consumer-secret", null);
+        Assert.AreEqual(HttpStatusCode.Forbidden, forbidden.StatusCode);
+        Assert.AreEqual(HttpStatusCode.Forbidden, forbiddenRead.StatusCode);
+        Assert.AreEqual(HttpStatusCode.Unauthorized, unauthenticated.StatusCode);
+        Assert.AreEqual(HttpStatusCode.NotFound, missing.StatusCode);
+
+        // Audit events carry actor and target but no secret material; nothing else ever shows the plaintext.
+        using var scope = factory.Services.CreateScope();
+        var events = await scope.ServiceProvider.GetRequiredService<AuthenticationDbContext>().SecurityEvents
+            .Where(item => item.SubjectId == applicationA && item.SubjectType == "consumer-credential").ToListAsync();
+        CollectionAssert.AreEquivalent(
+            new[] { "consumer.credential.generated", "consumer.credential.rotated", "consumer.credential.previous-retired", "consumer.credential.previous-retired" },
+            events.Select(item => item.EventType).ToArray());
+        Assert.IsTrue(events.All(item => item.ActorUserId == global.UserId && item.ApplicationId == applicationA));
+        var everything = JsonSerializer.Serialize(events) + metadataBody + retiredBody + string.Join('\n', logs.Entries);
+        foreach (var secret in new[] { first, second })
+        {
+            Assert.IsFalse(everything.Contains(secret, StringComparison.Ordinal));
+            Assert.IsFalse(everything.Contains(secret[..8], StringComparison.Ordinal));
+        }
+
+        Assert.IsFalse(new GaussAuth.Application.Administration.ConsumerCredentials.ConsumerSecretIssuance(first,
+            new(true, "managed", null, null, false)).ToString().Contains(first, StringComparison.Ordinal));
+    }
+
+    [TestMethod]
+    public async Task Configured_hashes_keep_working_until_the_first_rotation_and_are_then_imported_as_retiring()
+    {
+        var code = $"cfg-{Guid.NewGuid():N}";
+        var configuredSecret = $"configured-{Guid.NewGuid():N}";
+        var variable = $"AuthorizationConsumers__{code}__CurrentSecretHash";
+        Environment.SetEnvironmentVariable(variable, new PasswordHasher<string>().HashPassword(code, configuredSecret));
+        try
+        {
+            var policy = new TestGlobalAdministratorPolicy();
+            using var factory = await MigratedFactoryAsync(policy);
+            using var global = await factory.CreateGlobalAdministratorAsync(policy);
+            Guid applicationId;
+            using (var scope = factory.Services.CreateScope())
+                applicationId = (await scope.ServiceProvider.GetRequiredService<ApplicationService>().CreateAsync(code, "Configured", CancellationToken.None)).Application!.Id;
+            using var member = await NewMemberSessionAsync(factory, applicationId, code);
+            var route = $"/admin/applications/{applicationId}/consumer-secret";
+
+            using var metadata = await global.Client.GetAsync(route);
+            var before = JsonDocument.Parse(await metadata.Content.ReadAsStringAsync()).RootElement;
+            Assert.IsTrue(before.GetProperty("exists").GetBoolean());
+            Assert.AreEqual("configured", before.GetProperty("source").GetString());
+            Assert.AreEqual(HttpStatusCode.OK, await ContextStatusAsync(factory, member, code, configuredSecret));
+            using var conflict = await global.Client.PostAsync(route, null);
+            Assert.AreEqual(HttpStatusCode.Conflict, conflict.StatusCode);
+            using var noManaged = await global.Client.PostAsync(route + "/retire-previous", null);
+            Assert.AreEqual(HttpStatusCode.Conflict, noManaged.StatusCode);
+
+            using var rotated = await global.Client.PostAsync(route + "/rotate", null);
+            Assert.AreEqual(HttpStatusCode.OK, rotated.StatusCode);
+            var fresh = await SecretFromAsync(rotated);
+            Assert.AreEqual(HttpStatusCode.OK, await ContextStatusAsync(factory, member, code, configuredSecret));
+            Assert.AreEqual(HttpStatusCode.OK, await ContextStatusAsync(factory, member, code, fresh));
+
+            using var retired = await global.Client.PostAsync(route + "/retire-previous", null);
+            Assert.AreEqual(HttpStatusCode.OK, retired.StatusCode);
+            Assert.AreEqual(HttpStatusCode.Unauthorized, await ContextStatusAsync(factory, member, code, configuredSecret));
+            Assert.AreEqual(HttpStatusCode.OK, await ContextStatusAsync(factory, member, code, fresh));
+        }
+        finally { Environment.SetEnvironmentVariable(variable, null); }
+    }
+
+    [TestMethod]
+    public async Task Concurrent_rotations_leave_one_consistent_active_and_retiring_state()
+    {
+        var policy = new TestGlobalAdministratorPolicy();
+        using var factory = await MigratedFactoryAsync(policy);
+        using var global = await factory.CreateGlobalAdministratorAsync(policy);
+        var (applicationId, code) = await factory.CreateApplicationAsync();
+        using var member = await NewMemberSessionAsync(factory, applicationId, code);
+        var route = $"/admin/applications/{applicationId}/consumer-secret";
+        using var generated = await global.Client.PostAsync(route, null);
+        var original = await SecretFromAsync(generated);
+
+        var responses = await Task.WhenAll(Enumerable.Range(0, 4).Select(async _ =>
+        {
+            using var response = await global.Client.PostAsync(route + "/rotate", null);
+            return (response.StatusCode, Secret: response.StatusCode == HttpStatusCode.OK ? await SecretFromAsync(response) : null);
+        }));
+        Assert.IsTrue(responses.All(item => item.StatusCode is HttpStatusCode.OK or HttpStatusCode.Conflict));
+        var winners = responses.Where(item => item.Secret is not null).Select(item => item.Secret!).ToArray();
+        Assert.IsGreaterThanOrEqualTo(1, winners.Length);
+
+        var working = 0;
+        foreach (var secret in winners.Append(original))
+            if (await ContextStatusAsync(factory, member, code, secret) == HttpStatusCode.OK) working++;
+        Assert.IsTrue(working is >= 1 and <= 2, $"{working} secrets work");
+        using var metadata = await global.Client.GetAsync(route);
+        Assert.IsTrue(JsonDocument.Parse(await metadata.Content.ReadAsStringAsync()).RootElement.GetProperty("hasRetiring").GetBoolean());
+        using var scope = factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AuthenticationDbContext>();
+        Assert.AreEqual(1, await db.ConsumerCredentials.CountAsync(item => item.ApplicationId == applicationId));
+        Assert.AreEqual(winners.Length, await db.SecurityEvents.CountAsync(item => item.EventType == "consumer.credential.rotated" && item.SubjectId == applicationId));
+    }
+
+    [TestMethod]
+    public async Task Failed_audit_write_rolls_back_the_rotation_and_returns_no_plaintext()
+    {
+        var policy = new TestGlobalAdministratorPolicy();
+        using var factory = (await MigratedFactoryAsync(policy)).WithWebHostBuilder(builder => builder.ConfigureServices(services =>
+        {
+            services.RemoveAll<ISecurityEventRecorder>();
+            services.AddScoped<ISecurityEventRecorder>(_ => new FailingEventRecorder(SecurityEventType.ConsumerCredentialRotated));
+        }));
+        using var global = await factory.CreateGlobalAdministratorAsync(policy);
+        var (applicationId, code) = await factory.CreateApplicationAsync();
+        using var member = await NewMemberSessionAsync(factory, applicationId, code);
+        var route = $"/admin/applications/{applicationId}/consumer-secret";
+        using var generated = await global.Client.PostAsync(route, null);
+        Assert.AreEqual(HttpStatusCode.Created, generated.StatusCode);
+        var original = await SecretFromAsync(generated);
+
+        using var failed = await global.Client.PostAsync(route + "/rotate", null);
+        var body = await failed.Content.ReadAsStringAsync();
+        Assert.AreEqual(HttpStatusCode.InternalServerError, failed.StatusCode);
+        Assert.IsFalse(body.Contains("secret", StringComparison.OrdinalIgnoreCase));
+        Assert.AreEqual(HttpStatusCode.OK, await ContextStatusAsync(factory, member, code, original));
+        using var metadata = await global.Client.GetAsync(route);
+        var root = JsonDocument.Parse(await metadata.Content.ReadAsStringAsync()).RootElement;
+        Assert.IsFalse(root.GetProperty("hasRetiring").GetBoolean());
+        Assert.AreEqual(JsonValueKind.Null, root.GetProperty("rotatedAtUtc").ValueKind);
+    }
+
+    [TestMethod]
+    public async Task Every_administrative_change_records_one_event_with_actor_and_target()
+    {
+        var policy = new TestGlobalAdministratorPolicy();
+        using var factory = await MigratedFactoryAsync(policy);
+        using var global = await factory.CreateGlobalAdministratorAsync(policy);
+        var client = global.Client;
+        var (applicationId, code) = await factory.CreateApplicationAsync();
+        var targetUser = await factory.CreateUserAsync();
+        await factory.CreateMembershipAsync(targetUser, applicationId);
+        using var targetSession = await factory.SignInAsync((await WithDbAsync(factory, db => db.DomainUsers.Where(user => user.Id == targetUser).Select(user => user.Email).SingleAsync())), applicationId, code);
+
+        await client.PostAsync($"/admin/users/{targetUser}/deactivate", null);
+        await client.PostAsync($"/admin/users/{targetUser}/activate", null);
+        await client.PostAsync($"/admin/applications/{applicationId}/deactivate", null);
+        await client.PostAsync($"/admin/applications/{applicationId}/activate", null);
+        await client.PostAsync($"/admin/applications/{applicationId}/memberships/{targetUser}/deactivate", null);
+        var roleId = await IdAsync(await client.PostAsJsonAsync($"/admin/applications/{applicationId}/roles", new { name = "Audited" }));
+        var permissionId = await IdAsync(await client.PostAsJsonAsync($"/admin/applications/{applicationId}/permissions", new { code = "audited.read" }));
+        await client.PostAsync($"/admin/applications/{applicationId}/memberships/{targetUser}/activate", null);
+        var rolePermissionId = await IdAsync(await client.PostAsync($"/admin/applications/{applicationId}/roles/{roleId}/permissions/{permissionId}", null));
+        var userRoleId = await IdAsync(await client.PostAsync($"/admin/applications/{applicationId}/users/{targetUser}/roles/{roleId}", null));
+        await client.PostAsync($"/admin/applications/{applicationId}/sessions/{targetSession.SessionId}/revoke", null);
+        await client.PostAsync($"/admin/applications/{applicationId}/consumer-secret", null);
+        await client.PostAsync($"/admin/applications/{applicationId}/consumer-secret/rotate", null);
+        await client.PostAsync($"/admin/applications/{applicationId}/consumer-secret/retire-previous", null);
+
+        var events = await WithDbAsync(factory, db => db.SecurityEvents.Where(item => item.ActorUserId == global.UserId).ToListAsync());
+        void Expect(string type, Guid? userId, Guid? subjectId, string? subjectType)
+        {
+            var matches = events.Where(item => item.EventType == type && (userId is null || item.UserId == userId) && item.SubjectId == subjectId).ToList();
+            Assert.AreEqual(1, matches.Count, $"{type} {subjectId}");
+            Assert.AreEqual(subjectType, matches[0].SubjectType, type);
+        }
+
+        Expect("user.deactivated", targetUser, null, null);
+        Expect("user.activated", targetUser, null, null);
+        Expect("application.deactivated", null, applicationId, "application");
+        Expect("application.activated", null, applicationId, "application");
+        Expect("role.created", null, roleId, "role");
+        Expect("permission.created", null, permissionId, "permission");
+        Expect("permission.assigned", null, rolePermissionId, "role-permission");
+        Expect("role.assigned", targetUser, userRoleId, "user-role");
+        Expect("session.revoked", targetUser, targetSession.SessionId, "session");
+        Expect("consumer.credential.generated", null, applicationId, "consumer-credential");
+        Expect("consumer.credential.rotated", null, applicationId, "consumer-credential");
+        Expect("consumer.credential.previous-retired", null, applicationId, "consumer-credential");
+        Assert.AreEqual(1, events.Count(item => item.EventType == "membership.deactivated" && item.UserId == targetUser && item.SubjectType == "membership"));
+        Assert.AreEqual(1, events.Count(item => item.EventType == "membership.activated" && item.UserId == targetUser && item.SubjectType == "membership"));
+        Assert.IsTrue(events.Where(item => item.EventType != "user.deactivated" && item.EventType != "user.activated" && item.EventType.StartsWith("application.", StringComparison.Ordinal) == false)
+            .All(item => item.ApplicationId == applicationId || item.ApplicationId is null));
+    }
+
+    [TestMethod]
+    public async Task Actor_comes_from_the_session_even_when_the_target_is_the_same_user()
+    {
+        var policy = new TestGlobalAdministratorPolicy();
+        using var factory = await MigratedFactoryAsync(policy);
+        var (applicationId, code) = await factory.CreateApplicationAsync();
+        var email = $"self-{Guid.NewGuid():N}@example.test";
+        var userId = await factory.CreateUserAsync(email);
+        await factory.CreateMembershipAsync(userId, applicationId);
+        await factory.GrantPermissionsAsync(applicationId, userId, AdministrativePermissionCatalog.RolesManage, AdministrativePermissionCatalog.RolesRead);
+        using var admin = await factory.SignInAsync(email, applicationId, code);
+        var roleId = await IdAsync(await admin.Client.PostAsJsonAsync($"/admin/applications/{applicationId}/roles", new { name = "Self" }));
+
+        using var assigned = await admin.Client.PostAsync($"/admin/applications/{applicationId}/users/{userId}/roles/{roleId}", null);
+        Assert.AreEqual(HttpStatusCode.Created, assigned.StatusCode);
+        var userRoleId = await IdAsync(assigned);
+        var recorded = await WithDbAsync(factory, db => db.SecurityEvents.SingleAsync(item => item.EventType == "role.assigned" && item.SubjectId == userRoleId));
+        Assert.AreEqual(userId, recorded.UserId);
+        Assert.AreEqual(userId, recorded.ActorUserId);
+    }
+
+    [TestMethod]
+    public async Task Denied_authenticated_attempts_are_audited_and_unauthenticated_ones_are_not()
+    {
+        var policy = new TestGlobalAdministratorPolicy();
+        using var factory = await MigratedFactoryAsync(policy);
+        var (applicationId, code) = await factory.CreateApplicationAsync();
+        using var ordinary = await factory.CreateApplicationAdministratorAsync(applicationId, code);
+        Task<int> DeniedAsync() => WithDbAsync(factory, db => db.SecurityEvents.CountAsync(item => item.EventType == "administration.access.denied"));
+
+        var before = await DeniedAsync();
+        using var anonymous = factory.CreateClient();
+        using var unauthenticated = await anonymous.GetAsync("/admin/applications");
+        Assert.AreEqual(HttpStatusCode.Unauthorized, unauthenticated.StatusCode);
+        Assert.AreEqual(before, await DeniedAsync());
+
+        using var denied = await ordinary.Client.GetAsync("/admin/applications");
+        Assert.AreEqual(HttpStatusCode.Forbidden, denied.StatusCode);
+        Assert.AreEqual(before + 1, await DeniedAsync());
+        var recorded = await WithDbAsync(factory, db => db.SecurityEvents.Where(item => item.EventType == "administration.access.denied" && item.ActorUserId == ordinary.UserId).SingleAsync());
+        Assert.AreEqual("rejected", recorded.Outcome);
+    }
+
+    [TestMethod]
+    public async Task Application_reviewer_sees_only_its_application_and_the_global_administrator_sees_all_without_secrets()
+    {
+        var policy = new TestGlobalAdministratorPolicy();
+        using var factory = await MigratedFactoryAsync(policy);
+        using var global = await factory.CreateGlobalAdministratorAsync(policy);
+        var (applicationA, codeA) = await factory.CreateApplicationAsync();
+        var (applicationB, _) = await factory.CreateApplicationAsync();
+        using var reviewer = await factory.CreateApplicationAdministratorAsync(applicationA, codeA, AdministrativePermissionCatalog.SecurityAuditRead);
+        using var noAudit = await factory.CreateApplicationAdministratorAsync(applicationA, codeA, AdministrativePermissionCatalog.RolesRead);
+
+        await global.Client.PostAsJsonAsync($"/admin/applications/{applicationA}/roles", new { name = "In-A" });
+        await global.Client.PostAsJsonAsync($"/admin/applications/{applicationB}/roles", new { name = "In-B" });
+        using var generated = await global.Client.PostAsync($"/admin/applications/{applicationA}/consumer-secret", null);
+        var secret = await SecretFromAsync(generated);
+
+        using var own = await reviewer.Client.GetAsync("/security-events?pageSize=100");
+        Assert.AreEqual(HttpStatusCode.OK, own.StatusCode);
+        var ownBody = await own.Content.ReadAsStringAsync();
+        var ownItems = JsonDocument.Parse(ownBody).RootElement.GetProperty("items").EnumerateArray().ToList();
+        Assert.IsGreaterThan(0, ownItems.Count);
+        Assert.IsTrue(ownItems.All(item => item.GetProperty("applicationId").GetGuid() == applicationA));
+        Assert.IsTrue(ownItems.Any(item => item.GetProperty("actorUserId").ValueKind == JsonValueKind.String && item.GetProperty("actorUserId").GetGuid() == global.UserId));
+        using var otherApplication = await reviewer.Client.GetAsync($"/security-events?applicationId={applicationB}");
+        Assert.AreEqual(HttpStatusCode.Forbidden, otherApplication.StatusCode);
+        using var withoutPermission = await noAudit.Client.GetAsync("/security-events");
+        Assert.AreEqual(HttpStatusCode.Forbidden, withoutPermission.StatusCode);
+
+        using var all = await global.Client.GetAsync("/security-events?pageSize=100&eventType=role.created");
+        var allBody = await all.Content.ReadAsStringAsync();
+        var applications = JsonDocument.Parse(allBody).RootElement.GetProperty("items").EnumerateArray().Select(item => item.GetProperty("applicationId").GetGuid()).ToList();
+        CollectionAssert.IsSubsetOf(new[] { applicationA, applicationB }, applications);
+        using var everything = await global.Client.GetAsync("/security-events?pageSize=100");
+        Assert.IsFalse((ownBody + await everything.Content.ReadAsStringAsync()).Contains(secret, StringComparison.Ordinal));
+    }
+
+    private static async Task<T> WithDbAsync<T>(WebApplicationFactory<Program> factory, Func<AuthenticationDbContext, Task<T>> query)
+    {
+        using var scope = factory.Services.CreateScope();
+        return await query(scope.ServiceProvider.GetRequiredService<AuthenticationDbContext>());
     }
 
     private static async Task<WebApplicationFactory<Program>> MigratedFactoryAsync(TestGlobalAdministratorPolicy policy, TimeProvider? time = null)

@@ -108,7 +108,9 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddScoped<IPermissionRepository, PermissionRepository>();
         services.AddScoped<IRolePermissionRepository, RolePermissionRepository>();
         services.AddScoped<IUserRoleRepository, UserRoleRepository>();
-        services.AddSingleton<IConsumerCredentialValidator>(new ConfiguredConsumerCredentialValidator(configuration));
+        services.AddSingleton(new ConfiguredConsumerCredentialValidator(configuration));
+        services.AddScoped<IConsumerCredentialValidator, StoreBackedConsumerCredentialValidator>();
+        services.AddScoped<IConsumerCredentialStore, EfConsumerCredentialStore>();
         services.AddScoped<ICredentialProvisioningService, IdentityCredentialProvisioningService>();
         services.AddScoped<ICredentialVerificationService, IdentityCredentialVerificationService>();
         services.AddScoped<IPasswordCredentialService, IdentityPasswordCredentialService>();

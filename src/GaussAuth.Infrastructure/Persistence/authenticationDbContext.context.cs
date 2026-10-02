@@ -1,3 +1,4 @@
+using GaussAuth.Domain.Applications;
 using GaussAuth.Domain.Users;
 using DomainApplication = GaussAuth.Domain.Applications.Application;
 using GaussAuth.Domain.Memberships;
@@ -24,6 +25,7 @@ public sealed class AuthenticationDbContext(DbContextOptions<AuthenticationDbCon
     public DbSet<DomainPermission> Permissions => Set<DomainPermission>();
     public DbSet<RolePermission> RolePermissions => Set<RolePermission>();
     public DbSet<UserRole> UserRoles => Set<UserRole>();
+    public DbSet<ConsumerCredential> ConsumerCredentials => Set<ConsumerCredential>();
     public DbSet<Session> Sessions => Set<Session>();
     public DbSet<SecurityEvent> SecurityEvents => Set<SecurityEvent>();
 
@@ -93,6 +95,16 @@ public sealed class AuthenticationDbContext(DbContextOptions<AuthenticationDbCon
             permission.HasIndex(x => new { x.ApplicationId, x.Code }).IsUnique().HasDatabaseName("IX_Permissions_ApplicationId_Code");
             permission.HasAlternateKey(x => new { x.Id, x.ApplicationId }).HasName("AK_Permissions_Id_ApplicationId");
             permission.HasOne<DomainApplication>().WithMany().HasForeignKey(x => x.ApplicationId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        builder.Entity<ConsumerCredential>(credential =>
+        {
+            credential.ToTable("ApplicationConsumerCredentials"); credential.HasKey(x => x.ApplicationId);
+            credential.Property(x => x.ApplicationId).ValueGeneratedNever();
+            credential.Property(x => x.CurrentHash).HasMaxLength(ConsumerCredential.MaximumHashLength).IsRequired();
+            credential.Property(x => x.RetiringHash).HasMaxLength(ConsumerCredential.MaximumHashLength);
+            credential.Property<uint>("xmin").HasColumnName("xmin").HasColumnType("xid").ValueGeneratedOnAddOrUpdate().IsConcurrencyToken();
+            credential.HasOne<DomainApplication>().WithOne().HasForeignKey<ConsumerCredential>(x => x.ApplicationId).OnDelete(DeleteBehavior.Restrict);
         });
 
         builder.Entity<RolePermission>(assignment =>

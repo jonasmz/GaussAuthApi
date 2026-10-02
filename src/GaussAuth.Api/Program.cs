@@ -44,6 +44,7 @@ admin.MapRolesEndpoints();
 admin.MapPermissionsEndpoints();
 admin.MapAuthorizationEndpoints();
 admin.MapAdministrativeSessionEndpoints();
+admin.MapConsumerSecretEndpoints();
 app.MapLoginEndpoints();
 app.MapSessionsEndpoints();
 app.MapPasswordsEndpoints();

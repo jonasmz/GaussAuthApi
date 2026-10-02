@@ -11,6 +11,7 @@ namespace GaussAuth.Foundation.Tests;
 [TestClass]
 public sealed class AdministrationMigrationTests
 {
+    private const string BeforeAuditMove = "20261002000617_AddApplicationConsumerCredentials";
     private const string PreviousMigration = "20261001232459_AddSecurityEventActor";
 
     [TestMethod]
@@ -85,6 +86,47 @@ public sealed class AdministrationMigrationTests
         }
 
         Assert.AreEqual(9, await CountAsync(db, applicationId));
+    }
+
+    [TestMethod]
+    public async Task Audit_permission_migration_preserves_reviewer_access_and_is_idempotent()
+    {
+        var policy = new TestGlobalAdministratorPolicy();
+        using var factory = new WebApplicationFactory<Program>().WithGlobalAdministrators(policy);
+        using var scope = factory.Services.CreateScope();
+        var provider = scope.ServiceProvider;
+        var db = provider.GetRequiredService<AuthenticationDbContext>();
+        await db.Database.MigrateAsync();
+        var migrator = db.GetService<IMigrator>();
+        var (applicationId, code) = await factory.CreateApplicationAsync();
+        var email = $"reviewer-{Guid.NewGuid():N}@example.test";
+        var userId = await factory.CreateUserAsync(email);
+        await factory.CreateMembershipAsync(userId, applicationId);
+
+        await migrator.MigrateAsync(BeforeAuditMove);
+        var role = (await provider.GetRequiredService<GaussAuth.Application.Roles.RoleService>().CreateAsync(applicationId, "Legacy reviewer", null, CancellationToken.None)).Role!;
+        var legacy = (await provider.GetRequiredService<GaussAuth.Application.Permissions.PermissionService>().CreateAsync(applicationId, "audit.events.read", null, CancellationToken.None)).Permission!;
+        await provider.GetRequiredService<GaussAuth.Application.Authorization.RolePermissionService>().AssignAsync(applicationId, role.Id, legacy.Id, CancellationToken.None);
+        await provider.GetRequiredService<GaussAuth.Application.Authorization.UserRoleService>().AssignAsync(applicationId, userId, role.Id, CancellationToken.None);
+
+        async Task<int> NewAssignmentsAsync() => await db.RolePermissions.AsNoTracking().CountAsync(item => item.RoleId == role.Id &&
+            db.Permissions.Any(permission => permission.Id == item.PermissionId && permission.Code == "auth.security.audit.read") && item.IsActive);
+
+        Assert.AreEqual(0, await NewAssignmentsAsync());
+        await migrator.MigrateAsync();
+        Assert.AreEqual(1, await NewAssignmentsAsync());
+        Assert.IsFalse((await db.Permissions.AsNoTracking().SingleAsync(item => item.Id == legacy.Id)).IsActive);
+        using (var reviewer = await factory.SignInAsync(email, applicationId, code))
+        {
+            using var response = await reviewer.Client.GetAsync("/security-events");
+            Assert.AreEqual(System.Net.HttpStatusCode.OK, response.StatusCode);
+        }
+
+        await migrator.MigrateAsync(BeforeAuditMove);
+        await migrator.MigrateAsync();
+        Assert.AreEqual(1, await NewAssignmentsAsync());
+        Assert.AreEqual(1, await db.Permissions.AsNoTracking().CountAsync(item => item.ApplicationId == applicationId && item.Code == "auth.security.audit.read"));
+        Assert.IsFalse((await db.Permissions.AsNoTracking().SingleAsync(item => item.Id == legacy.Id)).IsActive);
     }
 
     /// <summary>

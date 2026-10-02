@@ -28,7 +28,7 @@ public static class SecurityEventEndpoints
         context.Response.Headers.CacheControl = "no-store";
         return TypedResults.Ok(new SecurityEventsResponse(result.Items.Select(item => new SecurityEventResponse(item.Id,
             item.EventType, item.Outcome, item.OccurredAtUtc, item.UserId, item.ApplicationId, item.SessionId,
-            item.ConsumerApplicationId, item.CorrelationId, item.SubjectType, item.SubjectId, item.Reason)).ToArray(), result.NextCursor));
+            item.ConsumerApplicationId, item.CorrelationId, item.SubjectType, item.SubjectId, item.Reason, item.ActorUserId)).ToArray(), result.NextCursor));
     }
 
     private static bool TryCreateQuery(AuditQueryRequest request, out SecurityEventQuery? query)
