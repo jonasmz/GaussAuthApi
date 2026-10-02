@@ -148,6 +148,19 @@ The six operator documents were walked through using that process evidence: empt
 
 Focused Release tests (8 passed, 0 failed) cover JSON Production console logging with scopes, value-free forced-500 output/logs, and a persisted `application.failure.unexpected` audit event. The test proves the response `X-Correlation-Id`, the safe operational log entry, and the audit row carry the same existing trace id. Captured process/host output confirms start and graceful-shutdown entries; `MigrateCommandTests` records value-free migration database/connection failures, and `ReadinessTests` records database connectivity failure as a 503. Startup configuration failures are covered by `ProductionStartupValidationTests`; all paths avoid connection strings, Authorization values, passwords, key material and request/file content.
 
+### Final polish and gate — T074–T078
+
+Development composition was rendered with `.env.example`; its new Data Protection, storage-persistence, bootstrap, and forwarded-header variables are empty/optional, so the existing Development behavior remains unchanged. `docs/README.md` indexes all six operator guides. The secret scan exits 0.
+
+Quickstart scenarios 1–12 were re-run or matched to their end-to-end regression evidence: Release restore/build/test; zero/upgrade/SQL migrations; Production startup validation; readiness failure/recovery; bootstrap; recovery without delivery; edge/proxy baseline; image/compose/persistence/shutdown; secret scan; consumer-secret/log review; and documentation procedure. The focused Release scenario group passed **32/32**. The final SDK gate ran `dotnet restore`, `dotnet build -c Release` (**0 warnings, 0 errors**) and `dotnet test -c Release` with exit 0. The branch review found no package-reference change, no newly introduced HTTP route other than the specified readiness endpoint, no SMTP/webhook adapter, and no CORS allowlist.
+
+| Success criterion | Recorded evidence |
+|---|---|
+| SC-001–SC-005 | Release build, Production startup and migration validation tests |
+| SC-006–SC-008 | Readiness, persistence, graceful-shutdown and security/audit tests |
+| SC-009–SC-011 | Quickstart/documentation walk-through and secret scan |
+| SC-012–SC-014 | Bootstrap, sensitive-logging and correlation regression tests |
+
 ## Findings
 
 Release-blocking categories (spec): authentication correctness; authorization isolation; session revocation; credential secrecy; consumer-secret isolation; password/reset secrecy; audit integrity; database migration consistency; startup reliability; production configuration safety. A release-blocking finding can only be closed as **fixed with a regression test**.
@@ -158,8 +171,8 @@ Release-blocking categories (spec): authentication correctness; authorization is
 | F-002 | Startup | Configuration failures surface as unhandled-exception stack traces, messages do not name the setting, and only the administration rate limit is validated. | Yes — startup reliability, production configuration safety | **Fixed** (T009–T018, T021): `StartupConfigurationException` + `StartupFailureReporter` (key-only Critical log, exit 1, no stack trace); every rate-limit group, lifetimes, lockout, request limit, retention, administrator list and key settings validated. Tests: `ProductionStartupValidationTests` (31 process-level cases incl. `Staging`), `StartupFailureReporterTests` |
 | F-003 | Health | No readiness endpoint; a database outage cannot be reported. | Yes — startup reliability | **Fixed** (T031–T034): cached built-in health checks return empty 503 for database/storage outage or pending migrations and recover within 10 s. Tests: `ReadinessTests`. |
 | F-004 | Bootstrap | No supported way to create the first user: user creation requires a global administrator and the global list only holds ids of existing users. | Yes — startup reliability, production configuration safety | **Fixed** (T057–T059): value-free, no-HTTP `bootstrap-admin` only creates the first active user and requires explicit authority configuration afterward. Regression: `BootstrapAdministratorTests`. |
-| F-005 | Data Protection | Key ring defaults to ephemeral container storage; password-reset credentials are lost on restart and not shared across replicas. | Yes — production configuration safety | **Startup enforcement fixed** (T015, T016: `DataProtection:KeysPath` required in Production-class, validated for absolute path and writability, persisted via the framework file store). Cross-restart credential survival test still pending → T046 |
-| F-006 | Forwarded headers | No forwarded-header handling; behind a proxy every client shares one rate-limit bucket. | No — documented behavior with startup warning (direct deployment) | Open → T050, T051 |
+| F-005 | Data Protection | Key ring defaults to ephemeral container storage; password-reset credentials are lost on restart and not shared across replicas. | Yes — production configuration safety | **Fixed** (T015, T016, T046): durable key-ring configuration and cross-restart persistence are covered by `DataProtectionPersistenceTests`. |
+| F-006 | Forwarded headers | No forwarded-header handling; behind a proxy every client shares one rate-limit bucket. | No — documented behavior with startup warning (direct deployment) | **Fixed** (T050, T051): explicit trusted-proxy forwarding with regression coverage; direct deployment remains a documented warning. |
 | F-008 | Migrations | Two simultaneous `migrate` runs corrupted the outcome: 2 of 3 rounds failed with PostgreSQL `42704` / `2BP01` (the framework's per-call locking was assumed sufficient but is not). | Yes — database migration consistency | **Fixed** (T023/T030): the migrator holds a PostgreSQL advisory lock for the whole run; held lock ⇒ category `locked`, no schema change. Tests: `ConcurrentMigrationTests` (3 rounds both `0`, plus held-lock test) |
 | F-009 | Migration script | `dotnet ef` writes the SQL script with a UTF-8 BOM that `psql` rejects on the first statement. | No — operational (DBA path) | **Fixed** (T029): `scripts/generate-migration-script.sh` strips it and verifies no connection settings; applied with real `psql` |
 | F-007 | Test warning | CS8619 in `profileImageTests.test.cs:768` (test code only). | No | **Fixed** (T035): explicit post-filter nullability narrowing; final Release build has 0 warnings. |
@@ -167,4 +180,4 @@ Release-blocking categories (spec): authentication correctness; authorization is
 
 ## Sign-off
 
-Open release-blocking items: **F-003 (readiness), F-004 (bootstrap) and the T046 part of F-005**; F-001 and F-002 closed with regression tests (feature in progress).
+Open release-blocking items: **0**. Every release-blocking finding is fixed with a regression test. Remaining operational constraints are non-blocking and listed in `docs/limitations.md`.

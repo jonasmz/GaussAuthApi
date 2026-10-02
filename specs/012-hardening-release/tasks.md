@@ -205,11 +205,11 @@ Four-project solution: `src/GaussAuth.Domain`, `src/GaussAuth.Application`, `src
 
 ## Phase 11: Polish & Cross-Cutting Concerns
 
-- [ ] T074 Update `.env.example` and `compose.dev.yml` comments/variables for the new settings (`DataProtection__KeysPath` optional in Development, `ProfileImages__StorageIsPersistent`, `Bootstrap__*`, `ForwardedHeaders__*`) without changing development behavior or committing any value; keep the development container workflow unchanged
-- [ ] T075 Create `docs/README.md` indexing the six operator documents (deployment, configuration, database, bootstrap, security-baseline, limitations) with a one-line purpose each so the set is discoverable
-- [ ] T076 Re-run every quickstart scenario (`quickstart.md` 1–12) end to end after all stories, fix or record deviations, and mark each in `release-validation.md`
-- [ ] T077 Final gate: from a clean checkout `dotnet restore`, `dotnet build -c Release`, `dotnet test -c Release` against a clean PostgreSQL 17 (FR-001, FR-003); review the whole branch diff and confirm no new NuGet package, no HTTP endpoint other than `/health/ready`, no SMTP/webhook adapter and no CORS allowlist were added (FR-006); update `release-validation.md` with final results and confirm SC-001…SC-014 each have recorded evidence
-- [ ] T078 Close out the Findings table: every release-blocking finding is *fixed with a test* (none documented-only); every remaining item is a non-blocking limitation listed in `docs/limitations.md`; the sign-off section lists zero open release-blocking items (SC-008)
+- [X] T074 Update `.env.example` and `compose.dev.yml` comments/variables for the new settings (`DataProtection__KeysPath` optional in Development, `ProfileImages__StorageIsPersistent`, `Bootstrap__*`, `ForwardedHeaders__*`) without changing development behavior or committing any value; keep the development container workflow unchanged
+- [X] T075 Create `docs/README.md` indexing the six operator documents (deployment, configuration, database, bootstrap, security-baseline, limitations) with a one-line purpose each so the set is discoverable
+- [X] T076 Re-run every quickstart scenario (`quickstart.md` 1–12) end to end after all stories, fix or record deviations, and mark each in `release-validation.md`
+- [X] T077 Final gate: from a clean checkout `dotnet restore`, `dotnet build -c Release`, `dotnet test -c Release` against a clean PostgreSQL 17 (FR-001, FR-003); review the whole branch diff and confirm no new NuGet package, no HTTP endpoint other than `/health/ready`, no SMTP/webhook adapter and no CORS allowlist were added (FR-006); update `release-validation.md` with final results and confirm SC-001…SC-014 each have recorded evidence
+- [X] T078 Close out the Findings table: every release-blocking finding is *fixed with a test* (none documented-only); every remaining item is a non-blocking limitation listed in `docs/limitations.md`; the sign-off section lists zero open release-blocking items (SC-008)
 
 ---
 
