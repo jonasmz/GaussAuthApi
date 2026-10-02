@@ -14,6 +14,16 @@ Features 001–011 delivered the complete functional platform: users and profile
 
 Where verification reveals a defect, the defect is classified. A defect that compromises authentication correctness, authorization isolation, session revocation, credential secrecy, consumer-secret isolation, password/reset secrecy, audit integrity, database migration consistency, startup reliability, or production configuration safety is **release-blocking** and MUST be corrected in this feature. All other findings are corrected when low-risk, or recorded as documented operational limitations.
 
+## Clarifications
+
+### Session 2026-10-02
+
+- Q: How should operators apply database migrations in production, given that the running service will not apply them on its own? → A: Both. The documented default is a one-off migration command run from the same production image before the new version starts; each release also provides an SQL script of the same migrations for environments where operators or DBAs must review and apply changes manually. The script is an operational alternative, not a separate schema-evolution mechanism.
+- Q: Who should be allowed to call the health and readiness endpoints in production? → A: Any caller that can reach the service, without authentication, receiving only minimal operational status. No probe-specific credentials are introduced. Network exposure is controlled by the deployment (network, reverse proxy, firewall, ingress, or equivalent), and any future detailed diagnostics view is a separate, explicitly protected capability.
+- Q: When the service runs in production but no trusted proxy has been configured, should it start normally, start with a warning, or refuse to start? → A: Start normally, ignore all forwarded headers (behaving as a direct deployment), and log a clear startup warning. Forwarded headers are processed only when trusted proxies or networks are explicitly configured; an invalid or unsafe proxy configuration fails configuration validation.
+- Q: In production, should the service refuse to start if profile image storage is not on persistent storage, or only warn? → A: Production configuration must explicitly declare whether profile storage is persistent. A missing declaration rejects startup; a declaration of persistent starts normally; an explicit declaration of non-persistent starts with a clear, visible warning that images may be lost when the container is replaced or recreated. The service never infers persistence from the path. The check applies only in Production unless another setting explicitly enables it elsewhere.
+- Q: How should password recovery behave in production, given the service has no production way to deliver reset credentials (the only adapter is file-based and works only in Development and Testing)? → A: Recovery delivery is an operator-supplied extension. With no production delivery adapter configured, the service starts normally and emits a clear structured warning; recovery requests keep returning the same generic response for existing and unknown accounts; no reset credential is generated, logged, audited, or returned when no delivery channel exists; the public recovery contract does not change; and a future production adapter (SMTP, webhook, or other) can be added through the existing delivery interface without redesigning the flow. No SMTP, webhook, or other delivery mechanism is added in this feature, and the limitation is documented.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Safe and Predictable Startup (Priority: P1)
@@ -30,6 +40,8 @@ An operator starts the service in a Production environment. If any critical conf
 2. **Given** Production with an invalid value (non-positive lifetime, impossible rate limit, unusable storage path, malformed signing material), **When** the service starts, **Then** it fails with an actionable message.
 3. **Given** Production without externally supplied signing material, **When** the service starts, **Then** it does not generate or fall back to an ephemeral or development key and fails instead.
 4. **Given** Production, **When** the service starts, **Then** development-only behaviors (fake or file-based recovery delivery, development key generation, verbose error detail, permissive bootstrap) are not active unless explicitly and visibly enabled.
+4a. **Given** Production with no password-recovery delivery adapter configured, **When** the service starts, **Then** it starts normally and emits a clear structured warning that password recovery delivery is not configured.
+4b. **Given** that same state, **When** a recovery request is made for an existing account and for an unknown account, **Then** both receive the same generic response, no reset credential is generated, and no reset credential appears in any log, audit event, or response.
 5. **Given** a valid Production configuration, **When** the service starts, **Then** the startup is logged with environment and non-sensitive configuration summary, and shutdown is logged.
 6. **Given** Development and Testing environments, **When** the service starts, **Then** development conveniences remain available there and are clearly separated from Production behavior.
 
@@ -50,7 +62,9 @@ An operator creates a brand-new database from zero using the full migration chai
 3. **Given** a database at the previous schema state with representative data, **When** upgraded, **Then** existing users, memberships, roles, assignments, sessions, security events, and consumer credentials are preserved or transformed only as documented.
 4. **Given** the migration set, **When** reviewed, **Then** any operation that drops, rewrites, or invalidates user, security, authorization, or audit data is intentional and documented; none is silent.
 5. **Given** a migration that fails, **When** it fails, **Then** the diagnostics identify the failing migration and cause without exposing credentials.
-6. **Given** the deployment documentation, **When** read, **Then** it states explicitly how migrations are applied in production (an explicit deployment step) and that the running service does not apply them implicitly.
+6. **Given** the deployment documentation, **When** read, **Then** it presents the one-off migration command run from the production image as the standard path, the release SQL script as the alternative for manual review and application, and states that the running service never applies migrations on startup.
+7. **Given** a release, **When** its migration command and its SQL script are compared, **Then** both represent exactly the same set of migrations and produce the same final schema from the same starting state.
+8. **Given** a deployment, **When** the migration command fails, **Then** the deployment stops and the new version is not started against an incompatible schema.
 
 ---
 
@@ -69,7 +83,9 @@ An orchestrator or operator can ask whether the process is alive and whether it 
 3. **Given** the database is unreachable, **When** readiness is queried, **Then** it reports not-ready; it is never reported ready.
 4. **Given** the profile storage location is unusable, **When** readiness is queried, **Then** it reports not-ready, because required functionality cannot operate.
 5. **Given** any health response in any state, **When** inspected, **Then** it contains no connection string, credential, database internals, configuration values, environment details, or stack trace.
-6. **Given** health endpoints, **When** called without credentials, **Then** they return only minimal status and no detailed diagnostics.
+6. **Given** health endpoints, **When** called without credentials, **Then** they return only minimal status and no detailed diagnostics; no authentication or probe-specific credential is required.
+7. **Given** a not-ready result caused by an unavailable dependency, **When** the response is inspected, **Then** it indicates not-ready without revealing which dependency failed or why.
+8. **Given** the deployment documentation, **When** read, **Then** it states that health endpoints should not be published to the Internet unnecessarily and that their exposure must be controlled by network, reverse proxy, firewall, ingress, or an equivalent mechanism.
 
 ---
 
@@ -103,7 +119,9 @@ An operator deploys the service from a documented, reproducible runtime package,
 1. **Given** the repository, **When** the production image is built, **Then** it is reproducible, runs as a non-privileged user, and contains no secrets, development tooling, or source of test credentials.
 2. **Given** the production image, **When** run, **Then** all secrets and environment-specific settings are supplied externally and none are baked in.
 3. **Given** profile storage configured on a persistent volume, **When** the container is replaced, **Then** previously uploaded profile files remain available.
-4. **Given** profile storage not backed by persistent storage, **When** the service starts in Production, **Then** the documentation and startup behavior make the ephemeral-storage risk unmistakable rather than silently accepted.
+4. **Given** Production with no declaration of whether profile storage is persistent, **When** the service starts, **Then** startup is rejected with a message naming the missing declaration.
+4a. **Given** Production with storage explicitly declared persistent, **When** the service starts, **Then** it starts normally.
+4b. **Given** Production with storage explicitly declared not persistent, **When** the service starts, **Then** it starts and emits a clear, visible warning that profile images may be lost when the container is replaced or recreated.
 5. **Given** a local/integration composition for evaluation, **When** started, **Then** the service, database, and persistent storage run together without altering the existing development container workflow.
 6. **Given** a termination signal, **When** the service shuts down, **Then** in-flight requests complete or are cancelled cleanly and no persisted state is corrupted.
 
@@ -121,6 +139,8 @@ A security reviewer confirms that the service's network-facing behavior is safe 
 
 1. **Given** Production, **When** a request fails unexpectedly, **Then** the response is a stable, generic error contract exposing no stack trace, file path, query text, framework internals, identity internals, cryptographic detail, or raw exception.
 2. **Given** a request arriving with forwarding headers from a source that is not a configured trusted proxy, **When** processed, **Then** the forwarded values are ignored.
+2a. **Given** no trusted proxy or network is configured, **When** the service starts, **Then** it starts normally as a direct deployment, ignores all forwarded headers, and logs a clear warning stating that forwarded headers will be ignored and that, if the service is actually behind a reverse proxy, the remote address, HTTPS detection, and any policy depending on them may not represent the real client.
+2b. **Given** a trusted-proxy configuration that is invalid or unsafe (for example, one that would trust any source), **When** the service starts, **Then** configuration validation fails.
 3. **Given** a request arriving through a configured trusted proxy, **When** processed, **Then** the original scheme and client address are used for HTTPS detection and rate-limit partitioning.
 4. **Given** Production responses, **When** inspected, **Then** content-type-sniffing protection is present, transport-security policy is applied where HTTPS is expected, and server implementation details are not unnecessarily disclosed.
 5. **Given** the current server-to-server usage, **When** cross-origin browser requests arrive, **Then** none are permitted unless an explicit origin allowlist is configured; there is no allow-any-origin behavior.
@@ -172,7 +192,7 @@ An operator diagnosing a production incident can follow a request or security ev
 - Signing material is present but too weak or malformed: startup fails rather than accepting it.
 - A secret rotation or administrative change occurs during shutdown: the change either completes fully or not at all.
 - The global administrator list is empty or malformed in Production: behavior matches the decision made in feature 011 and is documented; no implicit administrator exists.
-- A trusted-proxy configuration is empty in Production behind a proxy: HTTPS detection and client addressing fall back safely and the limitation is documented rather than trusting arbitrary headers.
+- No trusted proxy is configured in Production while actually behind a proxy: the service starts as a direct deployment, ignores forwarded headers, and logs a clear warning; the resulting client-address and HTTPS-detection limits are documented rather than trusting arbitrary headers.
 - Profile storage is available at startup but fills or becomes read-only: upload fails safely with a stable error, no partial file remains, and readiness reflects it.
 - A review finding sits on the boundary between release-blocking and a documented limitation: it is treated as release-blocking when it affects any listed protected category.
 
@@ -196,16 +216,21 @@ An operator diagnosing a production incident can follow a request or security ev
 - **FR-009**: Migration from the previous release schema state to the final state MUST be validated with representative data wherever practical, and any data transformation MUST be documented.
 - **FR-010**: All migrations MUST be reviewed for destructive operations; any operation affecting user, security, authorization-history, or audit data MUST be intentional and documented, and none MAY be silent.
 - **FR-011**: Migration failure MUST produce diagnostics that identify the failing step and cause without exposing credentials.
-- **FR-012**: Production migrations MUST be applied by an explicit deployment step documented for operators; the running service MUST NOT apply schema changes implicitly in Production.
+- **FR-012**: The running service MUST NOT apply migrations automatically at startup in any Production deployment. Production migrations MUST be applied by an explicit deployment step documented for operators.
+- **FR-012a**: The standard migration mechanism MUST be a one-off command executed from the same production image as the release, so that migration logic and migrations are exactly the version being released, and MUST NOT require the .NET SDK or any development tooling on the production host.
+- **FR-012b**: Each release MUST provide an SQL script representing exactly the migrations included in that release, as an operational alternative for environments where operators or DBAs review and apply changes manually. It MUST NOT constitute a second, divergent schema-evolution mechanism.
+- **FR-012c**: The documented deployment procedure MUST run the migration first and start the new version only if the migration completes successfully; a migration failure MUST stop the deployment and MUST NOT result in a version running against an incompatible schema.
+- **FR-012d**: Neither the production image nor the SQL script MAY embed database credentials; credentials MUST be supplied externally at execution time.
 - **FR-013**: If the database schema does not match the version the service requires, readiness MUST report not-ready and logs MUST state the mismatch actionably.
 
 **Startup and configuration**
 
 - **FR-014**: In Production the service MUST validate all critical configuration at startup and refuse to start when any required setting is missing or invalid, before accepting requests.
-- **FR-015**: Configuration validation MUST cover at least the database connection, session signing material, session and token lifetimes, consumer-secret related settings, profile-storage root and limits, rate-limit values, administrative limits, and the global administrator list format.
+- **FR-015**: Configuration validation MUST cover at least the database connection, session signing material, session and token lifetimes, consumer-secret related settings, profile-storage root, persistence declaration, and limits, rate-limit values, administrative limits, and the global administrator list format.
 - **FR-016**: Startup failure messages MUST name the offending setting and the reason and MUST NOT include any secret value.
 - **FR-017**: In Production the service MUST NOT generate, default, or fall back to an ephemeral or development signing key; signing material MUST be supplied externally and MUST meet documented strength requirements.
 - **FR-018**: Development-only conveniences (non-production recovery delivery, development key handling, verbose error detail, test credentials, developer bootstrap, insecure transport assumptions) MUST NOT be active in Production unless explicitly and visibly enabled, and MUST remain available in Development and Testing.
+- **FR-018a**: Password-recovery delivery MUST be an operator-supplied extension in Production. When no delivery adapter is configured, the service MUST start normally and emit a clear structured warning; recovery requests MUST return the same generic response for existing and unknown accounts (preserving enumeration resistance), MUST NOT fail differently depending on account existence, and MUST NOT generate any reset credential; no reset credential MAY appear in logs, audit events, or responses. The public recovery contract MUST NOT change, and a future production adapter MUST be addable through the existing delivery interface without redesigning the flow. This feature MUST NOT add SMTP, webhook, or any other delivery mechanism.
 - **FR-019**: Environment-specific configuration MUST clearly separate Development, Testing, and Production, and the repository defaults MUST be safe for Production.
 - **FR-020**: Token and session lifetimes MUST be explicitly configured, and the parameters used to validate credentials MUST match those used to issue them.
 - **FR-021**: Startup and shutdown MUST be logged, and critical configuration errors, database connectivity failures, and migration failures MUST produce meaningful non-sensitive log entries.
@@ -221,13 +246,16 @@ An operator diagnosing a production incident can follow a request or security ev
 
 - **FR-026**: The service MUST expose a liveness signal that reports process responsiveness and does not depend on any external system.
 - **FR-027**: The service MUST expose a readiness signal that reports not-ready when the database is unreachable, when the schema is incompatible, or when profile storage required for operation is unusable, and ready otherwise.
-- **FR-028**: Health responses MUST be minimal and MUST NOT reveal connection strings, credentials, database internals, configuration, environment details, or stack traces; any detailed diagnostics MUST NOT be publicly exposed by default.
+- **FR-028**: Health endpoints MUST NOT require authentication, and no probe-specific credentials MAY be introduced. Responses MUST be limited to minimal operational status and MUST NOT reveal server names, connection strings, credentials, internal versions, exceptions, configuration, environment details, stack traces, or the identity and internals of any dependency. Liveness MUST indicate only whether the process is operating; readiness MAY indicate unavailability of critical dependencies but MUST NOT reveal the internal cause.
+- **FR-028a**: Any detailed diagnostics view, if ever provided, MUST be a separate capability that is explicitly protected and MUST NOT be enabled by default. Operator documentation MUST state that health endpoints are not intended for unnecessary Internet exposure and that their exposure is controlled by network, reverse proxy, firewall, ingress, or equivalent means.
 - **FR-029**: Health signals MUST be excluded from, or separately limited by, request-protection rules so that orchestrators are not locked out and the signals cannot be used for abuse.
 
 **HTTP and network security**
 
 - **FR-030**: Production error responses MUST use a stable error contract and MUST NOT expose stack traces, file paths, SQL, ORM internals, identity-framework internals, cryptographic details, or raw exceptions; status codes MUST be appropriate to the failure.
-- **FR-031**: Forwarded headers (scheme, client address) MUST be honored only from explicitly configured trusted proxies or networks and ignored otherwise; the behavior MUST be documented.
+- **FR-031**: Forwarded headers (scheme, client address) MUST be honored only from explicitly configured trusted proxies or networks and ignored otherwise; the service MUST NOT trust forwarded headers automatically and MUST NOT have any fallback that trusts any proxy. The behavior MUST be documented.
+- **FR-031a**: When no trusted proxy or network is configured, the service MUST start normally, behave as a direct deployment, and log a clear startup warning that forwarded headers are ignored and that, behind a real reverse proxy, remote address, HTTPS detection, and dependent policies may not represent the real client.
+- **FR-031b**: An invalid or unsafe trusted-proxy configuration (including one that would trust arbitrary sources) MUST fail configuration validation.
 - **FR-032**: Production MUST apply transport-security policy where HTTPS is expected, MUST send content-type-sniffing protection, and SHOULD avoid disclosing server implementation details.
 - **FR-033**: Cross-origin browser access MUST be denied by default; if enabled, it MUST use an explicit origin allowlist and MUST NOT permit any origin on authenticated endpoints.
 - **FR-034**: Request-size and upload limits MUST be explicitly configured and enforced.
@@ -243,12 +271,12 @@ An operator diagnosing a production incident can follow a request or security ev
 **Runtime and deployment**
 
 - **FR-040**: A production runtime package MUST be reproducibly buildable, MUST run as a non-privileged user, and MUST NOT contain secrets, development tooling, or test credentials.
-- **FR-041**: Profile storage in Production MUST be configured on persistent storage, and the risk of ephemeral container storage MUST be made explicit in startup behavior or documentation.
+- **FR-041**: Production configuration MUST explicitly declare whether profile storage is persistent. Startup MUST be rejected when the declaration is absent; MUST proceed normally when declared persistent; and MUST proceed with a clear, visible warning (that images may be lost when the container is replaced or recreated) when declared not persistent. The service MUST NOT infer persistence from the storage path. The check MUST apply only in Production unless another setting explicitly enables it in other environments, and the decision MUST be documented in the deployment and configuration guide.
 - **FR-042**: A simple local/integration composition MUST be provided for evaluating the deployed service with its database and persistent storage, and MUST NOT replace or alter the existing development container workflow.
 
 **Documentation**
 
-- **FR-043**: Operator documentation MUST cover deployment requirements, a complete configuration reference (meaning, default, Production requirement), secret injection, migration and upgrade procedure, backup and restore for both database and profile storage with consistency guidance, HTTPS and reverse-proxy expectations, health signals, logging and correlation, graceful shutdown, profile-storage operations, consumer-secret rotation, and known operational limitations.
+- **FR-043**: Operator documentation MUST cover deployment requirements, a complete configuration reference (meaning, default, Production requirement), secret injection, migration and upgrade procedure, backup and restore for both database and profile storage with consistency guidance, HTTPS and reverse-proxy expectations, health signals, logging and correlation, graceful shutdown, profile-storage operations, consumer-secret rotation, and known operational limitations, explicitly including that password recovery delivery requires an operator-supplied adapter in Production.
 
 ### Key Entities *(include if feature involves data)*
 
@@ -278,12 +306,13 @@ An operator diagnosing a production incident can follow a request or security ev
 ## Assumptions
 
 - Docker is the intended deployment mechanism; a production image and a local/integration composition are provided, while orchestration platforms and cloud-specific tooling are out of scope.
-- Production migrations are applied by an explicit deployment step run before or alongside the new release; the service does not apply migrations implicitly in Production. This is documented as the chosen mechanism.
+- Production migrations are applied by an explicit deployment step (one-off command from the production image) run before the new release starts; the release SQL script is the documented alternative for manual review. The service does not apply migrations implicitly in Production.
 - The service is currently used server-to-server by consuming APIs, so cross-origin browser access is denied by default and no CORS allowlist is enabled unless an operator configures one.
 - TLS is typically terminated at a reverse proxy; the service trusts forwarded headers only from explicitly configured proxies or networks.
 - Existing structured logging, correlation identifiers (009), and rate-limiting mechanisms are reused; no external observability platform or secret-management product is introduced.
 - The "previous release state" for upgrade validation is the schema produced by migrations through feature 010, with feature 011 migrations as the upgrade under test, supplemented by the full chain from zero.
 - Behaviors established in earlier specifications (session freshness policy from 006, global administrator model from 011, consumer-secret rotation from 008/009, profile image handling from 010) are authoritative; this feature verifies them and does not change them except to fix release-blocking defects.
-- Detailed health diagnostics beyond minimal status are not required; if added, they are not publicly exposed by default.
+- Detailed health diagnostics beyond minimal status are not required; if ever added, they are a separate, explicitly protected capability and are not enabled by default.
 - Load, performance, and capacity testing, high availability, multi-region deployment, and automated key-rotation orchestration are out of scope.
+- Production password-recovery delivery is intentionally not provided by this feature; it is an operator-supplied extension through the existing delivery interface and is documented as a known operational limitation.
 - The existing AI development container and development compose workflow remain unchanged and are not the production image.
