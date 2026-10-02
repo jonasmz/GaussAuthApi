@@ -10,6 +10,7 @@ public static class ApiServiceCollectionExtensions
     {
         services.AddProblemDetails();
         services.AddExceptionHandler<SafeExceptionHandler>();
+        services.AddReadinessChecks();
 
         var limits = RateLimitOptions.Load(configuration);
 

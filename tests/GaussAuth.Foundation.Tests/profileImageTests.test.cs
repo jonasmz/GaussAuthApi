@@ -781,7 +781,7 @@ public sealed class ProfileImageTests
         }
 
         public string[] StoredFiles() => Directory.Exists(Path.Combine(Root, "avatars"))
-            ? Directory.GetFiles(Path.Combine(Root, "avatars")).Select(Path.GetFileName).Where(name => ProfileImageReference.TryParse(name, out _)).OrderBy(name => name).ToArray()!
+            ? Directory.GetFiles(Path.Combine(Root, "avatars")).Select(Path.GetFileName).Where(name => ProfileImageReference.TryParse(name, out _)).Select(name => name!).OrderBy(name => name).ToArray()
             : [];
 
         public void Dispose()

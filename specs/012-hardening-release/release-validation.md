@@ -28,9 +28,45 @@ Warnings at baseline (reviewed under T035):
 | `dotnet tool restore` | `dotnet-ef` 10.0.12 restored from `.config/dotnet-tools.json` |
 | `dotnet ef --version` | 10.0.12 |
 
+### Final warning review — T035
+
+| Warning | Category | Disposition |
+|---------|----------|-------------|
+| CS8619 in `profileImageTests.test.cs` (`Path.GetFileName` nullability) | Nullability, test code | **Fixed**: filter valid names and explicitly narrow them to non-null before materializing the array. Final Release build: 0 warnings, 0 errors. |
+
 ## Tests
 
 Baseline above. Final-run results are recorded here by T040 and T077.
+
+### Phase 5 readiness — T031–T034
+
+`ReadinessTests` (4 cases) passed in Release. `/health/ready` evaluates database connectivity/current migrations and a profile-storage create/delete probe with two-second check timeouts; its result is cached for five seconds. It returns 204 or 503 with `Content-Length: 0`; `/health/live` remains a dependency-free 204. The tests cover healthy dependencies, an invalid database port, no migrations on a throwaway database followed by recovery to 204 after migration, and a filesystem path that is a file rather than a usable directory.
+
+### Final Release regression — T040
+
+| Item | Result |
+|------|--------|
+| Environment | clean `public` schema in the development PostgreSQL 17 container |
+| `dotnet build GaussAuth.slnx -c Release` | success, **0 warnings, 0 errors** |
+| `dotnet test GaussAuth.slnx -c Release` | **263 passed, 0 failed, 0 skipped**; TRX `phase6-final.trx` |
+| Failures found during the first clean run | 2; both fixed before final run: an over-broad response assertion treated ordinary email text containing “recovery” as secret material, and the membership repository missed the actual PostgreSQL alternate-key constraint name when translating a concurrent duplicate to a normal duplicate result. |
+
+### Full feature consistency review — T036–T039
+
+| Review area | Evidence | Gap / disposition |
+|-------------|----------|-------------------|
+| Users | `CreateUserTests`, `UserRetrievalTests`, `UserActivationTests` | Covered |
+| Applications and memberships | `ApplicationsTests`, `ApplicationMembershipsTests`, `AdministrationTests.Concurrent_identical_assignments_and_memberships_leave_exactly_one_record` | Concurrent duplicate membership was release-blocking; fixed by recognizing `AK_ApplicationMemberships_UserId_ApplicationId`. |
+| Roles and permissions | `RolesPermissionsTests`, `EffectivePermissionsTests` | Covered, including application isolation |
+| Login | `AuthenticationLoginTests` | Covered |
+| Sessions | `SessionsAccessTests`, `SessionDomainTests` | Covered, including expiry and revocation |
+| Password management | `PasswordManagementTests`, `RecoveryWithoutDeliveryTests` | Covered |
+| Authorization contract | `AuthorizationContractTests` | Covered |
+| Security and audit | `SecurityAuditTests`, `AdministrationTests.Every_administrative_change_records_one_event_with_actor_and_target` | Covered |
+| Profile files | `ProfileImageTests`, `ProfileUpdateTests` | Covered |
+| Administrative operations | `AdministrationTests` | Covered |
+| Cryptographic configuration | `CryptographicConfigurationTests` (6 cases) | Covered: configured issuer/key validation, mismatches, P-256/JWK publication and Development-only ephemeral keys. |
+| Consumer credentials | `AdministrationTests.Consumer_secret_lifecycle_shows_the_value_once_and_keeps_the_previous_until_retired`, `ConsumerCredentialTests` | Covered: isolation, hash-only persistence, rotation, retirement and secret-free logs/audit/errors; no additional test was missing. |
 
 ### After Phase 1–2 (foundation) — 2026-10-02
 
@@ -102,13 +138,14 @@ Release-blocking categories (spec): authentication correctness; authorization is
 |----|------|---------|-------------------|-------------|
 | F-001 | Password recovery | In Production-class environments the only recovery delivery adapter throws, and `RequestRecoveryAsync` generates the reset credential before delivering it and then discards it (FR-018a requires no generation without a channel). | Yes — password/reset secrecy, production configuration safety | **Fixed** (T019): `IRecoveryDelivery.IsAvailable`; the service returns before any lookup or generation. Tests: `RecoveryWithoutDeliveryTests` (identical responses, spy count 0, no events/file/log of the address, positive control proves the spy counts) |
 | F-002 | Startup | Configuration failures surface as unhandled-exception stack traces, messages do not name the setting, and only the administration rate limit is validated. | Yes — startup reliability, production configuration safety | **Fixed** (T009–T018, T021): `StartupConfigurationException` + `StartupFailureReporter` (key-only Critical log, exit 1, no stack trace); every rate-limit group, lifetimes, lockout, request limit, retention, administrator list and key settings validated. Tests: `ProductionStartupValidationTests` (31 process-level cases incl. `Staging`), `StartupFailureReporterTests` |
-| F-003 | Health | No readiness endpoint; a database outage cannot be reported. | Yes — startup reliability | Open → T031–T034 |
+| F-003 | Health | No readiness endpoint; a database outage cannot be reported. | Yes — startup reliability | **Fixed** (T031–T034): cached built-in health checks return empty 503 for database/storage outage or pending migrations and recover within 10 s. Tests: `ReadinessTests`. |
 | F-004 | Bootstrap | No supported way to create the first user: user creation requires a global administrator and the global list only holds ids of existing users. | Yes — startup reliability, production configuration safety | Open → T057–T059 |
 | F-005 | Data Protection | Key ring defaults to ephemeral container storage; password-reset credentials are lost on restart and not shared across replicas. | Yes — production configuration safety | **Startup enforcement fixed** (T015, T016: `DataProtection:KeysPath` required in Production-class, validated for absolute path and writability, persisted via the framework file store). Cross-restart credential survival test still pending → T046 |
 | F-006 | Forwarded headers | No forwarded-header handling; behind a proxy every client shares one rate-limit bucket. | No — documented behavior with startup warning (direct deployment) | Open → T050, T051 |
 | F-008 | Migrations | Two simultaneous `migrate` runs corrupted the outcome: 2 of 3 rounds failed with PostgreSQL `42704` / `2BP01` (the framework's per-call locking was assumed sufficient but is not). | Yes — database migration consistency | **Fixed** (T023/T030): the migrator holds a PostgreSQL advisory lock for the whole run; held lock ⇒ category `locked`, no schema change. Tests: `ConcurrentMigrationTests` (3 rounds both `0`, plus held-lock test) |
 | F-009 | Migration script | `dotnet ef` writes the SQL script with a UTF-8 BOM that `psql` rejects on the first statement. | No — operational (DBA path) | **Fixed** (T029): `scripts/generate-migration-script.sh` strips it and verifies no connection settings; applied with real `psql` |
-| F-007 | Test warning | CS8619 in `profileImageTests.test.cs:768` (test code only). | No | Open → T035 |
+| F-007 | Test warning | CS8619 in `profileImageTests.test.cs:768` (test code only). | No | **Fixed** (T035): explicit post-filter nullability narrowing; final Release build has 0 warnings. |
+| F-010 | Membership concurrency | A concurrent duplicate membership hit PostgreSQL alternate key `AK_ApplicationMemberships_UserId_ApplicationId`, which was not translated to the normal duplicate result. | Yes — authorization isolation | **Fixed** (T037): repository recognizes the actual unique constraint. Regression: `AdministrationTests.Concurrent_identical_assignments_and_memberships_leave_exactly_one_record`. |
 
 ## Sign-off
 

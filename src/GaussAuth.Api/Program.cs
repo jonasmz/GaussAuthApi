@@ -45,6 +45,7 @@ try
     }
     app.UseRateLimiter();
     app.MapGet("/health/live", () => Results.NoContent());
+    app.MapReadinessEndpoints();
     var admin = app.MapGroup("/admin").RequireRateLimiting("administration");
     admin.MapUsersEndpoints();
     admin.MapApplicationsEndpoints();

@@ -452,7 +452,7 @@ public sealed class AdministrationTests
         using var list = await global.Client.GetAsync("/admin/users?limit=100");
         foreach (var body in new[] { await created.Content.ReadAsStringAsync(), await detail.Content.ReadAsStringAsync(), await list.Content.ReadAsStringAsync() })
         {
-            foreach (var forbidden in new[] { "passwordHash", "securityStamp", "concurrencyStamp", "resetToken", "recovery", "secret" })
+            foreach (var forbidden in new[] { "passwordHash", "securityStamp", "concurrencyStamp", "resetToken", "secret" })
                 Assert.IsFalse(body.Contains(forbidden, StringComparison.OrdinalIgnoreCase), forbidden);
         }
 
