@@ -41,43 +41,20 @@ public static class InfrastructureServiceCollectionExtensions
         IConfiguration configuration,
         IHostEnvironment? environment = null)
     {
-        const string connectionKey = "ConnectionStrings:AuthenticationDatabase";
-        var connection = configuration.GetConnectionString("AuthenticationDatabase");
-        if (string.IsNullOrWhiteSpace(connection))
-        {
-            throw new StartupConfigurationException(connectionKey, "is required: configure a PostgreSQL connection string");
-        }
+        var connection = AuthenticationDatabaseConnection.Read(configuration);
 
-        NpgsqlConnectionStringBuilder parsed;
-        try
-        {
-            parsed = new NpgsqlConnectionStringBuilder(connection);
-        }
-        catch (ArgumentException)
-        {
-            throw new StartupConfigurationException(connectionKey, "is not a valid PostgreSQL connection string");
-        }
-
-        if (!parsed.ContainsKey("Host") || !parsed.ContainsKey("Database") || !parsed.ContainsKey("Username") ||
-            string.IsNullOrWhiteSpace(parsed.Host) || string.IsNullOrWhiteSpace(parsed.Database) || string.IsNullOrWhiteSpace(parsed.Username))
-        {
-            throw new StartupConfigurationException(connectionKey, "must specify Host, Database and Username");
-        }
-
-        services.AddDbContext<AuthenticationDbContext>(options => options.UseNpgsql(connection));
         services.AddAuthentication();
 
         var maxFailedAccessAttempts = configuration.GetBoundedInt32("Identity:Lockout:MaxFailedAccessAttempts", 5, 1, 1_000);
         var lockoutMinutes = configuration.GetBoundedInt32("Identity:Lockout:DefaultLockoutMinutes", 5, 1, 525_600);
 
-        services.AddIdentityCore<IdentityUser<Guid>>(options =>
+        // The same registration is used by the one-off migration host so both always build the identical EF model.
+        services.AddAuthenticationPersistence(connection, options =>
             {
-                options.Stores.SchemaVersion = IdentitySchemaVersions.Version2;
                 options.Lockout.MaxFailedAccessAttempts = maxFailedAccessAttempts;
                 options.Lockout.DefaultLockoutTimeSpan = TimeSpan.FromMinutes(lockoutMinutes);
                 options.Lockout.AllowedForNewUsers = true;
             })
-            .AddEntityFrameworkStores<AuthenticationDbContext>()
             .AddSignInManager()
             .AddDefaultTokenProviders();
 

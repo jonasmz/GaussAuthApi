@@ -13,7 +13,10 @@ public static class CommandLineCommands
     private delegate Task<int> CommandHandler(string[] arguments);
 
     // Subcommands reserved by the release contract. Handlers are registered here as they are implemented.
-    private static readonly Dictionary<string, CommandHandler> Handlers = new(StringComparer.Ordinal);
+    private static readonly Dictionary<string, CommandHandler> Handlers = new(StringComparer.Ordinal)
+    {
+        ["migrate"] = MigrateCommand.RunAsync
+    };
 
     private static readonly string[] ReservedCommands = ["migrate", "bootstrap-admin"];
 

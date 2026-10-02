@@ -15,8 +15,8 @@ dotnet GaussAuth.Api.dll migrate
 | Credentials | Supplied at execution time through the environment / mounted secret; never embedded in image or script. |
 | Action | Applies pending migrations in order; logs each applied migration id; no-op (exit 0) when none pending. Never drops the database; never touches data outside migration operations. |
 | Success | exit code `0`. |
-| Failure | exit code `≠ 0`; one structured Critical log naming the failing migration id (when known) and a value-free reason category (`connection`, `authentication`, `migration-failed`, `configuration`); no connection string, password or stack trace in output. |
-| Idempotence | Safe to run repeatedly. Concurrent runs rely on EF Core's migration locking for the PostgreSQL provider; this is verified during implementation rather than assumed, and the documentation states that deployments should still run a single migrator at a time. |
+| Failure | exit code `1`; one structured Critical log with the category, the failing migration id (when known), a safe code (a PostgreSQL SQLSTATE or an exception type name) and a fixed per-category hint; categories: `connection`, `authentication`, `migration-failed`, `locked`, `cancelled`, plus `configuration` (missing/invalid connection setting, reported by the startup reporter). No connection string, host, user, password, SQL or stack trace in output. |
+| Idempotence and concurrency | Safe to run repeatedly. The whole run holds a PostgreSQL session advisory lock, so migrators started at the same moment are serialized: the second waits (up to 5 minutes, then exits with category `locked`) and then finds nothing pending. **Verified, not assumed:** an experiment with two simultaneous runs *without* this lock failed in 2 of 3 rounds (PostgreSQL errors `42704`, `2BP01`), so the framework's own locking was not relied on; with the lock 3 of 3 rounds succeeded. Deployments should still schedule a single migrator. |
 | Runtime separation | The web host (`dotnet GaussAuth.Api.dll` without arguments) **never** applies migrations. |
 
 ### Deployment order (the documented contract)

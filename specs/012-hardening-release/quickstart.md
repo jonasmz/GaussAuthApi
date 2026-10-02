@@ -39,7 +39,7 @@ docker compose -f compose.dev.yml exec postgres psql -U "$POSTGRES_USER" -d mig_
 # Compare:  pg_dump --schema-only mig_a  vs  mig_b ;  SELECT "MigrationId" FROM "__EFMigrationsHistory" ORDER BY 1
 ```
 
-Expected: identical schema dump and identical history rows. The image contains no SDK (`docker run --rm --entrypoint dotnet gaussauth:release --list-sdks` lists none); no credentials in the script (`grep -i password schema.sql` empty).
+Expected: identical schema dump and identical history rows. The image contains no SDK (`docker run --rm --entrypoint dotnet gaussauth:release --list-sdks` lists none); no credentials in the script (`grep -E 'Host=|Username=|Password=' schema.sql` is empty — note that Identity column names such as `PasswordHash` legitimately appear, so do not grep for the bare word).
 
 ## 4. Startup validation (US1, FR-014–021)
 

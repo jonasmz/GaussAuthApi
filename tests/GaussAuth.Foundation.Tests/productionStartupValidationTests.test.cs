@@ -12,11 +12,8 @@ namespace GaussAuth.Foundation.Tests;
 public sealed class ProductionStartupValidationTests
 {
     private const string Sentinel = "SENTINEL_9f3a";
-    private const string Connection = "Host=localhost;Database=foundation_test;Username=test;Password=not_a_secret";
     private static readonly TimeSpan RefusalTimeout = TimeSpan.FromSeconds(30);
     private static readonly TimeSpan StartTimeout = TimeSpan.FromSeconds(60);
-
-    private static readonly string SigningKeyPem = ECDsa.Create(ECCurve.NamedCurves.nistP256).ExportPkcs8PrivateKeyPem();
 
     [DataRow("Production", "ConnectionStrings__AuthenticationDatabase", null, "ConnectionStrings:AuthenticationDatabase")]
     [DataRow("Production", "ConnectionStrings__AuthenticationDatabase", "not a connection string " + Sentinel, "ConnectionStrings:AuthenticationDatabase")]
@@ -182,24 +179,7 @@ public sealed class ProductionStartupValidationTests
         AssertRefused(refused, "Sessions:Signing:PrivateKeyPem");
     }
 
-    private static Dictionary<string, string?> ValidEnvironment(string environmentName)
-    {
-        var root = Path.Combine(Path.GetTempPath(), "gaussauth-startup-validation");
-        return new Dictionary<string, string?>
-        {
-            ["ASPNETCORE_ENVIRONMENT"] = environmentName,
-            ["ASPNETCORE_URLS"] = "http://127.0.0.1:0",
-            ["ConnectionStrings__AuthenticationDatabase"] = Connection,
-            ["Sessions__Signing__PrivateKeyPem"] = SigningKeyPem,
-            ["Sessions__Signing__PrivateKeyPemFile"] = null,
-            ["ProfileImages__RootPath"] = Path.Combine(root, "images"),
-            ["ProfileImages__StorageIsPersistent"] = "true",
-            ["DataProtection__KeysPath"] = Path.Combine(root, "keys"),
-            ["PasswordRecovery__DeliveryFile"] = null,
-            ["SecurityAudit__GlobalReviewerUserId"] = null,
-            ["Administration__GlobalAdministratorUserIds__0"] = null
-        };
-    }
+    private static Dictionary<string, string?> ValidEnvironment(string environmentName) => ProductionApiEnvironment.Create(environmentName);
 
     private static void AssertRefused((int ExitCode, string Output, bool TimedOut) result, string expectedSetting)
     {

@@ -55,7 +55,7 @@ No new NuGet packages. No schema changes (no new migration) are planned; if the 
 | VIII. Proportionate testing / error contracts | PASS. Tests target release-blocking categories only; no coverage padding. Error contract unchanged (RFC 7807 problem details). |
 | IX. Spec-driven development | PASS. Plan derives from spec; three spec-level discoveries (recovery adapter, Data Protection key ring, first-administrator bootstrap) are documented in research, confirmed with the project owner, and written back into the spec (FR-018a, FR-041a, FR-044–046). |
 | Operational constraints | PASS. Rate limits, request/upload limits, structured logging, external configuration, no secrets in images all addressed. |
-| One type per file / naming | PASS. Tasks follow `<name>.<type>.cs` and reuse the existing suffix vocabulary (`service`, `extension`, `options`, `adapter`, `handler`, `fixture`, `test`). Two suffixes are introduced deliberately because no existing one fits their category — `exception` (the startup configuration exception) and `check` (health-check implementations); both are named after the framework concept they implement. Subcommand dispatcher and command hosts use `service`. |
+| One type per file / naming | PASS. Tasks follow `<name>.<type>.cs` and reuse the existing suffix vocabulary (`service`, `extension`, `options`, `adapter`, `handler`, `fixture`, `test`). Three suffixes are introduced deliberately because no existing one fits their category — `exception` (the startup configuration exception), `check` (health-check implementations) and `factory` (the EF design-time factory); both are named after the framework concept they implement. Subcommand dispatcher and command hosts use `service`. |
 
 **Gate result**: PASS — no violations, Complexity Tracking not required.
 
@@ -119,6 +119,9 @@ src/GaussAuth.Infrastructure/
 │   └── profileStorageReadiness.check.cs           # NEW: root usable
 ├── Persistence/databaseMigrator.service.cs        # NEW: shared by `migrate` command (beside the repositories; not in the generated Migrations folder)
 ├── Persistence/databaseMigration.result.cs        # NEW: outcome (success / failure category + migration id)
+├── Persistence/authenticationDatabaseConnection.service.cs # NEW: validated, never-echoed connection string read (shared)
+├── Persistence/authenticationDbContextDesignTime.factory.cs # NEW: design-time factory so SQL generation needs no API settings
+├── DependencyInjection/persistenceServiceCollectionExtensions.extension.cs # NEW: one DbContext+Identity registration shared by API and `migrate`
 ├── Bootstrap/firstAdministratorBootstrap.service.cs # NEW: guarded first-user creation (reuses create-user use case)
 ├── Bootstrap/firstAdministratorBootstrap.result.cs  # NEW: outcome category + UserId
 ├── Passwords/protectedFileRecoveryDelivery.service.cs  # UPDATED: availability
@@ -161,6 +164,11 @@ tests/GaussAuth.Foundation.Tests/
 ├── apiProcess.fixture.cs                          # NEW: process launcher (extracted from startupTests)
 ├── releaseMigrationValidationTests.test.cs        # NEW (from zero, throwaway DB)
 ├── releaseMigrationUpgradeTests.test.cs           # NEW (previous state + data → latest)
+├── releaseMigrationScriptTests.test.cs            # NEW (idempotent SQL equals the command)
+├── concurrentMigrationTests.test.cs               # NEW (two simultaneous migrators; held lock)
+├── databaseSchema.fixture.cs                      # NEW: schema introspection/comparison
+├── migrationServices.fixture.cs                   # NEW: shared persistence registration for tests
+├── productionApiEnvironment.fixture.cs            # NEW: complete valid Production-class environment
 ├── migrateCommandTests.test.cs                    # NEW (success, value-free failure, web host never migrates)
 ├── cryptographicConfigurationTests.test.cs        # NEW
 ├── gracefulShutdownTests.test.cs                  # NEW
