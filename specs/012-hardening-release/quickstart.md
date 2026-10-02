@@ -12,7 +12,7 @@ Runnable validation guide for feature 012. Each scenario states prerequisites, c
 
 ```bash
 docker compose -f compose.dev.yml exec sdk dotnet restore
-docker compose -f compose.dev.yml exec sdk dotnet build -c Release -warnaserror:CS8600,CS8601,CS8602,CS8603,CS8604,CS8618,CA2000
+docker compose -f compose.dev.yml exec sdk dotnet build -c Release   # warnings are reviewed and classified per tasks T035, not blanket-promoted to errors
 docker compose -f compose.dev.yml exec sdk dotnet test -c Release
 ```
 
@@ -63,7 +63,7 @@ docker compose -f compose.release.yml start postgres ; sleep 8 ; curl -i localho
 
 Expected: no body or dependency detail in any response; transition logged once. Repeat with the profile storage volume made unusable (`readinessTests` simulates it) and with a database one migration behind (pending migrations ⇒ 503).
 
-## 5a. First administrator bootstrap (US7, FR-044–046)
+## 6. First administrator bootstrap (US7, FR-044–046)
 
 ```bash
 docker run --rm --network <net> -e ConnectionStrings__AuthenticationDatabase=… \
@@ -73,11 +73,11 @@ docker run --rm --network <net> -e ConnectionStrings__AuthenticationDatabase=…
 
 Expected (`bootstrapAdministratorTests` + image run): prints a `UserId` and exit 0 on an empty database; the password is absent from output/logs; re-running exits non-zero with `users-exist` and writes nothing; with the list still empty a global operation is rejected; after setting `Administration__GlobalAdministratorUserIds__0=<UserId>` and restarting, the same user logs in and a global operation succeeds; the command refuses when users already exist even if the list is empty.
 
-## 6. Recovery without a delivery channel (US1, FR-018a)
+## 7. Recovery without a delivery channel (US1, FR-018a)
 
 `recoveryWithoutDeliveryTests`: Production-class host, no adapter. Recovery for an existing and an unknown address returns identical responses; no reset credential is generated (spy on the credential service); no credential appears in logs, audit events or responses; Warning logged once at startup.
 
-## 7. Edge/network baseline (US6, FR-030–035)
+## 8. Edge/network baseline (US6, FR-030–035)
 
 `httpBaselineTests`, `forwardedHeadersTests`, `rateLimitCoverageTests`:
 - forced 500 returns the generic problem document with no stack trace, path, SQL or framework names; the exception is logged server-side with the correlation id;
@@ -87,7 +87,7 @@ Expected (`bootstrapAdministratorTests` + image run): prints a `UserId` and exit
 - spoofed `X-Forwarded-For`/`-Proto` from an untrusted source changes neither client address nor scheme; from a configured trusted proxy they do (rate-limit bucket follows the forwarded client);
 - every endpoint has a named rate-limit policy or is on the exempt list (health).
 
-## 8. Image and compose (US5, FR-040–042)
+## 9. Image and compose (US5, FR-040–042)
 
 ```bash
 cp .env.release.example .env.release   # replace placeholders locally; never commit
@@ -100,7 +100,7 @@ docker history gaussauth:release | grep -i -E "password|secret|key" # nothing se
 Then: upload a profile image through the API, `docker compose … up -d --force-recreate api`, fetch the image again (must still exist), confirm `/health/ready` 204, run `docker stop` and confirm exit code 0 within the grace period and no partial files under `/data/profile-images`.
 Failure path: break the connection string, `up` again — `migrate` exits non-zero and `api` never starts.
 
-## 9. Secret hygiene (US7, FR-022)
+## 10. Secret hygiene (US7, FR-022)
 
 ```bash
 scripts/scan-secrets.sh            # tracked files + git history
@@ -109,11 +109,11 @@ docker compose -f compose.dev.yml exec sdk dotnet test -c Release --filter "Full
 
 Expected: zero findings other than allow-listed placeholders (`replace_with_*`, `not_a_secret`).
 
-## 10. Consumer-secret and logging review (FR-024, FR-037)
+## 11. Consumer-secret and logging review (FR-024, FR-037)
 
 Existing `consumerCredentialTests` plus log-capture assertions: per-application independence, hash-only storage, rotation current/previous, retirement, plaintext only in issuance/rotation response, and no secrets in logs/audit/errors across the whole run.
 
-## 11. Documentation walk-through (US7, FR-043)
+## 12. Documentation walk-through (US7, FR-043)
 
 On a clean checkout follow `docs/deployment.md` → `docs/database.md` → `docs/configuration.md` to deploy, migrate, upgrade (previous image → new image), back up and restore (database + profile storage together), and rotate a consumer secret. Every Production-required key appears in `docs/configuration.md`; `docs/bootstrap.md` takes an empty database to a working global administrator; the documentation states ECDSA NIST P-256 for the signing key separately from the symmetric per-Application consumer secrets, that an empty administrator list means no global authority, and that key-ring persistence is required for reset credentials and other protected state; every item in `docs/limitations.md` is non-release-blocking.
 

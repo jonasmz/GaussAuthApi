@@ -8,10 +8,10 @@ The complete set of externally supplied settings for one environment. Full key l
 
 | Concept | Rules |
 |---------|-------|
-| Environment class | `Development` and `Testing` are *non-production*; every other name is *Production-class* (R1). Unsafe defaults are only reachable in non-production classes. |
+| Environment class | `Development` and `Testing` are *non-production*; every other name is *Production-class* (R1). Unsafe defaults are only reachable in non-production classes; an ephemeral signing key only in `Development`. |
 | Required in Production-class | database connection; signing key (PEM or PEM file; ECDSA NIST P-256); profile storage root; profile storage persistence declaration; **Data Protection key-ring location**. |
 | Optional with validated defaults | session/access lifetimes, lockout, request body limit, per-group rate limits, administration limits, audit retention, global administrator list, forwarded-header trust lists, HTTPS redirect port, image limits. |
-| Value rules | lifetimes > 0 and access lifetime ≤ session lifetime; rate limits `PermitLimit ≥ 1`, `WindowSeconds ≥ 1`; request body 1..1 048 576 bytes; image limits > 0; storage and key-ring paths absolute, free of NUL, and the key-ring path creatable/writable at startup (persistence itself is the operator's declared responsibility and is not inferred); global admin ids valid non-empty GUIDs (blank entries ignored); trust lists parse as IPs/CIDRs and never include a match-everything network; legacy `SecurityAudit:GlobalReviewerUserId` must be unset. |
+| Value rules | lifetimes > 0 and access lifetime ≤ session lifetime; rate limits `PermitLimit` 1 … 10 000 000 and `WindowSeconds` 1 … 86 400; request body 1..1 048 576 bytes; image limits > 0; storage and key-ring paths absolute, free of NUL, and the key-ring path creatable/writable at startup (persistence itself is the operator's declared responsibility and is not inferred); global admin ids valid non-empty GUIDs (blank entries ignored); trust lists parse as IPs/CIDRs and never include a match-everything network; legacy `SecurityAudit:GlobalReviewerUserId` must be unset. |
 | Failure semantics | Invalid → startup refuses, one Critical log naming each offending **setting key** and a value-free reason, non-zero exit, no stack trace. Secrets never appear. |
 | Warnings (start anyway) | no trusted proxies configured; recovery delivery not configured; storage declared non-persistent; (Production-class only). The framework's "key stored without encryption at rest" warning is expected and documented. |
 

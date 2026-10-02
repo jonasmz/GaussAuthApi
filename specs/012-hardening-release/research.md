@@ -32,6 +32,7 @@ All findings below come from reading the current code on `main` (features 001–
 ### R1 — One "Production-class" environment rule
 - **Decision**: An environment is *Production-class* unless it is `Development` or `Testing`. All unsafe-default gating (signing key, recovery adapter, storage root, persistence declaration, HSTS, proxy warnings) uses one extension method, replacing the ad-hoc `IsDevelopment()` / `Development||Testing` mix. Staging-like names are therefore treated as Production (secure by default).
 - **Rationale**: FR-018/019. Removes the inconsistent Testing-gets-HSTS case and makes safe the default for any unknown environment name.
+- **Signing key exception**: an ephemeral signing key is allowed **only in `Development`** (existing behavior, stricter than the class rule); `Testing` must supply a key.
 - **Alternatives**: Match literal `"Production"` only — rejected: a typo or `Staging` would silently get development conveniences.
 
 ### R2 — Typed, fail-fast configuration validation without a new framework

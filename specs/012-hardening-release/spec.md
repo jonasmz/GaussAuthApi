@@ -42,11 +42,11 @@ An operator starts the service in a Production environment. If any critical conf
 2. **Given** Production with an invalid value (non-positive lifetime, impossible rate limit, unusable storage path, malformed signing material), **When** the service starts, **Then** it fails with an actionable message.
 3. **Given** Production without externally supplied signing material, **When** the service starts, **Then** it does not generate or fall back to an ephemeral or development key and fails instead.
 4. **Given** Production, **When** the service starts, **Then** development-only behaviors (fake or file-based recovery delivery, development key generation, verbose error detail, permissive bootstrap) are not active unless explicitly and visibly enabled.
-3a. **Given** Production without a valid persistent key-ring location configured for protected state, **When** the service starts, **Then** startup is refused with a message naming only the missing or invalid setting; Development and Testing may start without it.
-4a. **Given** Production with no password-recovery delivery adapter configured, **When** the service starts, **Then** it starts normally and emits a clear structured warning that password recovery delivery is not configured.
-4b. **Given** that same state, **When** a recovery request is made for an existing account and for an unknown account, **Then** both receive the same generic response, no reset credential is generated, and no reset credential appears in any log, audit event, or response.
-5. **Given** a valid Production configuration, **When** the service starts, **Then** the startup is logged with environment and non-sensitive configuration summary, and shutdown is logged.
-6. **Given** Development and Testing environments, **When** the service starts, **Then** development conveniences remain available there and are clearly separated from Production behavior.
+5. **Given** Production without a valid persistent key-ring location configured for protected state, **When** the service starts, **Then** startup is refused with a message naming only the missing or invalid setting; Development and Testing may start without it.
+6. **Given** Production with no password-recovery delivery adapter configured, **When** the service starts, **Then** it starts normally and emits a clear structured warning that password recovery delivery is not configured.
+7. **Given** that same state, **When** a recovery request is made for an existing account and for an unknown account, **Then** both receive the same generic response, no reset credential is generated, and no reset credential appears in any log, audit event, or response.
+8. **Given** a valid Production configuration, **When** the service starts, **Then** the startup is logged with environment and non-sensitive configuration summary, and shutdown is logged.
+9. **Given** Development and Testing environments, **When** the service starts, **Then** development conveniences remain available there and are clearly separated from Production behavior.
 
 ---
 
@@ -123,10 +123,10 @@ An operator deploys the service from a documented, reproducible runtime package,
 2. **Given** the production image, **When** run, **Then** all secrets and environment-specific settings are supplied externally and none are baked in.
 3. **Given** profile storage configured on a persistent volume, **When** the container is replaced, **Then** previously uploaded profile files remain available.
 4. **Given** Production with no declaration of whether profile storage is persistent, **When** the service starts, **Then** startup is rejected with a message naming the missing declaration.
-4a. **Given** Production with storage explicitly declared persistent, **When** the service starts, **Then** it starts normally.
-4b. **Given** Production with storage explicitly declared not persistent, **When** the service starts, **Then** it starts and emits a clear, visible warning that profile images may be lost when the container is replaced or recreated.
-5. **Given** a local/integration composition for evaluation, **When** started, **Then** the service, database, and persistent storage run together without altering the existing development container workflow.
-6. **Given** a termination signal, **When** the service shuts down, **Then** in-flight requests complete or are cancelled cleanly and no persisted state is corrupted.
+5. **Given** Production with storage explicitly declared persistent, **When** the service starts, **Then** it starts normally.
+6. **Given** Production with storage explicitly declared not persistent, **When** the service starts, **Then** it starts and emits a clear, visible warning that profile images may be lost when the container is replaced or recreated.
+7. **Given** a local/integration composition for evaluation, **When** started, **Then** the service, database, and persistent storage run together without altering the existing development container workflow.
+8. **Given** a termination signal, **When** the service shuts down, **Then** in-flight requests complete or are cancelled cleanly and no persisted state is corrupted.
 
 ---
 
@@ -142,13 +142,13 @@ A security reviewer confirms that the service's network-facing behavior is safe 
 
 1. **Given** Production, **When** a request fails unexpectedly, **Then** the response is a stable, generic error contract exposing no stack trace, file path, query text, framework internals, identity internals, cryptographic detail, or raw exception.
 2. **Given** a request arriving with forwarding headers from a source that is not a configured trusted proxy, **When** processed, **Then** the forwarded values are ignored.
-2a. **Given** no trusted proxy or network is configured, **When** the service starts, **Then** it starts normally as a direct deployment, ignores all forwarded headers, and logs a clear warning stating that forwarded headers will be ignored and that, if the service is actually behind a reverse proxy, the remote address, HTTPS detection, and any policy depending on them may not represent the real client.
-2b. **Given** a trusted-proxy configuration that is invalid or unsafe (for example, one that would trust any source), **When** the service starts, **Then** configuration validation fails.
-3. **Given** a request arriving through a configured trusted proxy, **When** processed, **Then** the original scheme and client address are used for HTTPS detection and rate-limit partitioning.
-4. **Given** Production responses, **When** inspected, **Then** content-type-sniffing protection is present, transport-security policy is applied where HTTPS is expected, and server implementation details are not unnecessarily disclosed.
-5. **Given** the current server-to-server usage, **When** cross-origin browser requests arrive, **Then** none are permitted unless an explicit origin allowlist is configured; there is no allow-any-origin behavior.
-6. **Given** oversized request bodies or uploads, **When** submitted, **Then** they are rejected at the configured limits.
-7. **Given** the sensitive endpoint groups (login, recovery request, password reset, consumer authorization/introspection, file upload, administration), **When** reviewed, **Then** each has an appropriate, separately justified protection limit, and exceeding it is rejected without affecting other groups.
+3. **Given** no trusted proxy or network is configured, **When** the service starts, **Then** it starts normally as a direct deployment, ignores all forwarded headers, and logs a clear warning stating that forwarded headers will be ignored and that, if the service is actually behind a reverse proxy, the remote address, HTTPS detection, and any policy depending on them may not represent the real client.
+4. **Given** a trusted-proxy configuration that is invalid or unsafe (for example, one that would trust any source), **When** the service starts, **Then** configuration validation fails.
+5. **Given** a request arriving through a configured trusted proxy, **When** processed, **Then** the original scheme and client address are used for HTTPS detection and rate-limit partitioning.
+6. **Given** Production responses, **When** inspected, **Then** content-type-sniffing protection is present, transport-security policy is applied where HTTPS is expected, and server implementation details are not unnecessarily disclosed.
+7. **Given** the current server-to-server usage, **When** cross-origin browser requests arrive, **Then** none are permitted unless an explicit origin allowlist is configured; there is no allow-any-origin behavior.
+8. **Given** oversized request bodies or uploads, **When** submitted, **Then** they are rejected at the configured limits.
+9. **Given** the sensitive endpoint groups (login, recovery request, password reset, consumer authorization/introspection, file upload, administration), **When** reviewed, **Then** each has an appropriate, separately justified protection limit, and exceeding it is rejected without affecting other groups.
 
 ---
 
@@ -166,10 +166,10 @@ An operator who did not build the system can deploy, configure, upgrade, back up
 2. **Given** the documentation, **When** read, **Then** it covers deployment requirements, the complete configuration reference, secret injection, migration procedure, upgrade procedure, backup and restore (database and profile storage, including consistency between them), HTTPS and reverse-proxy expectations, health endpoints, logging and correlation, graceful shutdown, and known operational limitations.
 3. **Given** the profile-storage section, **When** read, **Then** it states the required storage root, filesystem permissions, persistence and backup requirements, container volume behavior, and behavior when storage is unavailable.
 4. **Given** a consumer-secret rotation, **When** performed per the documentation, **Then** consuming applications continue to validate during the retirement window.
-4a. **Given** the bootstrap documentation, **When** followed on an empty database, **Then** an operator can create the first user with the one-off command, list its UserId in the global administrator configuration, restart, and perform global administrative operations; the documentation states that an empty list means no global authority.
-4b. **Given** the documentation on signing keys, **When** read, **Then** it identifies the access-credential signing key as an ECDSA key on the NIST P-256 curve and keeps it conceptually separate from the symmetric, per-Application consumer secrets.
-4c. **Given** the documentation on protected-state keys, **When** read, **Then** it states that persisting the key ring is required to preserve password-reset credentials and any other protected state across restarts and replicas.
-5. **Given** the documentation, **When** a limitation is listed, **Then** it is not a release-blocking defect.
+5. **Given** the bootstrap documentation, **When** followed on an empty database, **Then** an operator can create the first user with the one-off command, list its UserId in the global administrator configuration, restart, and perform global administrative operations; the documentation states that an empty list means no global authority.
+6. **Given** the documentation on signing keys, **When** read, **Then** it identifies the access-credential signing key as an ECDSA key on the NIST P-256 curve and keeps it conceptually separate from the symmetric, per-Application consumer secrets.
+7. **Given** the documentation on protected-state keys, **When** read, **Then** it states that persisting the key ring is required to preserve password-reset credentials and any other protected state across restarts and replicas.
+8. **Given** the documentation, **When** a limitation is listed, **Then** it is not a release-blocking defect.
 
 ---
 
@@ -263,7 +263,7 @@ An operator diagnosing a production incident can follow a request or security ev
 - **FR-031**: Forwarded headers (scheme, client address) MUST be honored only from explicitly configured trusted proxies or networks and ignored otherwise; the service MUST NOT trust forwarded headers automatically and MUST NOT have any fallback that trusts any proxy. The behavior MUST be documented.
 - **FR-031a**: When no trusted proxy or network is configured, the service MUST start normally, behave as a direct deployment, and log a clear startup warning that forwarded headers are ignored and that, behind a real reverse proxy, remote address, HTTPS detection, and dependent policies may not represent the real client.
 - **FR-031b**: An invalid or unsafe trusted-proxy configuration (including one that would trust arbitrary sources) MUST fail configuration validation.
-- **FR-032**: Production MUST apply transport-security policy where HTTPS is expected, MUST send content-type-sniffing protection, and SHOULD avoid disclosing server implementation details.
+- **FR-032**: Production MUST apply transport-security policy where HTTPS is expected, MUST send content-type-sniffing protection, and MUST NOT disclose server implementation details through a `Server` response header or equivalent.
 - **FR-033**: Cross-origin browser access MUST be denied by default; if enabled, it MUST use an explicit origin allowlist and MUST NOT permit any origin on authenticated endpoints.
 - **FR-034**: Request-size and upload limits MUST be explicitly configured and enforced.
 - **FR-035**: Rate-limit protection MUST be verified for login, recovery request, password reset, consumer authorization/introspection, profile upload, and administrative endpoints, each with limits suited to its abuse profile rather than one uniform limit, and the chosen values MUST be documented.
@@ -298,6 +298,8 @@ An operator diagnosing a production incident can follow a request or security ev
 - **Health Status**: A minimal liveness or readiness result derived from process responsiveness and critical dependency availability.
 - **Migration Chain**: The ordered, version-controlled set of schema changes from an empty database to the current schema, with documented data effects.
 - **Release Validation Record**: Evidence that the build, regression suite, migration validation, consistency review, and secret scan were performed and their results.
+- **Protected-State Key Ring**: The persisted key material used by the platform's data-protection mechanism to protect state such as password-reset credentials; it must survive restarts and be shared by replicas.
+- **First Administrator Bootstrap**: The one-off operator procedure that creates the first user on an empty system; it grants no authority by itself.
 - **Operational Documentation Set**: The operator-facing documents covering deployment, configuration, upgrade, backup/restore, security expectations, and limitations.
 
 ## Success Criteria *(mandatory)*
@@ -320,6 +322,8 @@ An operator diagnosing a production incident can follow a request or security ev
 - **SC-014**: In 100% of tested Production starts without a valid key-ring location the service refuses to start naming only the setting; and a password-reset credential issued before an application/container restart remains valid after it when the documented persistent location is used.
 
 ## Assumptions
+
+- **Production-class environment**: any environment name other than `Development` and `Testing` (for example `Production`, `Staging`). Every statement in this specification about "Production" applies to all Production-class environments so that an unknown or mistyped environment name never receives development conveniences. The only environment that may use an ephemeral signing key is `Development`.
 
 - Docker is the intended deployment mechanism; a production image and a local/integration composition are provided, while orchestration platforms and cloud-specific tooling are out of scope.
 - Production migrations are applied by an explicit deployment step (one-off command from the production image) run before the new release starts; the release SQL script is the documented alternative for manual review. The service does not apply migrations implicitly in Production.

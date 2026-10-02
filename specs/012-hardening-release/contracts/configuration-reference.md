@@ -31,7 +31,7 @@ Five keys: connection, signing key, profile storage root, profile storage persis
 | `AuthorizationConsumers:<app-code>:CurrentSecretHash` / `RetiringSecretHash` | none | **hash only**, never plaintext (secret-grade); runtime rotation via 011 admin API |
 | `PasswordRecovery:DeliveryFile` | unset | **Development/Testing only**; ignored in Production-class |
 
-### Rate limits (`RateLimiting:<Group>:PermitLimit` / `WindowSeconds`) — all validated: `PermitLimit ≥ 1`, `WindowSeconds ≥ 1`
+### Rate limits (`RateLimiting:<Group>:PermitLimit` / `WindowSeconds`) — all validated: `PermitLimit` 1 … 10 000 000, `WindowSeconds` 1 … 86 400
 
 | Group | Protects | Default (per client address) |
 |-------|----------|------------------------------|
