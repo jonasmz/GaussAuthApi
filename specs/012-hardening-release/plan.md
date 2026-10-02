@@ -130,6 +130,7 @@ src/GaussAuth.Api/
 ├── appsettings.json                               # NEW: safe logging defaults, no secrets
 ├── appsettings.Production.json                    # NEW: JSON console, quieter levels
 ├── appsettings.Development.json                   # NEW: verbose
+├── Startup/startupFailureReporter.service.cs       # NEW: value-free Critical log + exit code for startup configuration failures
 ├── Commands/commandLine.service.cs                 # NEW: subcommand dispatcher (`migrate`, `bootstrap-admin`)
 ├── Commands/migrateCommand.service.cs              # NEW: `migrate` subcommand host
 ├── Commands/bootstrapAdminCommand.service.cs       # NEW: `bootstrap-admin` subcommand host
@@ -151,6 +152,8 @@ tests/GaussAuth.Foundation.Tests/
 ├── rateLimitCoverageTests.test.cs                 # NEW (every endpoint limited or exempt-by-rationale)
 ├── recoveryWithoutDeliveryTests.test.cs           # NEW
 ├── throwawayDatabase.fixture.cs                   # NEW: uniquely named empty database per test
+├── throwawayDatabaseTests.test.cs                 # NEW: fixture sanity (created empty, unique, dropped)
+├── startupFailureReporterTests.test.cs            # NEW: reporter output is key-only, no stack trace
 ├── apiProcess.fixture.cs                          # NEW: process launcher (extracted from startupTests)
 ├── releaseMigrationValidationTests.test.cs        # NEW (from zero, throwaway DB)
 ├── releaseMigrationUpgradeTests.test.cs           # NEW (previous state + data → latest)

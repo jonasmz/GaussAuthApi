@@ -1,5 +1,4 @@
 using System.Net;
-using System.Diagnostics;
 using System.Security.Cryptography;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -29,38 +28,36 @@ public sealed class StartupTests
         Assert.AreEqual(string.Empty, await response.Content.ReadAsStringAsync());
     }
 
+    [TestMethod]
+    public async Task Unknown_subcommand_is_rejected_instead_of_starting_the_web_host()
+    {
+        var result = await ApiProcess.RunAsync(
+            new Dictionary<string, string?> { ["ASPNETCORE_ENVIRONMENT"] = "Production" },
+            TimeSpan.FromSeconds(15),
+            "migrat");
+
+        Assert.IsFalse(result.TimedOut, "A mistyped subcommand must exit, not start the server.");
+        Assert.AreEqual(64, result.ExitCode);
+        Assert.Contains("Unknown command 'migrat'", result.Output);
+    }
+
     [DataRow("")]
     [DataRow("not a connection string")]
     [TestMethod]
     public async Task Invalid_database_configuration_fails_without_echoing_its_value(string connection)
     {
-        var start = new ProcessStartInfo("dotnet")
-        {
-            RedirectStandardError = true,
-            RedirectStandardOutput = true,
-            UseShellExecute = false
-        };
-        start.ArgumentList.Add(typeof(Program).Assembly.Location);
-        start.Environment["ConnectionStrings__AuthenticationDatabase"] = connection;
-        start.Environment["ASPNETCORE_ENVIRONMENT"] = "Production";
-        start.Environment["ProfileImages__RootPath"] = TestProfileImagesRoot;
+        var result = await ApiProcess.RunAsync(
+            new Dictionary<string, string?>
+            {
+                ["ConnectionStrings__AuthenticationDatabase"] = connection,
+                ["ASPNETCORE_ENVIRONMENT"] = "Production",
+                ["ProfileImages__RootPath"] = TestProfileImagesRoot
+            },
+            TimeSpan.FromSeconds(10));
+        if (result.TimedOut) Assert.Fail("API remained running with invalid database configuration.");
+        var output = result.Output;
 
-        using var process = Process.Start(start) ?? throw new InvalidOperationException("Could not start API process.");
-        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
-        try
-        {
-            await process.WaitForExitAsync(timeout.Token);
-        }
-        catch (OperationCanceledException)
-        {
-            process.Kill(entireProcessTree: true);
-            Assert.Fail("API remained running with invalid database configuration.");
-        }
-
-        var output = await process.StandardError.ReadToEndAsync() +
-                     await process.StandardOutput.ReadToEndAsync();
-
-        Assert.AreNotEqual(0, process.ExitCode);
+        Assert.AreNotEqual(0, result.ExitCode);
         Assert.Contains("database connection configuration", output);
         if (connection.Length > 0)
         {
@@ -77,28 +74,19 @@ public sealed class StartupTests
     [TestMethod]
     public async Task Invalid_session_configuration_fails_generically_without_echoing_values(string key, string value, bool withKey)
     {
-        var start = new ProcessStartInfo("dotnet") { RedirectStandardError = true, RedirectStandardOutput = true, UseShellExecute = false };
-        start.ArgumentList.Add(typeof(Program).Assembly.Location);
-        start.Environment["ConnectionStrings__AuthenticationDatabase"] = TestConnection;
-        start.Environment["ASPNETCORE_ENVIRONMENT"] = "Production";
-        start.Environment["ProfileImages__RootPath"] = TestProfileImagesRoot;
-        start.Environment["Sessions__Signing__PrivateKeyPem"] = withKey ? TestSigningKeyPem : "";
-        start.Environment[key] = value;
-
-        using var process = Process.Start(start) ?? throw new InvalidOperationException("Could not start API process.");
-        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(15));
-        try
-        {
-            await process.WaitForExitAsync(timeout.Token);
-        }
-        catch (OperationCanceledException)
-        {
-            process.Kill(entireProcessTree: true);
-            Assert.Fail("API remained running with invalid session configuration.");
-        }
-
-        var output = await process.StandardError.ReadToEndAsync() + await process.StandardOutput.ReadToEndAsync();
-        Assert.AreNotEqual(0, process.ExitCode);
+        var result = await ApiProcess.RunAsync(
+            new Dictionary<string, string?>
+            {
+                ["ConnectionStrings__AuthenticationDatabase"] = TestConnection,
+                ["ASPNETCORE_ENVIRONMENT"] = "Production",
+                ["ProfileImages__RootPath"] = TestProfileImagesRoot,
+                ["Sessions__Signing__PrivateKeyPem"] = withKey ? TestSigningKeyPem : "",
+                [key] = value
+            },
+            TimeSpan.FromSeconds(15));
+        if (result.TimedOut) Assert.Fail("API remained running with invalid session configuration.");
+        var output = result.Output;
+        Assert.AreNotEqual(0, result.ExitCode);
         Assert.IsTrue(output.Contains("Session lifetime configuration is missing or invalid.") ||
                       output.Contains("Access credential signing configuration is missing or invalid."));
         Assert.DoesNotContain("BEGIN PRIVATE KEY", output);
