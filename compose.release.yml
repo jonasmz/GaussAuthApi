@@ -27,14 +27,13 @@ services:
       ProfileImages__RootPath: /data/profile-images
       ProfileImages__StorageIsPersistent: "true"
       DataProtection__KeysPath: /data/keys
-    secrets: [signing-key]
-    volumes: [profile_images:/data/profile-images, key_ring:/data/keys]
+    volumes:
+      - profile_images:/data/profile-images
+      - key_ring:/data/keys
+      - ${SIGNING_KEY_FILE}:/run/secrets/signing-key:ro
     stop_grace_period: 40s
     depends_on:
       migrate: { condition: service_completed_successfully }
-secrets:
-  signing-key:
-    file: ${SIGNING_KEY_FILE}
 volumes:
   postgres_data:
   profile_images:
