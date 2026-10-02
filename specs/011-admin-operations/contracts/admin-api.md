@@ -1,6 +1,6 @@
 # Administrative API Contract
 
-All administrative routes are under `/admin` and require `Authorization: Bearer <access credential>` from a normal session. Every request is authorized before any data is read or changed. This document is the planned contract; it is re-verified against the implementation in the final task.
+All administrative routes are under `/admin` and require `Authorization: Bearer <access credential>` from a normal session. Every request is authorized before any data is read or changed. This document was verified against the implementation (integration tests in `tests/GaussAuth.Foundation.Tests/administrationTests.test.cs`).
 
 ## Authorization model
 
@@ -65,7 +65,7 @@ List item: `{ id, email, isActive, createdAtUtc }`. Never returned: password has
 |---|---|---|
 | Generate | `POST /admin/applications/{applicationId}/consumer-secret` | `201` with plaintext `secret` once; `409` if one already exists (managed or configured) |
 | Rotate | `POST /admin/applications/{applicationId}/consumer-secret/rotate` | `200` with new plaintext `secret` once; previous becomes retiring |
-| Retire previous | `POST /admin/applications/{applicationId}/consumer-secret/retire-previous` | `200` metadata; current secret keeps working |
+| Retire previous | `POST /admin/applications/{applicationId}/consumer-secret/retire-previous` | `200` metadata; current secret keeps working; `409` when the Application has no managed credential (configured hashes cannot be changed at runtime) |
 | Metadata | `GET /admin/applications/{applicationId}/consumer-secret` | `{ exists, source, createdAtUtc, rotatedAtUtc, hasRetiring }` |
 
 Plaintext appears only in the generate/rotate response, with `Cache-Control: no-store`. It is never retrievable later and never logged or audited. Application administrators are always rejected here.
@@ -137,6 +137,13 @@ Every administrative state change writes a critical security event with `ActorUs
 ## Never exposed
 
 Password hashes, security stamps, reset material, access or refresh credentials, session secrets, signing material, consumer secrets (after the one-time response), consumer secret hashes, and unnecessary personal data.
+
+## As built
+
+- Every consumer-secret response (generate, rotate, retire, metadata) is sent with `Cache-Control: no-store`; a concurrent change returns `409` and loses no data.
+- `GET /security-events` now includes `actorUserId` on each event.
+- Migrations, in order: `addSecurityEventActor`, `seedAdministrativePermissions`, `addApplicationConsumerCredentials`, `moveAuditPermissionToAuthNamespace`. The legacy `audit.events.read` permission is deactivated (not deleted) by the last one.
+- Configuration through the development stack: `GLOBAL_ADMINISTRATOR_USER_ID`, `ADMIN_MAX_BULK_SESSION_REVOCATION`, `ADMIN_RATE_LIMIT_PERMITS`, `ADMIN_RATE_LIMIT_WINDOW_SECONDS` (mapped in `compose.dev.yml`).
 
 ## Operational notes
 

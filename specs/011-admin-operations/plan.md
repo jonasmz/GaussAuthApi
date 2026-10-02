@@ -14,7 +14,7 @@ Put every management operation behind one permission-based administrative bounda
 
 **Primary Dependencies**: ASP.NET Core minimal APIs, EF Core, PostgreSQL 17, ASP.NET Core Identity `PasswordHasher` (already used for consumer hashes). No new packages.
 
-**Storage**: PostgreSQL. Four migrations: `addSecurityEventActor`, `seedAdministrativePermissions`, `addApplicationConsumerCredentials`, `moveAuditPermissionToAuthNamespace`.
+**Storage**: PostgreSQL. Four migrations, applied in this order: `addSecurityEventActor`, `seedAdministrativePermissions`, `addApplicationConsumerCredentials`, `moveAuditPermissionToAuthNamespace`.
 
 **Testing**: MSTest integration, migration, and architecture tests in the Docker SDK container, extending `tests/GaussAuth.Foundation.Tests`.
 

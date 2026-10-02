@@ -45,6 +45,27 @@ public sealed class ArchitectureTests
     }
 
     [TestMethod]
+    public void Administration_keeps_layers_clean_and_has_no_monolithic_service()
+    {
+        var root = FindRepositoryRoot();
+        var consumerCredential = File.ReadAllText(Path.Combine(root, "src/GaussAuth.Domain/Applications/consumerCredential.entity.cs"));
+        foreach (var forbidden in new[] { "Microsoft.", "Npgsql", "GaussAuth.Application", "GaussAuth.Infrastructure", "GaussAuth.Api" })
+            Assert.IsFalse(consumerCredential.Contains(forbidden, StringComparison.Ordinal), $"ConsumerCredential must not reference {forbidden}.");
+
+        foreach (var file in Directory.EnumerateFiles(Path.Combine(root, "src/GaussAuth.Application/Administration"), "*.cs", SearchOption.AllDirectories))
+        {
+            var source = File.ReadAllText(file);
+            foreach (var forbidden in new[] { "GaussAuth.Api", "GaussAuth.Infrastructure", "Microsoft.AspNetCore", "Microsoft.EntityFrameworkCore" })
+                Assert.IsFalse(source.Contains(forbidden, StringComparison.Ordinal), $"{Path.GetFileName(file)} must not reference {forbidden}.");
+        }
+
+        var monolithic = new Regex(@"^(Admin|Administration|Administrative)(Service|Manager|Facade)$", RegexOptions.CultureInvariant);
+        foreach (var assembly in new[] { typeof(GaussAuth.Application.Administration.AdministrationOptions).Assembly, typeof(GaussAuth.Domain.Applications.ConsumerCredential).Assembly })
+            foreach (var type in assembly.GetTypes())
+                Assert.IsFalse(monolithic.IsMatch(type.Name), $"{type.FullName} looks like a monolithic administrative service.");
+    }
+
+    [TestMethod]
     public void Source_files_follow_the_one_type_and_category_filename_rules()
     {
         var root = FindRepositoryRoot();

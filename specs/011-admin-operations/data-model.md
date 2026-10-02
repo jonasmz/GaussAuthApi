@@ -81,8 +81,8 @@ Startup fails if the legacy `SecurityAudit:GlobalReviewerUserId` key is present 
 
 ## Transient application types (not persisted)
 
-- `AdministrativeAuthorizationResult`: outcome, `ActorUserId`, `IsGlobal`.
+- `AdministrativeAuthorization`: outcome, `ActorUserId`, `IsGlobal`.
 - `AdministrativeActorContext`: scoped holder of the current actor for audit stamping.
 - `SessionSummary`: id, userId, applicationId, createdAtUtc, expiresAtUtc, revokedAtUtc, state.
-- `EffectiveAuthorizationView`: application and user state, membership state, active roles, effective permission codes.
-- `ConsumerCredentialMetadata`: exists, source, createdAtUtc, rotatedAtUtc, hasRetiring.
+- `AuthorizationView`: application and user state, membership state, active roles, effective permission codes.
+- `ConsumerSecretMetadata`: exists, source, createdAtUtc, rotatedAtUtc, hasRetiring.
