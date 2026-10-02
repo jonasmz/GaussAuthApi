@@ -175,19 +175,34 @@ public sealed class ProfileImageTests
     [TestMethod]
     public void Options_use_defaults_and_reject_invalid_configuration()
     {
-        var valid = Load(new() { ["ProfileImages:RootPath"] = "/var/lib/gaussauth/images" }, production: true);
+        var valid = Load(new() { ["ProfileImages:RootPath"] = "/var/lib/gaussauth/images", ["ProfileImages:StorageIsPersistent"] = "true" }, production: true);
         Assert.AreEqual(5L * 1024 * 1024, valid.MaxBytes);
         Assert.AreEqual(4096, valid.MaxDimension);
+        Assert.AreEqual(true, valid.StorageIsPersistent);
 
-        var configured = Load(new() { ["ProfileImages:RootPath"] = "/x/y", ["ProfileImages:MaxBytes"] = "1024", ["ProfileImages:MaxDimension"] = "128" }, production: true);
+        var configured = Load(new() { ["ProfileImages:RootPath"] = "/x/y", ["ProfileImages:StorageIsPersistent"] = "true", ["ProfileImages:MaxBytes"] = "1024", ["ProfileImages:MaxDimension"] = "128" }, production: true);
         Assert.AreEqual(1024, configured.MaxBytes);
         Assert.AreEqual(128, configured.MaxDimension);
 
-        Assert.ThrowsExactly<InvalidOperationException>(() => Load(new(), production: true));
-        Assert.ThrowsExactly<InvalidOperationException>(() => Load(new() { ["ProfileImages:RootPath"] = "relative/path" }, production: true));
-        Assert.ThrowsExactly<InvalidOperationException>(() => Load(new() { ["ProfileImages:RootPath"] = "/x", ["ProfileImages:MaxBytes"] = "0" }, production: true));
-        Assert.ThrowsExactly<InvalidOperationException>(() => Load(new() { ["ProfileImages:RootPath"] = "/x", ["ProfileImages:MaxDimension"] = "-5" }, production: true));
-        Assert.ThrowsExactly<InvalidOperationException>(() => Load(new() { ["ProfileImages:RootPath"] = "/x", ["ProfileImages:MaxBytes"] = "abc" }, production: true));
+        AssertRefused(new(), production: true, "ProfileImages:RootPath");
+        AssertRefused(new() { ["ProfileImages:RootPath"] = "relative/path", ["ProfileImages:StorageIsPersistent"] = "true" }, production: true, "ProfileImages:RootPath");
+        AssertRefused(new() { ["ProfileImages:RootPath"] = "/x", ["ProfileImages:StorageIsPersistent"] = "true", ["ProfileImages:MaxBytes"] = "0" }, production: true, "ProfileImages:MaxBytes");
+        AssertRefused(new() { ["ProfileImages:RootPath"] = "/x", ["ProfileImages:StorageIsPersistent"] = "true", ["ProfileImages:MaxDimension"] = "-5" }, production: true, "ProfileImages:MaxDimension");
+        AssertRefused(new() { ["ProfileImages:RootPath"] = "/x", ["ProfileImages:StorageIsPersistent"] = "true", ["ProfileImages:MaxBytes"] = "abc" }, production: true, "ProfileImages:MaxBytes");
+    }
+
+    [TestMethod]
+    public void Production_requires_an_explicit_persistence_declaration_and_never_infers_it_from_the_path()
+    {
+        AssertRefused(new() { ["ProfileImages:RootPath"] = "/var/lib/gaussauth/images" }, production: true, "ProfileImages:StorageIsPersistent");
+        AssertRefused(new() { ["ProfileImages:RootPath"] = "/var/lib/gaussauth/images", ["ProfileImages:StorageIsPersistent"] = "maybe" }, production: true, "ProfileImages:StorageIsPersistent");
+
+        var declaredNonPersistent = Load(new() { ["ProfileImages:RootPath"] = "/tmp/images", ["ProfileImages:StorageIsPersistent"] = "false" }, production: true);
+        Assert.AreEqual(false, declaredNonPersistent.StorageIsPersistent);
+
+        // Development/Testing do not need a declaration unless the check is explicitly enabled there.
+        Assert.IsNull(Load(new() { ["ProfileImages:RootPath"] = "/tmp/images" }, production: false).StorageIsPersistent);
+        AssertRefused(new() { ["ProfileImages:RootPath"] = "/tmp/images", ["ProfileImages:RequirePersistenceDeclaration"] = "true" }, production: false, "ProfileImages:StorageIsPersistent");
     }
 
     [TestMethod]
@@ -766,7 +781,7 @@ public sealed class ProfileImageTests
         }
 
         public string[] StoredFiles() => Directory.Exists(Path.Combine(Root, "avatars"))
-            ? Directory.GetFiles(Path.Combine(Root, "avatars")).Select(Path.GetFileName).Where(name => ProfileImageReference.TryParse(name, out _)).OrderBy(name => name).ToArray()!
+            ? Directory.GetFiles(Path.Combine(Root, "avatars")).Select(Path.GetFileName).Where(name => ProfileImageReference.TryParse(name, out _)).Select(name => name!).OrderBy(name => name).ToArray()
             : [];
 
         public void Dispose()
@@ -774,6 +789,13 @@ public sealed class ProfileImageTests
             Environment.SetEnvironmentVariable("ProfileImages__RootPath", previous);
             if (Directory.Exists(Root)) Directory.Delete(Root, recursive: true);
         }
+    }
+
+    private static void AssertRefused(Dictionary<string, string?> values, bool production, string expectedSetting)
+    {
+        var exception = Assert.ThrowsExactly<GaussAuth.Infrastructure.Configuration.StartupConfigurationException>(() => Load(values, production));
+        Assert.AreEqual(expectedSetting, exception.Setting);
+        Assert.DoesNotContain("abc", exception.Message);
     }
 
     private static ProfileImagesOptions Load(Dictionary<string, string?> values, bool production)

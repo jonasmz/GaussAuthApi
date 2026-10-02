@@ -138,6 +138,11 @@ public sealed class AdministrationMigrationTests
         await db.Database.ExecuteSqlRawAsync("""
             DELETE FROM "RolePermissions" WHERE "PermissionId" IN (SELECT "Id" FROM "Permissions" WHERE "Code" LIKE 'auth.%')
             """);
+        // The later audit-namespace migration intentionally preserves its replacement permission when rolled back.
+        // Remove that (and any independently seeded application copy) before exercising the seed migration's fail-closed path.
+        await db.Database.ExecuteSqlRawAsync("""
+            DELETE FROM "Permissions" WHERE "Code" LIKE 'auth.%'
+            """);
         await migrator.MigrateAsync(PreviousMigration);
     }
 

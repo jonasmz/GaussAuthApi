@@ -1,3 +1,4 @@
+using GaussAuth.Infrastructure.Configuration;
 using Microsoft.Extensions.Configuration;
 
 namespace GaussAuth.Infrastructure.Security;
@@ -8,8 +9,7 @@ public sealed class SecurityAuditRetentionPolicy
 
     public static SecurityAuditRetentionPolicy Load(IConfiguration configuration)
     {
-        var value = configuration.GetValue<int?>("SecurityAudit:RetentionDays");
-        if (value is <= 0) throw new InvalidOperationException("Security audit retention configuration is invalid.");
+        var value = configuration.GetOptionalBoundedInt32("SecurityAudit:RetentionDays", 1, int.MaxValue);
         return new SecurityAuditRetentionPolicy { RetentionDays = value };
     }
 }

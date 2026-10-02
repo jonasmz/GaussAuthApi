@@ -1,6 +1,8 @@
 .env
 .env.*
 !.env.example
+.env.release
+*.pem
 .recovery/
 **/bin/
 **/obj/
@@ -18,3 +20,6 @@ Thumbs.db
 # Private profile-image storage (user content; never version)
 .profile-images/
 profile-images/
+
+# Generated release artifacts (SQL migration script)
+artifacts/

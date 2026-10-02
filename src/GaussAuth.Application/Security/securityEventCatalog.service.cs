@@ -51,6 +51,7 @@ public sealed class SecurityEventCatalog
         SecurityEventType.ConsumerCredentialRotated => Critical("consumer.credential.rotated", SecurityEventOutcome.Succeeded),
         SecurityEventType.ConsumerCredentialPreviousRetired => Critical("consumer.credential.previous-retired", SecurityEventOutcome.Succeeded),
         SecurityEventType.AdministrativeAccessDenied => Operational("administration.access.denied", SecurityEventOutcome.Rejected),
+        SecurityEventType.UnexpectedApplicationFailure => Operational("application.failure.unexpected", SecurityEventOutcome.Failed),
         _ => throw new ArgumentOutOfRangeException(nameof(type))
     };
 

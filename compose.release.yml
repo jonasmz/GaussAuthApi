@@ -1,0 +1,40 @@
+services:
+  postgres:
+    image: postgres:17
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes: [postgres_data:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+  migrate:
+    image: gaussauth:release
+    command: ["migrate"]
+    environment:
+      ConnectionStrings__AuthenticationDatabase: ${CONNECTION_STRING}
+    depends_on:
+      postgres: { condition: service_healthy }
+  api:
+    image: gaussauth:release
+    ports: ["127.0.0.1:8080:8080"]
+    environment:
+      ConnectionStrings__AuthenticationDatabase: ${CONNECTION_STRING}
+      Sessions__Signing__PrivateKeyPemFile: /run/secrets/signing-key
+      ProfileImages__RootPath: /data/profile-images
+      ProfileImages__StorageIsPersistent: "true"
+      DataProtection__KeysPath: /data/keys
+    volumes:
+      - profile_images:/data/profile-images
+      - key_ring:/data/keys
+      - ${SIGNING_KEY_FILE}:/run/secrets/signing-key:ro
+    stop_grace_period: 40s
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+volumes:
+  postgres_data:
+  profile_images:
+  key_ring:

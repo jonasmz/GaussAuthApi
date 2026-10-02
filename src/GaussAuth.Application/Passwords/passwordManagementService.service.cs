@@ -39,6 +39,14 @@ public sealed class PasswordManagementService(
 
     public async Task RequestRecoveryAsync(string email, CancellationToken cancellationToken)
     {
+        // Without a delivery channel nothing can be delivered, so no reset credential is generated, logged or audited.
+        // Returning before any account lookup also keeps the outcome identical for existing and unknown accounts.
+        if (!recoveryDelivery.IsAvailable)
+        {
+            logger.LogDebug("Password recovery was requested but no delivery channel is configured; no credential was issued.");
+            return;
+        }
+
         var normalizedEmail = credentialProvisioning.NormalizeEmail(email.Trim());
         var user = await users.GetByNormalizedEmailAsync(normalizedEmail, cancellationToken);
         if (user is null || !user.IsActive) return;
