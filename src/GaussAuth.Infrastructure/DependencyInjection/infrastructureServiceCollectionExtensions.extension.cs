@@ -1,3 +1,5 @@
+using GaussAuth.Application.Administration.Ports;
+using GaussAuth.Infrastructure.Administration;
 using GaussAuth.Application.Users.Ports;
 using GaussAuth.Application.Applications.Ports;
 using GaussAuth.Application.Memberships.Ports;
@@ -75,6 +77,9 @@ public static class InfrastructureServiceCollectionExtensions
             .AddSignInManager()
             .AddDefaultTokenProviders();
 
+        services.AddSingleton(new GaussAuth.Application.Administration.AdministrationOptions(
+            configuration.GetValue("Administration:MaxBulkSessionRevocation", GaussAuth.Application.Administration.AdministrationOptions.DefaultMaxBulkSessionRevocation)));
+
         SessionPolicy sessionPolicy;
         try
         {
@@ -103,7 +108,9 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddScoped<IPermissionRepository, PermissionRepository>();
         services.AddScoped<IRolePermissionRepository, RolePermissionRepository>();
         services.AddScoped<IUserRoleRepository, UserRoleRepository>();
-        services.AddSingleton<IConsumerCredentialValidator>(new ConfiguredConsumerCredentialValidator(configuration));
+        services.AddSingleton(new ConfiguredConsumerCredentialValidator(configuration));
+        services.AddScoped<IConsumerCredentialValidator, StoreBackedConsumerCredentialValidator>();
+        services.AddScoped<IConsumerCredentialStore, EfConsumerCredentialStore>();
         services.AddScoped<ICredentialProvisioningService, IdentityCredentialProvisioningService>();
         services.AddScoped<ICredentialVerificationService, IdentityCredentialVerificationService>();
         services.AddScoped<IPasswordCredentialService, IdentityPasswordCredentialService>();
@@ -112,7 +119,7 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddSingleton<SecurityEventCatalog>();
         services.AddScoped<ISecurityEventRepository, SecurityEventRepository>();
         services.AddScoped<ISecurityEventQueryRepository, SecurityEventQueryRepository>();
-        services.AddSingleton<IGlobalAuditReviewerPolicy, ConfiguredGlobalAuditReviewerPolicy>();
+        services.AddSingleton<IGlobalAdministratorPolicy>(new ConfiguredGlobalAdministratorPolicy(configuration));
         services.AddScoped<ISecurityEventRecorder, PersistedSecurityEventRecorder>();
 
         var profileImages = ProfileImagesOptions.Load(configuration, environment);

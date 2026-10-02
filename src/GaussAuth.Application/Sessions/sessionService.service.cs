@@ -81,7 +81,7 @@ public sealed class SessionService(
             session.Revoke(timeProvider.GetUtcNow());
             await sessions.SaveChangesAsync(ct);
             logger.LogInformation("Session {SessionId} revoked for user {UserId} in application {ApplicationId}.", session.Id, session.UserId, session.ApplicationId);
-            await securityEvents.RecordAsync(SecurityEventType.SessionRevoked, session.UserId, session.ApplicationId, session.Id, ct);
+            await securityEvents.RecordAsync(SecurityEventType.SessionRevoked, session.UserId, session.ApplicationId, session.Id, "session", session.Id, ct);
         }
 
         return SessionOperationResult.Success(sessionId, session?.UserId ?? Guid.Empty, session?.ApplicationId ?? Guid.Empty, null, null, null, session?.ExpiresAt);
@@ -98,7 +98,7 @@ public sealed class SessionService(
         foreach (var session in activeSessions)
         {
             logger.LogInformation("Session {SessionId} revoked because credentials changed for user {UserId} in application {ApplicationId}.", session.Id, session.UserId, session.ApplicationId);
-            await securityEvents.RecordAsync(SecurityEventType.SessionRevoked, session.UserId, session.ApplicationId, session.Id, ct);
+            await securityEvents.RecordAsync(SecurityEventType.SessionRevoked, session.UserId, session.ApplicationId, session.Id, "session", session.Id, ct);
         }
 
         return activeSessions.Length;

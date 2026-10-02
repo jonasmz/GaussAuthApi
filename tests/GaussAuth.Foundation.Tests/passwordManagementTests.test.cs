@@ -26,7 +26,7 @@ public sealed class PasswordManagementTests
     [TestMethod]
     public async Task Change_password_requires_current_password_and_revokes_every_session()
     {
-        using var factory = await FactoryAsync(); using var client = factory.CreateClient();
+        using var factory = await FactoryAsync(); using var clientAdmin = await factory.CreateAdminClientAsync(); var client = clientAdmin.Client;
         var login = await CreateLoginAsync(client);
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", login.AccessToken);
 
@@ -56,12 +56,12 @@ public sealed class PasswordManagementTests
         Environment.SetEnvironmentVariable("PasswordRecovery__DeliveryFile", path);
         try
         {
-            using var factory = await FactoryAsync(); using var client = factory.CreateClient();
+            using var factory = await FactoryAsync(); using var clientAdmin = await factory.CreateAdminClientAsync(); var client = clientAdmin.Client;
             var eligible = $"eligible-{Guid.NewGuid():N}@example.test";
             var inactive = $"inactive-{Guid.NewGuid():N}@example.test";
             var eligibleId = await CreateUserAsync(client, eligible);
             var inactiveId = await CreateUserAsync(client, inactive);
-            using var deactivated = await client.PostAsync($"/users/{inactiveId}/deactivate", null);
+            using var deactivated = await client.PostAsync($"/admin/users/{inactiveId}/deactivate", null);
             Assert.AreEqual(HttpStatusCode.OK, deactivated.StatusCode);
 
             var responses = new List<string>();
@@ -86,16 +86,16 @@ public sealed class PasswordManagementTests
     [TestMethod]
     public async Task Change_password_rejects_policy_failures_and_inactive_users_without_changing_memberships()
     {
-        using var factory = await FactoryAsync(); using var client = factory.CreateClient();
+        using var factory = await FactoryAsync(); using var clientAdmin = await factory.CreateAdminClientAsync(); var client = clientAdmin.Client;
         var login = await CreateLoginAsync(client);
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", login.AccessToken);
         using var policyRejected = await client.PostAsJsonAsync("/auth/password/change", new { currentPassword = InitialPassword, newPassword = "short" });
         Assert.AreEqual(HttpStatusCode.BadRequest, policyRejected.StatusCode);
-        using var deactivated = await client.PostAsync($"/users/{login.UserId}/deactivate", null);
+        using var deactivated = await client.PostAsync($"/admin/users/{login.UserId}/deactivate", null);
         Assert.AreEqual(HttpStatusCode.OK, deactivated.StatusCode);
         using var inactiveRejected = await client.PostAsJsonAsync("/auth/password/change", new { currentPassword = InitialPassword, newPassword = "Updated!2026" });
         Assert.AreEqual(HttpStatusCode.BadRequest, inactiveRejected.StatusCode);
-        using var memberships = await client.GetAsync($"/users/{login.UserId}/memberships");
+        using var memberships = await client.GetAsync($"/admin/users/{login.UserId}/memberships");
         Assert.AreEqual(HttpStatusCode.OK, memberships.StatusCode);
         Assert.IsTrue(JsonDocument.Parse(await memberships.Content.ReadAsStringAsync()).RootElement.GetProperty("items").GetArrayLength() == 1);
     }
@@ -106,7 +106,7 @@ public sealed class PasswordManagementTests
         Environment.SetEnvironmentVariable("RateLimiting__PasswordRecovery__PermitLimit", "1");
         try
         {
-            using var factory = await FactoryAsync(); using var client = factory.CreateClient();
+            using var factory = await FactoryAsync(); using var clientAdmin = await factory.CreateAdminClientAsync(); var client = clientAdmin.Client;
             using var first = await client.PostAsJsonAsync("/auth/password/recovery", new { email = "first@example.test" });
             using var second = await client.PostAsJsonAsync("/auth/password/recovery", new { email = "second@example.test" });
             Assert.AreEqual(HttpStatusCode.Accepted, first.StatusCode);
@@ -123,7 +123,7 @@ public sealed class PasswordManagementTests
         var recorder = new RecordingSecurityEventRecorder();
         try
         {
-            using var factory = await FactoryAsync(recorder); using var client = factory.CreateClient();
+            using var factory = await FactoryAsync(recorder); using var clientAdmin = await factory.CreateAdminClientAsync(); var client = clientAdmin.Client;
             var login = await CreateLoginAsync(client);
             using var recovery = await client.PostAsJsonAsync("/auth/password/recovery", new { email = login.Email });
             Assert.AreEqual(HttpStatusCode.Accepted, recovery.StatusCode);
@@ -167,7 +167,7 @@ public sealed class PasswordManagementTests
         Environment.SetEnvironmentVariable("RateLimiting__PasswordReset__PermitLimit", "1");
         try
         {
-            using var factory = await FactoryAsync(); using var client = factory.CreateClient();
+            using var factory = await FactoryAsync(); using var clientAdmin = await factory.CreateAdminClientAsync(); var client = clientAdmin.Client;
             using var first = await client.PostAsJsonAsync("/auth/password/reset", new { email = "unknown@example.test", recoveryCredential = "invalid", newPassword = "Reset!2026" });
             using var second = await client.PostAsJsonAsync("/auth/password/reset", new { email = "unknown@example.test", recoveryCredential = "invalid", newPassword = "Reset!2026" });
             Assert.AreEqual(HttpStatusCode.BadRequest, first.StatusCode);
@@ -183,13 +183,13 @@ public sealed class PasswordManagementTests
         Environment.SetEnvironmentVariable("PasswordRecovery__DeliveryFile", path);
         try
         {
-            using var factory = await FactoryAsync(); using var client = factory.CreateClient();
+            using var factory = await FactoryAsync(); using var clientAdmin = await factory.CreateAdminClientAsync(); var client = clientAdmin.Client;
             var login = await CreateLoginAsync(client);
             using var recovery = await client.PostAsJsonAsync("/auth/password/recovery", new { email = login.Email });
             var credential = JsonDocument.Parse((await File.ReadAllLinesAsync(path)).Single()).RootElement.GetProperty("ResetCredential").GetString()!;
-            using var deactivated = await client.PostAsync($"/users/{login.UserId}/deactivate", null);
+            using var deactivated = await client.PostAsync($"/admin/users/{login.UserId}/deactivate", null);
             using var reset = await client.PostAsJsonAsync("/auth/password/reset", new { email = login.Email, recoveryCredential = credential, newPassword = "Reset!2026" });
-            using var memberships = await client.GetAsync($"/users/{login.UserId}/memberships");
+            using var memberships = await client.GetAsync($"/admin/users/{login.UserId}/memberships");
             Assert.AreEqual(HttpStatusCode.BadRequest, reset.StatusCode);
             Assert.AreEqual(1, JsonDocument.Parse(await memberships.Content.ReadAsStringAsync()).RootElement.GetProperty("items").GetArrayLength());
         }
@@ -238,7 +238,7 @@ public sealed class PasswordManagementTests
 
     private static async Task<WebApplicationFactory<Program>> FactoryAsync(RecordingSecurityEventRecorder? recorder = null)
     {
-        var factory = new WebApplicationFactory<Program>().WithWebHostBuilder(builder => builder.ConfigureServices(services =>
+        var factory = new WebApplicationFactory<Program>().WithGlobalAdministrators().WithWebHostBuilder(builder => builder.ConfigureServices(services =>
         {
             if (recorder is null) return;
             services.RemoveAll<ISecurityEventRecorder>();
@@ -254,9 +254,9 @@ public sealed class PasswordManagementTests
         var email = $"password-{Guid.NewGuid():N}@example.test";
         var userId = await CreateUserAsync(client, email);
         var applicationCode = $"app-{Guid.NewGuid():N}";
-        using var application = await client.PostAsJsonAsync("/applications", new { code = applicationCode, name = "Application" });
+        using var application = await client.PostAsJsonAsync("/admin/applications", new { code = applicationCode, name = "Application" });
         var applicationId = JsonDocument.Parse(await application.Content.ReadAsStringAsync()).RootElement.GetProperty("id").GetGuid();
-        using var membership = await client.PostAsJsonAsync($"/applications/{applicationId}/memberships", new { userId });
+        using var membership = await client.PostAsJsonAsync($"/admin/applications/{applicationId}/memberships", new { userId });
         using var login = await client.PostAsJsonAsync("/auth/login", new { applicationCode, email, password = InitialPassword });
         Assert.AreEqual(HttpStatusCode.OK, login.StatusCode);
         var body = JsonDocument.Parse(await login.Content.ReadAsStringAsync()).RootElement;
@@ -265,7 +265,7 @@ public sealed class PasswordManagementTests
 
     private static async Task<Guid> CreateUserAsync(HttpClient client, string email)
     {
-        using var response = await client.PostAsJsonAsync("/users", new { email, password = InitialPassword, firstName = "A", lastName = "B", displayName = "AB" });
+        using var response = await client.PostAsJsonAsync("/admin/users", new { email, password = InitialPassword, firstName = "A", lastName = "B", displayName = "AB" });
         Assert.AreEqual(HttpStatusCode.Created, response.StatusCode);
         return JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement.GetProperty("id").GetGuid();
     }

@@ -1,5 +1,8 @@
+using GaussAuth.Application.Administration.AuthorizationView;
 using GaussAuth.Application.Authorization;
 using GaussAuth.Domain.Authorization;
+using GaussAuth.Api.Administration;
+using GaussAuth.Application.Administration.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace GaussAuth.Api.Authorization;
@@ -8,13 +11,14 @@ public static class AuthorizationEndpoints
 {
     public static IEndpointRouteBuilder MapAuthorizationEndpoints(this IEndpointRouteBuilder app)
     {
-        app.MapPost("/applications/{applicationId:guid}/roles/{roleId:guid}/permissions/{permissionId:guid}", AssignRolePermissionAsync);
-        app.MapPost("/applications/{applicationId:guid}/roles/{roleId:guid}/permissions/{permissionId:guid}/remove", RemoveRolePermissionAsync);
-        app.MapGet("/applications/{applicationId:guid}/roles/{roleId:guid}/permissions", ListRolePermissionsAsync);
-        app.MapPost("/applications/{applicationId:guid}/users/{userId:guid}/roles/{roleId:guid}", AssignUserRoleAsync);
-        app.MapPost("/applications/{applicationId:guid}/users/{userId:guid}/roles/{roleId:guid}/remove", RemoveUserRoleAsync);
-        app.MapGet("/applications/{applicationId:guid}/users/{userId:guid}/roles", ListUserRolesAsync);
-        app.MapGet("/applications/{applicationId:guid}/users/{userId:guid}/effective-permissions", GetEffectivePermissionsAsync);
+        app.MapPost("/applications/{applicationId:guid}/roles/{roleId:guid}/permissions/{permissionId:guid}", AssignRolePermissionAsync).RequireApplicationAdministrator(AdministrativePermissionCatalog.PermissionsManage);
+        app.MapPost("/applications/{applicationId:guid}/roles/{roleId:guid}/permissions/{permissionId:guid}/remove", RemoveRolePermissionAsync).RequireApplicationAdministrator(AdministrativePermissionCatalog.PermissionsManage);
+        app.MapGet("/applications/{applicationId:guid}/roles/{roleId:guid}/permissions", ListRolePermissionsAsync).RequireApplicationAdministrator(AdministrativePermissionCatalog.PermissionsRead);
+        app.MapPost("/applications/{applicationId:guid}/users/{userId:guid}/roles/{roleId:guid}", AssignUserRoleAsync).RequireApplicationAdministrator(AdministrativePermissionCatalog.RolesManage);
+        app.MapPost("/applications/{applicationId:guid}/users/{userId:guid}/roles/{roleId:guid}/remove", RemoveUserRoleAsync).RequireApplicationAdministrator(AdministrativePermissionCatalog.RolesManage);
+        app.MapGet("/applications/{applicationId:guid}/users/{userId:guid}/roles", ListUserRolesAsync).RequireApplicationAdministrator(AdministrativePermissionCatalog.RolesRead);
+        app.MapGet("/applications/{applicationId:guid}/users/{userId:guid}/effective-permissions", GetEffectivePermissionsAsync).RequireApplicationAdministrator(AdministrativePermissionCatalog.RolesRead);
+        app.MapGet("/applications/{applicationId:guid}/users/{userId:guid}/authorization", GetAuthorizationViewAsync).RequireApplicationAdministrator(AdministrativePermissionCatalog.RolesRead);
         return app;
     }
 
@@ -23,7 +27,7 @@ public static class AuthorizationEndpoints
         var result = await service.AssignAsync(applicationId, roleId, permissionId, ct);
         if (result.RolePermission is { } rolePermission)
             return result.Created
-                ? TypedResults.Created($"/applications/{applicationId}/roles/{roleId}/permissions/{permissionId}", RolePermissionResponse.FromDomain(rolePermission))
+                ? TypedResults.Created($"/admin/applications/{applicationId}/roles/{roleId}/permissions/{permissionId}", RolePermissionResponse.FromDomain(rolePermission))
                 : TypedResults.Ok(RolePermissionResponse.FromDomain(rolePermission));
         return Failure(result.Failure);
     }
@@ -42,7 +46,7 @@ public static class AuthorizationEndpoints
         var result = await service.AssignAsync(applicationId, userId, roleId, ct);
         if (result.UserRole is { } userRole)
             return result.Created
-                ? TypedResults.Created($"/applications/{applicationId}/users/{userId}/roles/{roleId}", UserRoleResponse.FromDomain(userRole))
+                ? TypedResults.Created($"/admin/applications/{applicationId}/users/{userId}/roles/{roleId}", UserRoleResponse.FromDomain(userRole))
                 : TypedResults.Ok(UserRoleResponse.FromDomain(userRole));
         return Failure(result.Failure);
     }
@@ -65,6 +69,12 @@ public static class AuthorizationEndpoints
             not null => TypedResults.BadRequest(),
             _ => TypedResults.Ok(new EffectivePermissionListResponse(page.Items.Select(EffectivePermissionResponse.FromDomain).ToArray())),
         };
+    }
+
+    private static async Task<IResult> GetAuthorizationViewAsync(Guid applicationId, Guid userId, GetAuthorizationViewHandler handler, CancellationToken ct)
+    {
+        var result = await handler.HandleAsync(new GetAuthorizationViewQuery(applicationId, userId), ct);
+        return result.View is { } view ? TypedResults.Ok(AuthorizationViewResponse.FromDomain(view)) : NotFound();
     }
 
     private static IResult RolePermissionsPage(AuthorizationPage<RolePermission> page) => page.Failure switch

@@ -47,6 +47,17 @@ public sealed class ConfiguredConsumerCredentialValidator : IConsumerCredentialV
         hashesByApplication = hashes;
     }
 
+    /// <summary>Whether configured hashes exist for the Application code.</summary>
+    public bool HasConfigured(string applicationCode) => hashesByApplication.ContainsKey(applicationCode.Trim());
+
+    /// <summary>The configured current hash, or <see langword="null"/> when none is configured.</summary>
+    public string? GetConfiguredCurrentHash(string applicationCode) =>
+        hashesByApplication.TryGetValue(applicationCode.Trim(), out var hashes) ? hashes[0] : null;
+
+    /// <summary>Whether a configured retiring hash exists.</summary>
+    public bool HasConfiguredRetiring(string applicationCode) =>
+        hashesByApplication.TryGetValue(applicationCode.Trim(), out var hashes) && hashes.Count > 1;
+
     public Task<ConsumerCredentialValidationResult> ValidateAsync(string applicationCode, string serviceCredential, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();

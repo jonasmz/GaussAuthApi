@@ -1,9 +1,11 @@
 using System.ComponentModel.DataAnnotations;
+using GaussAuth.Application.Administration.Users.ListUsers;
 using GaussAuth.Application.Users.ActivateUser;
 using GaussAuth.Application.Users.CreateUser;
 using GaussAuth.Application.Users.DeactivateUser;
 using GaussAuth.Application.Users.GetUser;
 using GaussAuth.Application.Users.Profiles;
+using GaussAuth.Api.Administration;
 using Microsoft.AspNetCore.Mvc;
 
 namespace GaussAuth.Api.Users;
@@ -12,30 +14,45 @@ public static class UsersEndpoints
 {
     public static IEndpointRouteBuilder MapUsersEndpoints(this IEndpointRouteBuilder app)
     {
-        app.MapPost("/users", CreateUserAsync).RequireRateLimiting("user-creation");
-        app.MapGet("/users/{id:guid}", GetUserAsync);
-        app.MapPut("/users/{id:guid}/profile", UpdateProfileAsync);
-        app.MapPost("/users/{id:guid}/activate", ActivateUserAsync);
-        app.MapPost("/users/{id:guid}/deactivate", DeactivateUserAsync);
+        app.MapPost("/users", CreateUserAsync).RequireGlobalAdministrator().RequireRateLimiting("user-creation");
+        app.MapGet("/users", ListUsersAsync).RequireGlobalAdministrator();
+        app.MapGet("/users/{userId:guid}", GetUserAsync).RequireGlobalAdministrator();
+        app.MapPut("/users/{userId:guid}/profile", UpdateProfileAsync).RequireGlobalAdministrator();
+        app.MapPost("/users/{userId:guid}/activate", ActivateUserAsync).RequireGlobalAdministrator();
+        app.MapPost("/users/{userId:guid}/deactivate", DeactivateUserAsync).RequireGlobalAdministrator();
 
         return app;
     }
 
+    private static async Task<IResult> ListUsersAsync(
+        bool? isActive,
+        string? email,
+        string? cursor,
+        int? limit,
+        ListUsersHandler handler,
+        CancellationToken cancellationToken)
+    {
+        var result = await handler.HandleAsync(new ListUsersQuery(isActive, email, cursor, limit), cancellationToken);
+        return result.IsInvalid
+            ? TypedResults.BadRequest()
+            : TypedResults.Ok(new AdminUserListResponse(result.Items.Select(AdminUserSummaryResponse.FromDomain).ToArray(), result.NextCursor));
+    }
+
     private static async Task<IResult> ActivateUserAsync(
-        Guid id,
+        Guid userId,
         ActivateUserHandler handler,
         CancellationToken cancellationToken)
     {
-        var user = await handler.HandleAsync(id, cancellationToken);
+        var user = await handler.HandleAsync(userId, cancellationToken);
         return user is null ? UserNotFound() : TypedResults.Ok(UserResponse.FromDomain(user));
     }
 
     private static async Task<IResult> DeactivateUserAsync(
-        Guid id,
+        Guid userId,
         DeactivateUserHandler handler,
         CancellationToken cancellationToken)
     {
-        var user = await handler.HandleAsync(id, cancellationToken);
+        var user = await handler.HandleAsync(userId, cancellationToken);
         return user is null ? UserNotFound() : TypedResults.Ok(UserResponse.FromDomain(user));
     }
 
@@ -46,7 +63,7 @@ public static class UsersEndpoints
     });
 
     private static async Task<IResult> UpdateProfileAsync(
-        Guid id,
+        Guid userId,
         UpdateProfileRequest request,
         UpdateProfileHandler handler,
         CancellationToken cancellationToken)
@@ -64,7 +81,7 @@ public static class UsersEndpoints
         }
 
         var command = new UpdateProfileCommand(
-            id,
+            userId,
             request.FirstName,
             request.LastName,
             request.DisplayName,
@@ -87,11 +104,11 @@ public static class UsersEndpoints
     }
 
     private static async Task<IResult> GetUserAsync(
-        Guid id,
+        Guid userId,
         GetUserHandler handler,
         CancellationToken cancellationToken)
     {
-        var user = await handler.HandleAsync(new GetUserQuery(id), cancellationToken);
+        var user = await handler.HandleAsync(new GetUserQuery(userId), cancellationToken);
 
         return user is null ? UserNotFound() : TypedResults.Ok(UserResponse.FromDomain(user));
     }
@@ -119,7 +136,7 @@ public static class UsersEndpoints
         if (result.User is not null)
         {
             var response = UserResponse.FromDomain(result.User);
-            return TypedResults.Created($"/users/{response.Id}", response);
+            return TypedResults.Created($"/admin/users/{response.Id}", response);
         }
 
         if (result.IsDuplicateEmail)

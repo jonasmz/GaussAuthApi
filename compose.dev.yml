@@ -33,6 +33,10 @@ services:
       ProfileImages__RootPath: ${PROFILE_IMAGES_ROOT:-${PROJECT_DIR}/.profile-images}
       ProfileImages__MaxBytes: ${PROFILE_IMAGES_MAX_BYTES:-5242880}
       ProfileImages__MaxDimension: ${PROFILE_IMAGES_MAX_DIMENSION:-4096}
+      Administration__GlobalAdministratorUserIds__0: ${GLOBAL_ADMINISTRATOR_USER_ID:-}
+      Administration__MaxBulkSessionRevocation: ${ADMIN_MAX_BULK_SESSION_REVOCATION:-1000}
+      RateLimiting__Administration__PermitLimit: ${ADMIN_RATE_LIMIT_PERMITS:-120}
+      RateLimiting__Administration__WindowSeconds: ${ADMIN_RATE_LIMIT_WINDOW_SECONDS:-60}
     command: ["dotnet", "run", "--project", "src/GaussAuth.Api", "--urls", "http://0.0.0.0:8080"]
     networks:
       - foundation

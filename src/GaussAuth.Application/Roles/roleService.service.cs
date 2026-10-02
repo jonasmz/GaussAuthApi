@@ -21,7 +21,7 @@ public sealed class RoleService(IRoleRepository roles, IApplicationRepository ap
         var role = Role.Create(Guid.NewGuid(), applicationId, trimmedName, normalizedName, description, DateTimeOffset.UtcNow);
         await roles.AddAsync(role, ct);
         if (!await roles.TrySaveChangesAsync(ct)) return RoleOperationResult.Duplicate();
-        await securityEvents.RecordAsync(SecurityEventType.RoleCreated, null, applicationId, null, ct);
+        await securityEvents.RecordAsync(SecurityEventType.RoleCreated, null, applicationId, null, "role", role.Id, ct);
         logger.LogInformation("Role {RoleId} created.", role.Id);
         return RoleOperationResult.Success(role);
     }
@@ -41,9 +41,10 @@ public sealed class RoleService(IRoleRepository roles, IApplicationRepository ap
     {
         if (description?.Length > 500) return RoleOperationResult.Invalid();
         var role = await roles.GetByIdAndApplicationAsync(roleId, applicationId, ct); if (role is null) return RoleOperationResult.RoleNotFound();
+        var previousDescription = role.Description;
         role.UpdateDescription(description, DateTimeOffset.UtcNow);
         await roles.SaveChangesAsync(ct);
-        await securityEvents.RecordAsync(SecurityEventType.RoleActivated, null, applicationId, null, ct);
+        if (!string.Equals(previousDescription, role.Description, StringComparison.Ordinal)) await securityEvents.RecordAsync(SecurityEventType.RoleUpdated, null, applicationId, null, "role", role.Id, ct);
         logger.LogInformation("Role {RoleId} description updated.", role.Id);
         return RoleOperationResult.Success(role);
     }
@@ -53,9 +54,10 @@ public sealed class RoleService(IRoleRepository roles, IApplicationRepository ap
         var role = await roles.GetByIdAndApplicationAsync(roleId, applicationId, ct); if (role is null) return RoleOperationResult.RoleNotFound();
         var application = await applications.GetByIdAsync(applicationId, ct); if (application is null) return RoleOperationResult.ApplicationNotFound();
         if (!application.IsActive) return RoleOperationResult.InactiveApplication();
+        var wasActive = role.IsActive;
         role.Activate(DateTimeOffset.UtcNow);
         await roles.SaveChangesAsync(ct);
-        await securityEvents.RecordAsync(SecurityEventType.RoleDeactivated, null, applicationId, null, ct);
+        if (!wasActive) await securityEvents.RecordAsync(SecurityEventType.RoleActivated, null, applicationId, null, "role", role.Id, ct);
         logger.LogInformation("Role {RoleId} lifecycle transition completed with outcome {Outcome}.", role.Id, "activated");
         return RoleOperationResult.Success(role);
     }
@@ -63,8 +65,10 @@ public sealed class RoleService(IRoleRepository roles, IApplicationRepository ap
     public async Task<RoleOperationResult> DeactivateAsync(Guid applicationId, Guid roleId, CancellationToken ct)
     {
         var role = await roles.GetByIdAndApplicationAsync(roleId, applicationId, ct); if (role is null) return RoleOperationResult.RoleNotFound();
+        var wasActive = role.IsActive;
         role.Deactivate(DateTimeOffset.UtcNow);
         await roles.SaveChangesAsync(ct);
+        if (wasActive) await securityEvents.RecordAsync(SecurityEventType.RoleDeactivated, null, applicationId, null, "role", role.Id, ct);
         logger.LogInformation("Role {RoleId} lifecycle transition completed with outcome {Outcome}.", role.Id, "deactivated");
         return RoleOperationResult.Success(role);
     }

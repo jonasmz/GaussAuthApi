@@ -1,4 +1,6 @@
 using GaussAuth.Application.Memberships;
+using GaussAuth.Api.Administration;
+using GaussAuth.Application.Administration.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace GaussAuth.Api.Memberships;
@@ -6,9 +8,18 @@ namespace GaussAuth.Api.Memberships;
 public static class MembershipsEndpoints
 {
     public static IEndpointRouteBuilder MapMembershipsEndpoints(this IEndpointRouteBuilder app)
-    { app.MapPost("/applications/{applicationId:guid}/memberships", CreateAsync); app.MapGet("/applications/{applicationId:guid}/memberships/{userId:guid}", GetAsync); app.MapPost("/applications/{applicationId:guid}/memberships/{userId:guid}/activate", ActivateAsync); app.MapPost("/applications/{applicationId:guid}/memberships/{userId:guid}/deactivate", DeactivateAsync); app.MapGet("/applications/{applicationId:guid}/memberships", ListApplicationAsync); app.MapGet("/users/{userId:guid}/memberships", ListUserAsync); return app; }
+    {
+        const string a = "/applications/{applicationId:guid}/memberships";
+        app.MapPost(a, CreateAsync).RequireApplicationAdministrator(AdministrativePermissionCatalog.MembershipsManage);
+        app.MapGet(a + "/{userId:guid}", GetAsync).RequireApplicationAdministrator(AdministrativePermissionCatalog.MembershipsRead);
+        app.MapPost(a + "/{userId:guid}/activate", ActivateAsync).RequireApplicationAdministrator(AdministrativePermissionCatalog.MembershipsManage);
+        app.MapPost(a + "/{userId:guid}/deactivate", DeactivateAsync).RequireApplicationAdministrator(AdministrativePermissionCatalog.MembershipsManage);
+        app.MapGet(a, ListApplicationAsync).RequireApplicationAdministrator(AdministrativePermissionCatalog.MembershipsRead);
+        app.MapGet("/users/{userId:guid}/memberships", ListUserAsync).RequireGlobalAdministrator();
+        return app;
+    }
     private static async Task<IResult> CreateAsync(Guid applicationId, CreateMembershipRequest request, MembershipService service, CancellationToken ct)
-    { var result = await service.CreateAsync(request.UserId, applicationId, ct); if (result.Membership is not null) return TypedResults.Created($"/applications/{applicationId}/memberships/{request.UserId}", ApplicationMembershipResponse.FromDomain(result.Membership)); return result.Failure is "user-not-found" or "application-not-found" ? NotFound(result.Failure) : result.Failure is "duplicate" or "inactive-application" ? TypedResults.Conflict(new ProblemDetails { Status = 409, Title = "Membership creation conflicts with current state." }) : TypedResults.BadRequest(); }
+    { var result = await service.CreateAsync(request.UserId, applicationId, ct); if (result.Membership is not null) return TypedResults.Created($"/admin/applications/{applicationId}/memberships/{request.UserId}", ApplicationMembershipResponse.FromDomain(result.Membership)); return result.Failure is "user-not-found" or "application-not-found" ? NotFound(result.Failure) : result.Failure is "duplicate" or "inactive-application" ? TypedResults.Conflict(new ProblemDetails { Status = 409, Title = "Membership creation conflicts with current state." }) : TypedResults.BadRequest(); }
     private static async Task<IResult> GetAsync(Guid applicationId, Guid userId, MembershipService service, CancellationToken ct) => await service.GetAsync(userId, applicationId, ct) is { } value ? TypedResults.Ok(ApplicationMembershipResponse.FromDomain(value)) : NotFound("membership-not-found");
     private static async Task<IResult> ActivateAsync(Guid applicationId, Guid userId, MembershipService service, CancellationToken ct) => Operation(await service.ActivateAsync(userId, applicationId, ct));
     private static async Task<IResult> DeactivateAsync(Guid applicationId, Guid userId, MembershipService service, CancellationToken ct) => Operation(await service.DeactivateAsync(userId, applicationId, ct));

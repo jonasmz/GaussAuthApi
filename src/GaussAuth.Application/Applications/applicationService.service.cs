@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using GaussAuth.Application.Administration.Bootstrap;
 using GaussAuth.Application.Applications.Ports;
 using GaussAuth.Application.Security;
 using GaussAuth.Application.Security.Ports;
@@ -7,7 +8,7 @@ using Microsoft.Extensions.Logging;
 
 namespace GaussAuth.Application.Applications;
 
-public sealed class ApplicationService(IApplicationRepository repository, ISecurityEventRecorder securityEvents, ILogger<ApplicationService> logger)
+public sealed class ApplicationService(IApplicationRepository repository, AdministrativePermissionBootstrap bootstrap, ISecurityEventRecorder securityEvents, ILogger<ApplicationService> logger)
 {
     private static readonly Regex CodePattern = new("^[a-z0-9]+(?:-[a-z0-9]+)*$", RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
@@ -19,7 +20,9 @@ public sealed class ApplicationService(IApplicationRepository repository, ISecur
         if (await repository.GetByCodeAsync(normalizedCode, ct) is not null) return ApplicationOperationResult.Duplicate();
         var application = DomainApplication.Create(Guid.NewGuid(), normalizedCode, normalizedName, DateTimeOffset.UtcNow);
         await repository.AddAsync(application, ct);
+        await bootstrap.EnsureAsync(application.Id, ct);
         if (!await repository.TrySaveChangesAsync(ct)) return ApplicationOperationResult.Duplicate();
+        await securityEvents.RecordAsync(SecurityEventType.ApplicationRegistered, null, application.Id, null, "application", application.Id, ct);
         logger.LogInformation("Application {ApplicationId} created.", application.Id);
         return ApplicationOperationResult.Success(application);
     }
@@ -31,6 +34,6 @@ public sealed class ApplicationService(IApplicationRepository repository, ISecur
         var items = await repository.ListAsync(cursor is null ? null : Guid.Parse(cursor), limit ?? 50, ct);
         return ApplicationPage.Success(items, items.Count == (limit ?? 50) ? items[^1].Id.ToString() : null);
     }
-    public async Task<DomainApplication?> ActivateAsync(Guid id, CancellationToken ct) { var item = await repository.GetByIdAsync(id, ct); if (item is null) return null; item.Activate(DateTimeOffset.UtcNow); await repository.SaveChangesAsync(ct); await securityEvents.RecordAsync(SecurityEventType.ApplicationActivated, null, item.Id, null, ct); return item; }
-    public async Task<DomainApplication?> DeactivateAsync(Guid id, CancellationToken ct) { var item = await repository.GetByIdAsync(id, ct); if (item is null) return null; item.Deactivate(DateTimeOffset.UtcNow); await repository.SaveChangesAsync(ct); await securityEvents.RecordAsync(SecurityEventType.ApplicationDeactivated, null, item.Id, null, ct); return item; }
+    public async Task<DomainApplication?> ActivateAsync(Guid id, CancellationToken ct) { var item = await repository.GetByIdAsync(id, ct); if (item is null) return null; var wasActive = item.IsActive; item.Activate(DateTimeOffset.UtcNow); await repository.SaveChangesAsync(ct); if (!wasActive) await securityEvents.RecordAsync(SecurityEventType.ApplicationActivated, null, item.Id, null, "application", item.Id, ct); return item; }
+    public async Task<DomainApplication?> DeactivateAsync(Guid id, CancellationToken ct) { var item = await repository.GetByIdAsync(id, ct); if (item is null) return null; var wasActive = item.IsActive; item.Deactivate(DateTimeOffset.UtcNow); await repository.SaveChangesAsync(ct); if (wasActive) await securityEvents.RecordAsync(SecurityEventType.ApplicationDeactivated, null, item.Id, null, "application", item.Id, ct); return item; }
 }

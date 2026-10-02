@@ -1,4 +1,6 @@
 using GaussAuth.Application.Permissions;
+using GaussAuth.Api.Administration;
+using GaussAuth.Application.Administration.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace GaussAuth.Api.Permissions;
@@ -7,12 +9,12 @@ public static class PermissionsEndpoints
 {
     public static IEndpointRouteBuilder MapPermissionsEndpoints(this IEndpointRouteBuilder app)
     {
-        app.MapPost("/applications/{applicationId:guid}/permissions", CreateAsync);
-        app.MapGet("/applications/{applicationId:guid}/permissions/{permissionId:guid}", GetAsync);
-        app.MapGet("/applications/{applicationId:guid}/permissions", ListAsync);
-        app.MapPut("/applications/{applicationId:guid}/permissions/{permissionId:guid}/description", UpdateDescriptionAsync);
-        app.MapPost("/applications/{applicationId:guid}/permissions/{permissionId:guid}/activate", ActivateAsync);
-        app.MapPost("/applications/{applicationId:guid}/permissions/{permissionId:guid}/deactivate", DeactivateAsync);
+        app.MapPost("/applications/{applicationId:guid}/permissions", CreateAsync).RequireApplicationAdministrator(AdministrativePermissionCatalog.PermissionsManage);
+        app.MapGet("/applications/{applicationId:guid}/permissions/{permissionId:guid}", GetAsync).RequireApplicationAdministrator(AdministrativePermissionCatalog.PermissionsRead);
+        app.MapGet("/applications/{applicationId:guid}/permissions", ListAsync).RequireApplicationAdministrator(AdministrativePermissionCatalog.PermissionsRead);
+        app.MapPut("/applications/{applicationId:guid}/permissions/{permissionId:guid}/description", UpdateDescriptionAsync).RequireApplicationAdministrator(AdministrativePermissionCatalog.PermissionsManage);
+        app.MapPost("/applications/{applicationId:guid}/permissions/{permissionId:guid}/activate", ActivateAsync).RequireApplicationAdministrator(AdministrativePermissionCatalog.PermissionsManage);
+        app.MapPost("/applications/{applicationId:guid}/permissions/{permissionId:guid}/deactivate", DeactivateAsync).RequireApplicationAdministrator(AdministrativePermissionCatalog.PermissionsManage);
         return app;
     }
 
@@ -20,7 +22,7 @@ public static class PermissionsEndpoints
     {
         var result = await service.CreateAsync(applicationId, request.Code, request.Description, ct);
         return result.Permission is { } permission
-            ? TypedResults.Created($"/applications/{applicationId}/permissions/{permission.Id}", PermissionResponse.FromDomain(permission))
+            ? TypedResults.Created($"/admin/applications/{applicationId}/permissions/{permission.Id}", PermissionResponse.FromDomain(permission))
             : Failure(result.Failure);
     }
 
@@ -51,7 +53,7 @@ public static class PermissionsEndpoints
     private static IResult Failure(string? failure) => failure switch
     {
         "application-not-found" or "permission-not-found" => NotFound(),
-        "inactive-application" or "duplicate" => Conflict(),
+        "inactive-application" or "duplicate" or "platform-permission" => Conflict(),
         _ => TypedResults.BadRequest(),
     };
 

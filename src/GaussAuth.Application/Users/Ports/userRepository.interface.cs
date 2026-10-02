@@ -18,6 +18,9 @@ public interface IUserRepository
 
     Task<User?> GetByNormalizedEmailAsync(string normalizedEmail, CancellationToken cancellationToken);
 
+    /// <summary>Lists users in ascending <c>Id</c> order after <paramref name="afterId"/>, optionally filtered by state and exact normalized email.</summary>
+    Task<IReadOnlyList<User>> ListAsync(bool? isActive, string? normalizedEmail, Guid? afterId, int limit, CancellationToken cancellationToken);
+
     Task SaveChangesAsync(CancellationToken cancellationToken);
 
     /// <summary>

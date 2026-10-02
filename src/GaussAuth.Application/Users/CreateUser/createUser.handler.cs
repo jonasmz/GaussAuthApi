@@ -1,3 +1,5 @@
+using GaussAuth.Application.Security;
+using GaussAuth.Application.Security.Ports;
 using GaussAuth.Application.Users.Ports;
 using GaussAuth.Domain.Users;
 using Microsoft.Extensions.Logging;
@@ -7,6 +9,7 @@ namespace GaussAuth.Application.Users.CreateUser;
 public sealed class CreateUserHandler(
     IUserRepository userRepository,
     ICredentialProvisioningService credentialProvisioningService,
+    ISecurityEventRecorder securityEvents,
     ILogger<CreateUserHandler> logger)
 {
     public async Task<CreateUserResult> HandleAsync(CreateUserCommand command, CancellationToken cancellationToken)
@@ -63,6 +66,7 @@ public sealed class CreateUserHandler(
         }
 
         await transaction.CommitAsync(cancellationToken);
+        await securityEvents.RecordAsync(SecurityEventType.UserCreated, userId, null, null, "user", userId, cancellationToken);
         logger.LogInformation("User {UserId} created.", userId);
         return CreateUserResult.Success(user);
     }

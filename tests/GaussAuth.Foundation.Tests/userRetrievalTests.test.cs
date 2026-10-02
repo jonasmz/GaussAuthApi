@@ -15,10 +15,10 @@ public sealed class UserRetrievalTests
     public async Task Existing_user_is_retrieved_without_exposing_credentials()
     {
         using var factory = await CreateMigratedFactoryAsync();
-        using var client = factory.CreateClient();
+        using var clientAdmin = await factory.CreateAdminClientAsync(); var client = clientAdmin.Client;
 
         var email = UniqueEmail("retrieve");
-        using var createResponse = await client.PostAsJsonAsync("/users", ValidRequest(email));
+        using var createResponse = await client.PostAsJsonAsync("/admin/users", ValidRequest(email));
         Assert.AreEqual(HttpStatusCode.Created, createResponse.StatusCode);
         var location = createResponse.Headers.Location!;
 
@@ -44,16 +44,16 @@ public sealed class UserRetrievalTests
     public async Task Unknown_identifier_returns_not_found_without_revealing_internals()
     {
         using var factory = await CreateMigratedFactoryAsync();
-        using var client = factory.CreateClient();
+        using var clientAdmin = await factory.CreateAdminClientAsync(); var client = clientAdmin.Client;
 
-        using var response = await client.GetAsync($"/users/{Guid.NewGuid()}");
+        using var response = await client.GetAsync($"/admin/users/{Guid.NewGuid()}");
 
         Assert.AreEqual(HttpStatusCode.NotFound, response.StatusCode);
     }
 
     private static async Task<WebApplicationFactory<Program>> CreateMigratedFactoryAsync()
     {
-        var factory = new WebApplicationFactory<Program>();
+        var factory = new WebApplicationFactory<Program>().WithGlobalAdministrators();
         using var scope = factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AuthenticationDbContext>();
         await db.Database.MigrateAsync();

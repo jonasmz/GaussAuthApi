@@ -15,10 +15,10 @@ public sealed class ProfileUpdateTests
     public async Task Valid_update_changes_only_profile_fields()
     {
         using var factory = await CreateMigratedFactoryAsync();
-        using var client = factory.CreateClient();
+        using var clientAdmin = await factory.CreateAdminClientAsync(); var client = clientAdmin.Client;
 
         var email = UniqueEmail("update");
-        using var createResponse = await client.PostAsJsonAsync("/users", ValidCreateRequest(email));
+        using var createResponse = await client.PostAsJsonAsync("/admin/users", ValidCreateRequest(email));
         Assert.AreEqual(HttpStatusCode.Created, createResponse.StatusCode);
         var location = createResponse.Headers.Location!;
 
@@ -47,10 +47,10 @@ public sealed class ProfileUpdateTests
     public async Task Invalid_field_is_rejected_and_prior_profile_values_unchanged()
     {
         using var factory = await CreateMigratedFactoryAsync();
-        using var client = factory.CreateClient();
+        using var clientAdmin = await factory.CreateAdminClientAsync(); var client = clientAdmin.Client;
 
         var email = UniqueEmail("update-invalid");
-        using var createResponse = await client.PostAsJsonAsync("/users", ValidCreateRequest(email));
+        using var createResponse = await client.PostAsJsonAsync("/admin/users", ValidCreateRequest(email));
         var location = createResponse.Headers.Location!;
 
         using var response = await client.PutAsJsonAsync(
@@ -67,10 +67,10 @@ public sealed class ProfileUpdateTests
     public async Task Request_with_email_field_is_rejected_and_login_email_remains_immutable()
     {
         using var factory = await CreateMigratedFactoryAsync();
-        using var client = factory.CreateClient();
+        using var clientAdmin = await factory.CreateAdminClientAsync(); var client = clientAdmin.Client;
 
         var email = UniqueEmail("update-email-attempt");
-        using var createResponse = await client.PostAsJsonAsync("/users", ValidCreateRequest(email));
+        using var createResponse = await client.PostAsJsonAsync("/admin/users", ValidCreateRequest(email));
         var location = createResponse.Headers.Location!;
 
         using var response = await client.PutAsJsonAsync(location.ToString() + "/profile", new
@@ -94,9 +94,9 @@ public sealed class ProfileUpdateTests
     public async Task Unknown_identifier_returns_not_found()
     {
         using var factory = await CreateMigratedFactoryAsync();
-        using var client = factory.CreateClient();
+        using var clientAdmin = await factory.CreateAdminClientAsync(); var client = clientAdmin.Client;
 
-        using var response = await client.PutAsJsonAsync($"/users/{Guid.NewGuid()}/profile", ValidUpdateRequest());
+        using var response = await client.PutAsJsonAsync($"/admin/users/{Guid.NewGuid()}/profile", ValidUpdateRequest());
 
         Assert.AreEqual(HttpStatusCode.NotFound, response.StatusCode);
     }
@@ -105,10 +105,10 @@ public sealed class ProfileUpdateTests
     public async Task Sequential_updates_demonstrate_last_write_wins()
     {
         using var factory = await CreateMigratedFactoryAsync();
-        using var client = factory.CreateClient();
+        using var clientAdmin = await factory.CreateAdminClientAsync(); var client = clientAdmin.Client;
 
         var email = UniqueEmail("update-sequential");
-        using var createResponse = await client.PostAsJsonAsync("/users", ValidCreateRequest(email));
+        using var createResponse = await client.PostAsJsonAsync("/admin/users", ValidCreateRequest(email));
         var location = createResponse.Headers.Location!;
 
         using var firstUpdate = await client.PutAsJsonAsync(
@@ -126,7 +126,7 @@ public sealed class ProfileUpdateTests
 
     private static async Task<WebApplicationFactory<Program>> CreateMigratedFactoryAsync()
     {
-        var factory = new WebApplicationFactory<Program>();
+        var factory = new WebApplicationFactory<Program>().WithGlobalAdministrators();
         using var scope = factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AuthenticationDbContext>();
         await db.Database.MigrateAsync();

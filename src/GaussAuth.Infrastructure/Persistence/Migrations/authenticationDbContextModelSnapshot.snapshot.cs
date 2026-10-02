@@ -55,6 +55,40 @@ namespace GaussAuth.Infrastructure.Persistence.Migrations
                     b.ToTable("Applications", (string)null);
                 });
 
+            modelBuilder.Entity("GaussAuth.Domain.Applications.ConsumerCredential", b =>
+                {
+                    b.Property<Guid>("ApplicationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CurrentHash")
+                        .IsRequired()
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)");
+
+                    b.Property<DateTimeOffset?>("RetiredAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("RetiringHash")
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)");
+
+                    b.Property<DateTimeOffset?>("RotatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<uint>("xmin")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("ApplicationId");
+
+                    b.ToTable("ApplicationConsumerCredentials", (string)null);
+                });
+
             modelBuilder.Entity("GaussAuth.Domain.Authorization.RolePermission", b =>
                 {
                     b.Property<Guid>("Id")
@@ -243,6 +277,9 @@ namespace GaussAuth.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("Id")
                         .HasColumnType("uuid");
 
+                    b.Property<Guid?>("ActorUserId")
+                        .HasColumnType("uuid");
+
                     b.Property<Guid?>("ApplicationId")
                         .HasColumnType("uuid");
 
@@ -291,6 +328,9 @@ namespace GaussAuth.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("OccurredAtUtc", "Id")
                         .HasDatabaseName("IX_SecurityEvents_OccurredAtUtc_Id");
+
+                    b.HasIndex("ActorUserId", "OccurredAtUtc", "Id")
+                        .HasDatabaseName("IX_SecurityEvents_ActorUserId_OccurredAtUtc_Id");
 
                     b.HasIndex("ApplicationId", "OccurredAtUtc", "Id")
                         .HasDatabaseName("IX_SecurityEvents_ApplicationId_OccurredAtUtc_Id");
@@ -533,6 +573,15 @@ namespace GaussAuth.Infrastructure.Persistence.Migrations
                     b.HasKey("UserId", "LoginProvider", "Name");
 
                     b.ToTable("AspNetUserTokens", (string)null);
+                });
+
+            modelBuilder.Entity("GaussAuth.Domain.Applications.ConsumerCredential", b =>
+                {
+                    b.HasOne("GaussAuth.Domain.Applications.Application", null)
+                        .WithOne()
+                        .HasForeignKey("GaussAuth.Domain.Applications.ConsumerCredential", "ApplicationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("GaussAuth.Domain.Authorization.RolePermission", b =>

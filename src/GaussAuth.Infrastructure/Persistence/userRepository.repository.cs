@@ -50,6 +50,15 @@ public sealed class UserRepository(AuthenticationDbContext context) : IUserRepos
             .Include(user => user.Profile)
             .SingleOrDefaultAsync(user => user.NormalizedEmail == normalizedEmail, cancellationToken);
 
+    public async Task<IReadOnlyList<User>> ListAsync(bool? isActive, string? normalizedEmail, Guid? afterId, int limit, CancellationToken cancellationToken)
+    {
+        var query = context.DomainUsers.AsNoTracking().Include(user => user.Profile).AsQueryable();
+        if (isActive is { } active) query = query.Where(user => user.IsActive == active);
+        if (normalizedEmail is not null) query = query.Where(user => user.NormalizedEmail == normalizedEmail);
+        if (afterId is { } after) query = query.Where(user => user.Id.CompareTo(after) > 0);
+        return await query.OrderBy(user => user.Id).Take(limit).ToListAsync(cancellationToken);
+    }
+
     public Task SaveChangesAsync(CancellationToken cancellationToken) =>
         context.SaveChangesAsync(cancellationToken);
 

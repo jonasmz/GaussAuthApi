@@ -1,4 +1,6 @@
 using GaussAuth.Application.Roles;
+using GaussAuth.Api.Administration;
+using GaussAuth.Application.Administration.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace GaussAuth.Api.Roles;
@@ -7,12 +9,12 @@ public static class RolesEndpoints
 {
     public static IEndpointRouteBuilder MapRolesEndpoints(this IEndpointRouteBuilder app)
     {
-        app.MapPost("/applications/{applicationId:guid}/roles", CreateAsync);
-        app.MapGet("/applications/{applicationId:guid}/roles/{roleId:guid}", GetAsync);
-        app.MapGet("/applications/{applicationId:guid}/roles", ListAsync);
-        app.MapPut("/applications/{applicationId:guid}/roles/{roleId:guid}/description", UpdateDescriptionAsync);
-        app.MapPost("/applications/{applicationId:guid}/roles/{roleId:guid}/activate", ActivateAsync);
-        app.MapPost("/applications/{applicationId:guid}/roles/{roleId:guid}/deactivate", DeactivateAsync);
+        app.MapPost("/applications/{applicationId:guid}/roles", CreateAsync).RequireApplicationAdministrator(AdministrativePermissionCatalog.RolesManage);
+        app.MapGet("/applications/{applicationId:guid}/roles/{roleId:guid}", GetAsync).RequireApplicationAdministrator(AdministrativePermissionCatalog.RolesRead);
+        app.MapGet("/applications/{applicationId:guid}/roles", ListAsync).RequireApplicationAdministrator(AdministrativePermissionCatalog.RolesRead);
+        app.MapPut("/applications/{applicationId:guid}/roles/{roleId:guid}/description", UpdateDescriptionAsync).RequireApplicationAdministrator(AdministrativePermissionCatalog.RolesManage);
+        app.MapPost("/applications/{applicationId:guid}/roles/{roleId:guid}/activate", ActivateAsync).RequireApplicationAdministrator(AdministrativePermissionCatalog.RolesManage);
+        app.MapPost("/applications/{applicationId:guid}/roles/{roleId:guid}/deactivate", DeactivateAsync).RequireApplicationAdministrator(AdministrativePermissionCatalog.RolesManage);
         return app;
     }
 
@@ -20,7 +22,7 @@ public static class RolesEndpoints
     {
         var result = await service.CreateAsync(applicationId, request.Name, request.Description, ct);
         return result.Role is { } role
-            ? TypedResults.Created($"/applications/{applicationId}/roles/{role.Id}", RoleResponse.FromDomain(role))
+            ? TypedResults.Created($"/admin/applications/{applicationId}/roles/{role.Id}", RoleResponse.FromDomain(role))
             : Failure(result.Failure);
     }
 
@@ -51,7 +53,7 @@ public static class RolesEndpoints
     private static IResult Failure(string? failure) => failure switch
     {
         "application-not-found" or "role-not-found" => NotFound(),
-        "inactive-application" or "duplicate" => Conflict(),
+        "inactive-application" or "duplicate" or "platform-permission" => Conflict(),
         _ => TypedResults.BadRequest(),
     };
 

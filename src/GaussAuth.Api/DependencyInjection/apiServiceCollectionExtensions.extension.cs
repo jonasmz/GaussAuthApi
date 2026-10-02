@@ -28,6 +28,9 @@ public static class ApiServiceCollectionExtensions
         var securityEventsPermitLimit = configuration.GetValue("RateLimiting:SecurityEvents:PermitLimit", 60);
         var securityEventsWindow = TimeSpan.FromSeconds(configuration.GetValue("RateLimiting:SecurityEvents:WindowSeconds", 60));
 
+        var administrationPermitLimit = configuration.GetValue("RateLimiting:Administration:PermitLimit", 120);
+        var administrationWindow = TimeSpan.FromSeconds(configuration.GetValue("RateLimiting:Administration:WindowSeconds", 60));
+        if (administrationPermitLimit < 1 || administrationWindow <= TimeSpan.Zero) throw new InvalidOperationException("Administration rate limit configuration is invalid.");
         var profileImageWritePermitLimit = configuration.GetValue("RateLimiting:ProfileImageWrite:PermitLimit", 10);
         var profileImageWriteWindow = TimeSpan.FromSeconds(configuration.GetValue("RateLimiting:ProfileImageWrite:WindowSeconds", 60));
 
@@ -92,6 +95,9 @@ public static class ApiServiceCollectionExtensions
             options.AddPolicy("profile-image-write", httpContext => RateLimitPartition.GetFixedWindowLimiter(
                 partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
                 factory: _ => new FixedWindowRateLimiterOptions { PermitLimit = profileImageWritePermitLimit, Window = profileImageWriteWindow, QueueLimit = 0 }));
+            options.AddPolicy("administration", httpContext => RateLimitPartition.GetFixedWindowLimiter(
+                partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+                factory: _ => new FixedWindowRateLimiterOptions { PermitLimit = administrationPermitLimit, Window = administrationWindow, QueueLimit = 0 }));
             options.AddPolicy("security-events", httpContext => RateLimitPartition.GetFixedWindowLimiter(
                 partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
                 factory: _ => new FixedWindowRateLimiterOptions { PermitLimit = securityEventsPermitLimit, Window = securityEventsWindow, QueueLimit = 0 }));

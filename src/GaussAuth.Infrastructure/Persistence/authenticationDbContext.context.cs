@@ -1,3 +1,4 @@
+using GaussAuth.Domain.Applications;
 using GaussAuth.Domain.Users;
 using DomainApplication = GaussAuth.Domain.Applications.Application;
 using GaussAuth.Domain.Memberships;
@@ -24,6 +25,7 @@ public sealed class AuthenticationDbContext(DbContextOptions<AuthenticationDbCon
     public DbSet<DomainPermission> Permissions => Set<DomainPermission>();
     public DbSet<RolePermission> RolePermissions => Set<RolePermission>();
     public DbSet<UserRole> UserRoles => Set<UserRole>();
+    public DbSet<ConsumerCredential> ConsumerCredentials => Set<ConsumerCredential>();
     public DbSet<Session> Sessions => Set<Session>();
     public DbSet<SecurityEvent> SecurityEvents => Set<SecurityEvent>();
 
@@ -95,6 +97,16 @@ public sealed class AuthenticationDbContext(DbContextOptions<AuthenticationDbCon
             permission.HasOne<DomainApplication>().WithMany().HasForeignKey(x => x.ApplicationId).OnDelete(DeleteBehavior.Restrict);
         });
 
+        builder.Entity<ConsumerCredential>(credential =>
+        {
+            credential.ToTable("ApplicationConsumerCredentials"); credential.HasKey(x => x.ApplicationId);
+            credential.Property(x => x.ApplicationId).ValueGeneratedNever();
+            credential.Property(x => x.CurrentHash).HasMaxLength(ConsumerCredential.MaximumHashLength).IsRequired();
+            credential.Property(x => x.RetiringHash).HasMaxLength(ConsumerCredential.MaximumHashLength);
+            credential.Property<uint>("xmin").HasColumnName("xmin").HasColumnType("xid").ValueGeneratedOnAddOrUpdate().IsConcurrencyToken();
+            credential.HasOne<DomainApplication>().WithOne().HasForeignKey<ConsumerCredential>(x => x.ApplicationId).OnDelete(DeleteBehavior.Restrict);
+        });
+
         builder.Entity<RolePermission>(assignment =>
         {
             assignment.ToTable("RolePermissions"); assignment.HasKey(x => x.Id); assignment.Property(x => x.Id).ValueGeneratedNever();
@@ -137,6 +149,7 @@ public sealed class AuthenticationDbContext(DbContextOptions<AuthenticationDbCon
             securityEvent.HasIndex(x => new { x.UserId, x.OccurredAtUtc, x.Id }).HasDatabaseName("IX_SecurityEvents_UserId_OccurredAtUtc_Id");
             securityEvent.HasIndex(x => new { x.SessionId, x.OccurredAtUtc, x.Id }).HasDatabaseName("IX_SecurityEvents_SessionId_OccurredAtUtc_Id");
             securityEvent.HasIndex(x => new { x.EventType, x.OccurredAtUtc, x.Id }).HasDatabaseName("IX_SecurityEvents_EventType_OccurredAtUtc_Id");
+            securityEvent.HasIndex(x => new { x.ActorUserId, x.OccurredAtUtc, x.Id }).HasDatabaseName("IX_SecurityEvents_ActorUserId_OccurredAtUtc_Id");
         });
     }
 }
