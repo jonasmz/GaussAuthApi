@@ -23,6 +23,14 @@ Permissions seeded per Application: `auth.memberships.read|manage`, `auth.roles.
 - A global administrator needs an active membership in an active Application to sign in, and loses access if deactivated or if the session is revoked or expired.
 - Authorization happens before any data is read; a caller outside the target Application gets the same `403` whether or not it exists. Authenticated denials are audited (`administration.access.denied`); unauthenticated ones are not.
 
+## Personal data in responses
+
+Administrative user responses return identifiers, email, state, timestamps, and the profile fields (names, display name, phone, avatar reference) that administrators need to identify and correct an account through `PUT /admin/users/{id}/profile`. List items are minimal (`id`, `email`, `isActive`, `createdAtUtc`). No credential, hash, stamp, reset, or token field exists on any response. Audit events record identifiers only, never profile values.
+
+## Audit coverage
+
+Every state change listed in FR-023 records a critical event with actor and target, plus administrative profile updates (`user.profile.updated`, only when a value actually changes). Every persisted event carries the request correlation id (the `X-Correlation-Id` response header value) when one exists.
+
 ## Secrets
 
 Consumer secrets are 32 random bytes (base64url), stored only as hashes, shown once with `Cache-Control: no-store`, and never present in events, logs, metadata, or later responses. Generate, rotate, and retire write the change and the critical event in one transaction.

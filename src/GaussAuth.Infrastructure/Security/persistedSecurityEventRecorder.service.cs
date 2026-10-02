@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using GaussAuth.Application.Administration.Ports;
 using GaussAuth.Application.Security;
 using GaussAuth.Application.Security.Ports;
@@ -23,7 +24,7 @@ public sealed class PersistedSecurityEventRecorder(ISecurityEventRepository repo
             var definition = draft.Definition;
             var securityEvent = SecurityEvent.Create(Guid.NewGuid(), definition.EventType, ToStorageValue(definition.Outcome),
                 timeProvider.GetUtcNow(), draft.UserId, draft.ApplicationId, draft.SessionId, draft.ConsumerApplicationId,
-                draft.CorrelationId, draft.SubjectType, draft.SubjectId, draft.Reason, draft.Metadata,
+                draft.CorrelationId ?? Activity.Current?.TraceId.ToString(), draft.SubjectType, draft.SubjectId, draft.Reason, draft.Metadata,
                 draft.ActorUserId ?? actorContext.ActorUserId);
             await repository.AddAsync(securityEvent, cancellationToken);
             await repository.SaveChangesAsync(cancellationToken);

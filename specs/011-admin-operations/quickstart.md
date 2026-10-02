@@ -20,6 +20,10 @@ All commands run through the existing Docker development environment (.NET conta
 8. **Audit**: Query `/security-events` as the Application reviewer (`auth.security.audit.read`) and as the global administrator; confirm `actorUserId` and target on each change above, and no secret material.
 9. **Migration**: Apply migrations to a database containing an Application with an `audit.events.read` role assignment; confirm the same role now holds `auth.security.audit.read` and the reviewer still has access. Run the seeding again to confirm no duplicates.
 
+## Validation status
+
+Every scenario above is executed by `tests/GaussAuth.Foundation.Tests/administrationTests.test.cs` and `administrationMigrationTests.test.cs`, which run the real API pipeline against the PostgreSQL 17 container of `compose.dev.yml` (scenario 9 by migrating down and up). Running them by hand additionally needs a real user's id in `GLOBAL_ADMINISTRATOR_USER_ID`; create that user through the test fixture or a one-off script, never through a source-controlled value.
+
 ## Test commands
 
 ```bash

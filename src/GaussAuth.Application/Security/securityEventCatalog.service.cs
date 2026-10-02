@@ -43,6 +43,7 @@ public sealed class SecurityEventCatalog
         SecurityEventType.AvatarRemoved => Operational("profile.avatar.removed", SecurityEventOutcome.Succeeded),
         SecurityEventType.AvatarUploadRejected => Operational("profile.avatar.upload.rejected", SecurityEventOutcome.Rejected),
         SecurityEventType.ApplicationRegistered => Critical("application.registered", SecurityEventOutcome.Succeeded),
+        SecurityEventType.UserProfileUpdated => Critical("user.profile.updated", SecurityEventOutcome.Succeeded),
         SecurityEventType.UserCreated => Critical("user.created", SecurityEventOutcome.Succeeded),
         SecurityEventType.RoleUpdated => Critical("role.updated", SecurityEventOutcome.Succeeded),
         SecurityEventType.PermissionUpdated => Critical("permission.updated", SecurityEventOutcome.Succeeded),

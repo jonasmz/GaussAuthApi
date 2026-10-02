@@ -148,7 +148,7 @@ Every administrative state change is recorded with the acting administrator and 
 - A secret rotation occurs while a consumer is validating with the previous secret: validation continues to succeed during the retirement window.
 - A session is revoked while the user is mid-request: the session is unusable for subsequent requests, consistent with 006.
 - Repeated state-transition requests (activate an active membership, deactivate an inactive role, revoke a revoked session): no duplicate records and a stable outcome.
-- An Application already holds a permission whose code begins with the reserved `auth.` prefix (created before this feature): it must not silently be treated as platform-defined authority; the bootstrap reports it safely, never overwrites it, and its handling is defined in planning.
+- An Application already holds a permission whose code begins with the reserved `auth.` prefix (created before this feature): it must not silently be treated as platform-defined authority; the bootstrap reports it safely, never overwrites it, and its handling is defined in planning. **Resolved in planning**: the seeding migration aborts with a clear error when any such permission exists, so an operator renames or removes it deliberately; nothing is overwritten or silently reinterpreted.
 - A configured global-administrator UserId refers to an inactive or non-existent user: that user cannot obtain a session, so the entry confers no usable authority.
 - Concurrent creation of the same membership: exactly one membership results.
 - An Application administrator removes their own administrative role: no lockout exemption exists and a global administrator can restore access.

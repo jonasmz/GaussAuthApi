@@ -148,4 +148,5 @@ Password hashes, security stamps, reset material, access or refresh credentials,
 ## Operational notes
 
 - Configuration: `Administration:GlobalAdministratorUserIds`, `Administration:MaxBulkSessionRevocation`, `RateLimiting:Administration:*`. Startup fails if the legacy `SecurityAudit:GlobalReviewerUserId` is set.
-- Rate limit `administration` applies to the whole `/admin` group (default 120 per 60 s).
+- Rate limit `administration` applies to the whole `/admin` group (default 120 per 60 s). `POST /admin/users` additionally keeps the stricter `user-creation` limit (default 5 per window), so both apply there.
+- Administrative profile updates (`PUT /admin/users/{userId}/profile`) record `user.profile.updated` (identifiers only) when a value changes, and every event stores the request correlation id.

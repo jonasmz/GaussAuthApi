@@ -23,6 +23,7 @@ New event types (stable names, reliability):
 | `UserCreated` | `user.created` | Critical |
 | `RoleUpdated` | `role.updated` | Critical |
 | `PermissionUpdated` | `permission.updated` | Critical |
+| `UserProfileUpdated` | `user.profile.updated` | Critical |
 | `ConsumerCredentialGenerated` | `consumer.credential.generated` | Critical |
 | `ConsumerCredentialRotated` | `consumer.credential.rotated` | Critical |
 | `ConsumerCredentialPreviousRetired` | `consumer.credential.previous-retired` | Critical |

@@ -1296,6 +1296,58 @@ public sealed class AdministrationTests
         Assert.IsFalse((ownBody + await everything.Content.ReadAsStringAsync()).Contains(secret, StringComparison.Ordinal));
     }
 
+    [TestMethod]
+    public async Task Profile_updates_are_audited_only_on_real_change_without_personal_data_and_with_the_correlation_id()
+    {
+        var policy = new TestGlobalAdministratorPolicy();
+        using var factory = await MigratedFactoryAsync(policy);
+        using var global = await factory.CreateGlobalAdministratorAsync(policy);
+        var userId = await factory.CreateUserAsync();
+        var body = new { firstName = "Grace", lastName = "Hopper", displayName = "Grace H", phoneNumber = "+15551230000" };
+
+        using var first = await global.Client.PutAsJsonAsync($"/admin/users/{userId}/profile", body);
+        using var repeated = await global.Client.PutAsJsonAsync($"/admin/users/{userId}/profile", body);
+        Assert.AreEqual(HttpStatusCode.OK, first.StatusCode);
+        Assert.AreEqual(HttpStatusCode.OK, repeated.StatusCode);
+        var recorded = await WithDbAsync(factory, db => db.SecurityEvents.Where(item => item.EventType == "user.profile.updated" && item.UserId == userId).ToListAsync());
+        Assert.AreEqual(1, recorded.Count);
+        Assert.AreEqual(global.UserId, recorded[0].ActorUserId);
+        Assert.AreEqual(first.Headers.GetValues("X-Correlation-Id").Single(), recorded[0].CorrelationId);
+        Assert.IsFalse(JsonSerializer.Serialize(recorded).Contains("Grace", StringComparison.Ordinal));
+        Assert.IsFalse(JsonSerializer.Serialize(recorded).Contains("5551230000", StringComparison.Ordinal));
+
+        // Every administrative event carries the correlation id of its request.
+        var (applicationId, _) = await factory.CreateApplicationAsync();
+        using var role = await global.Client.PostAsJsonAsync($"/admin/applications/{applicationId}/roles", new { name = "Correlated" });
+        var roleId = await IdAsync(role);
+        var roleEvent = await WithDbAsync(factory, db => db.SecurityEvents.SingleAsync(item => item.EventType == "role.created" && item.SubjectId == roleId));
+        Assert.AreEqual(role.Headers.GetValues("X-Correlation-Id").Single(), roleEvent.CorrelationId);
+    }
+
+    [TestMethod]
+    public async Task Oversized_fields_are_rejected_on_administrative_routes()
+    {
+        var policy = new TestGlobalAdministratorPolicy();
+        using var factory = await MigratedFactoryAsync(policy);
+        using var global = await factory.CreateGlobalAdministratorAsync(policy);
+        var (applicationId, _) = await factory.CreateApplicationAsync();
+        var applications = $"/admin/applications/{applicationId}";
+        var cases = new (string Path, object Body)[]
+        {
+            ("/admin/applications", new { code = new string('a', 65), name = "N" }),
+            ("/admin/applications", new { code = $"app-{Guid.NewGuid():N}", name = new string('n', 201) }),
+            (applications + "/roles", new { name = new string('r', 201) }),
+            (applications + "/roles", new { name = "R", description = new string('d', 501) }),
+            (applications + "/permissions", new { code = new string('p', 129) }),
+            (applications + "/permissions", new { code = "ok.code", description = new string('d', 501) }),
+        };
+        foreach (var (path, body) in cases)
+        {
+            using var response = await global.Client.PostAsJsonAsync(path, body);
+            Assert.AreEqual(HttpStatusCode.BadRequest, response.StatusCode, path);
+        }
+    }
+
     private static async Task<T> WithDbAsync<T>(WebApplicationFactory<Program> factory, Func<AuthenticationDbContext, Task<T>> query)
     {
         using var scope = factory.Services.CreateScope();

@@ -157,6 +157,13 @@
 - [X] T061 Run the quickstart validation scenarios from `specs/011-admin-operations/quickstart.md` against the running development stack and fix any discrepancy between the quickstart, the contract, and the behavior.
 - [X] T062 Run the full test suite in the `sdk` container (`docker compose -f compose.dev.yml exec sdk dotnet test`) and confirm all tests pass; confirm no administrative frontend, impersonation, workflow, or enterprise IAM placeholder was introduced.
 
+## Phase 10: Analysis Remediation
+
+- [X] T063 Audit administrative profile updates: add `UserProfileUpdated` (`user.profile.updated`, critical) in `src/GaussAuth.Application/Security/` and record it from `UpdateProfileHandler` only when a value changes, with identifiers only.
+- [X] T064 Record the request correlation id on every persisted security event (`persistedSecurityEventRecorder.service.cs`, same value as `X-Correlation-Id`).
+- [X] T065 Document the personal-data decision, audit coverage, the reserved-prefix migration decision (spec edge case), the double rate limit, and the validation status in `security-review.md`, `spec.md`, `contracts/admin-api.md`, `data-model.md`, and `quickstart.md`.
+- [X] T066 Add tests for profile-update auditing, correlation id, and oversized-field rejection to `administrationTests.test.cs`; add `[MaxLength]` bounds to role and permission request DTOs.
+
 ---
 
 ## Dependencies & Execution Order
