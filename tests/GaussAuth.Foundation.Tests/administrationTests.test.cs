@@ -461,6 +461,501 @@ public sealed class AdministrationTests
         Assert.IsFalse((recorded.Metadata ?? string.Empty).Contains("example.test", StringComparison.OrdinalIgnoreCase));
     }
 
+    private static readonly string[] AccessModelPermissions =
+    [
+        AdministrativePermissionCatalog.MembershipsRead, AdministrativePermissionCatalog.MembershipsManage,
+        AdministrativePermissionCatalog.RolesRead, AdministrativePermissionCatalog.RolesManage,
+        AdministrativePermissionCatalog.PermissionsRead, AdministrativePermissionCatalog.PermissionsManage,
+    ];
+
+    private static async Task<int> EventCountAsync(WebApplicationFactory<Program> factory, string eventType, Guid subjectId)
+    {
+        using var scope = factory.Services.CreateScope();
+        return await scope.ServiceProvider.GetRequiredService<AuthenticationDbContext>().SecurityEvents
+            .CountAsync(item => item.EventType == eventType && item.SubjectId == subjectId);
+    }
+
+    private static async Task<Guid> IdAsync(HttpResponseMessage response) =>
+        JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement.GetProperty("id").GetGuid();
+
+    [TestMethod]
+    public async Task Application_administrator_manages_memberships_within_state_rules()
+    {
+        var policy = new TestGlobalAdministratorPolicy();
+        using var factory = await MigratedFactoryAsync(policy);
+        using var global = await factory.CreateGlobalAdministratorAsync(policy);
+        var (applicationA, codeA) = await factory.CreateApplicationAsync();
+        var (applicationB, _) = await factory.CreateApplicationAsync();
+        using var adminA = await factory.CreateApplicationAdministratorAsync(applicationA, codeA, AccessModelPermissions);
+        var userId = await factory.CreateUserAsync();
+
+        using var created = await adminA.Client.PostAsJsonAsync($"/admin/applications/{applicationA}/memberships", new { userId });
+        Assert.AreEqual(HttpStatusCode.Created, created.StatusCode);
+        using var duplicate = await adminA.Client.PostAsJsonAsync($"/admin/applications/{applicationA}/memberships", new { userId });
+        Assert.AreEqual(HttpStatusCode.Conflict, duplicate.StatusCode);
+        var membershipId = await IdAsync(created);
+        Assert.AreEqual(1, await EventCountAsync(factory, "membership.created", membershipId));
+
+        using var deactivated = await adminA.Client.PostAsync($"/admin/applications/{applicationA}/memberships/{userId}/deactivate", null);
+        using var activated = await adminA.Client.PostAsync($"/admin/applications/{applicationA}/memberships/{userId}/activate", null);
+        using var activatedAgain = await adminA.Client.PostAsync($"/admin/applications/{applicationA}/memberships/{userId}/activate", null);
+        Assert.AreEqual(HttpStatusCode.OK, deactivated.StatusCode);
+        Assert.AreEqual(HttpStatusCode.OK, activated.StatusCode);
+        Assert.AreEqual(HttpStatusCode.OK, activatedAgain.StatusCode);
+        Assert.AreEqual(1, await EventCountAsync(factory, "membership.deactivated", membershipId));
+        Assert.AreEqual(1, await EventCountAsync(factory, "membership.activated", membershipId));
+
+        // An inactive user cannot have a membership activated.
+        await adminA.Client.PostAsync($"/admin/applications/{applicationA}/memberships/{userId}/deactivate", null);
+        using (var scope = factory.Services.CreateScope())
+            await scope.ServiceProvider.GetRequiredService<DeactivateUserHandler>().HandleAsync(userId, CancellationToken.None);
+        using var inactiveUser = await adminA.Client.PostAsync($"/admin/applications/{applicationA}/memberships/{userId}/activate", null);
+        Assert.AreEqual(HttpStatusCode.Conflict, inactiveUser.StatusCode);
+
+        // An inactive Application accepts no new membership.
+        await global.Client.PostAsync($"/admin/applications/{applicationB}/deactivate", null);
+        var other = await factory.CreateUserAsync();
+        using var inactiveApplication = await global.Client.PostAsJsonAsync($"/admin/applications/{applicationB}/memberships", new { userId = other });
+        Assert.AreEqual(HttpStatusCode.Conflict, inactiveApplication.StatusCode);
+
+        // Cross-application misuse is refused before anything is read.
+        using var cross = await adminA.Client.PostAsJsonAsync($"/admin/applications/{applicationB}/memberships", new { userId = other });
+        Assert.AreEqual(HttpStatusCode.Forbidden, cross.StatusCode);
+        using var list = await adminA.Client.GetAsync($"/admin/applications/{applicationA}/memberships");
+        Assert.AreEqual(HttpStatusCode.OK, list.StatusCode);
+    }
+
+    [TestMethod]
+    public async Task Roles_and_permissions_are_unique_per_application_and_same_names_elsewhere_grant_nothing()
+    {
+        var policy = new TestGlobalAdministratorPolicy();
+        using var factory = await MigratedFactoryAsync(policy);
+        using var global = await factory.CreateGlobalAdministratorAsync(policy);
+        var (applicationA, codeA) = await factory.CreateApplicationAsync();
+        var (applicationB, codeB) = await factory.CreateApplicationAsync();
+        using var adminA = await factory.CreateApplicationAdministratorAsync(applicationA, codeA, AccessModelPermissions);
+
+        using var role = await adminA.Client.PostAsJsonAsync($"/admin/applications/{applicationA}/roles", new { name = "Reader", description = "d" });
+        Assert.AreEqual(HttpStatusCode.Created, role.StatusCode);
+        var roleId = await IdAsync(role);
+        using var duplicateRole = await adminA.Client.PostAsJsonAsync($"/admin/applications/{applicationA}/roles", new { name = "reader" });
+        Assert.AreEqual(HttpStatusCode.Conflict, duplicateRole.StatusCode);
+        using var roleInB = await global.Client.PostAsJsonAsync($"/admin/applications/{applicationB}/roles", new { name = "Reader" });
+        Assert.AreEqual(HttpStatusCode.Created, roleInB.StatusCode);
+
+        using var permission = await adminA.Client.PostAsJsonAsync($"/admin/applications/{applicationA}/permissions", new { code = "reports.read" });
+        Assert.AreEqual(HttpStatusCode.Created, permission.StatusCode);
+        var permissionId = await IdAsync(permission);
+        using var duplicatePermission = await adminA.Client.PostAsJsonAsync($"/admin/applications/{applicationA}/permissions", new { code = "reports.read" });
+        Assert.AreEqual(HttpStatusCode.Conflict, duplicatePermission.StatusCode);
+        using var permissionInB = await global.Client.PostAsJsonAsync($"/admin/applications/{applicationB}/permissions", new { code = "reports.read" });
+        Assert.AreEqual(HttpStatusCode.Created, permissionInB.StatusCode);
+
+        using var describeRole = await adminA.Client.PutAsJsonAsync($"/admin/applications/{applicationA}/roles/{roleId}/description", new { description = "changed" });
+        using var describeRoleAgain = await adminA.Client.PutAsJsonAsync($"/admin/applications/{applicationA}/roles/{roleId}/description", new { description = "changed" });
+        Assert.AreEqual(HttpStatusCode.OK, describeRole.StatusCode);
+        Assert.AreEqual(HttpStatusCode.OK, describeRoleAgain.StatusCode);
+        Assert.AreEqual(1, await EventCountAsync(factory, "role.updated", roleId));
+        using var describePermission = await adminA.Client.PutAsJsonAsync($"/admin/applications/{applicationA}/permissions/{permissionId}/description", new { description = "changed" });
+        Assert.AreEqual(HttpStatusCode.OK, describePermission.StatusCode);
+        Assert.AreEqual(1, await EventCountAsync(factory, "permission.updated", permissionId));
+
+        foreach (var path in new[] { "roles/" + roleId, "permissions/" + permissionId })
+        {
+            using var off = await adminA.Client.PostAsync($"/admin/applications/{applicationA}/{path}/deactivate", null);
+            using var offAgain = await adminA.Client.PostAsync($"/admin/applications/{applicationA}/{path}/deactivate", null);
+            using var on = await adminA.Client.PostAsync($"/admin/applications/{applicationA}/{path}/activate", null);
+            using var onAgain = await adminA.Client.PostAsync($"/admin/applications/{applicationA}/{path}/activate", null);
+            Assert.IsTrue(new[] { off, offAgain, on, onAgain }.All(response => response.StatusCode == HttpStatusCode.OK), path);
+        }
+
+        Assert.AreEqual(1, await EventCountAsync(factory, "role.deactivated", roleId));
+        Assert.AreEqual(1, await EventCountAsync(factory, "role.activated", roleId));
+        Assert.AreEqual(1, await EventCountAsync(factory, "permission.deactivated", permissionId));
+        Assert.AreEqual(1, await EventCountAsync(factory, "permission.activated", permissionId));
+        foreach (var path in new[] { "roles", "permissions" })
+        {
+            using var list = await adminA.Client.GetAsync($"/admin/applications/{applicationA}/{path}?limit=100");
+            Assert.AreEqual(HttpStatusCode.OK, list.StatusCode);
+        }
+
+        // A user holding A's role and permission has nothing in B, which has same-named records.
+        var userId = await factory.CreateUserAsync();
+        await factory.CreateMembershipAsync(userId, applicationA);
+        await factory.CreateMembershipAsync(userId, applicationB);
+        using var rolePermission = await adminA.Client.PostAsync($"/admin/applications/{applicationA}/roles/{roleId}/permissions/{permissionId}", null);
+        using var userRole = await adminA.Client.PostAsync($"/admin/applications/{applicationA}/users/{userId}/roles/{roleId}", null);
+        Assert.AreEqual(HttpStatusCode.Created, rolePermission.StatusCode);
+        Assert.AreEqual(HttpStatusCode.Created, userRole.StatusCode);
+        using var viewA = await adminA.Client.GetAsync($"/admin/applications/{applicationA}/users/{userId}/authorization");
+        using var viewB = await global.Client.GetAsync($"/admin/applications/{applicationB}/users/{userId}/authorization");
+        CollectionAssert.AreEqual(new[] { "reports.read" }, PermissionCodes(await viewA.Content.ReadAsStringAsync()));
+        Assert.AreEqual(0, PermissionCodes(await viewB.Content.ReadAsStringAsync()).Length);
+        Assert.AreEqual(0, JsonDocument.Parse(await viewB.Content.ReadAsStringAsync()).RootElement.GetProperty("roles").GetArrayLength());
+        _ = codeB;
+    }
+
+    [TestMethod]
+    public async Task Assignments_require_membership_stay_inside_the_application_and_are_idempotent_with_correct_subjects()
+    {
+        var policy = new TestGlobalAdministratorPolicy();
+        using var factory = await MigratedFactoryAsync(policy);
+        using var global = await factory.CreateGlobalAdministratorAsync(policy);
+        var (applicationA, codeA) = await factory.CreateApplicationAsync();
+        var (applicationB, _) = await factory.CreateApplicationAsync();
+        using var adminA = await factory.CreateApplicationAdministratorAsync(applicationA, codeA, AccessModelPermissions);
+        var roleA = await IdAsync(await adminA.Client.PostAsJsonAsync($"/admin/applications/{applicationA}/roles", new { name = "A-role" }));
+        var permissionA = await IdAsync(await adminA.Client.PostAsJsonAsync($"/admin/applications/{applicationA}/permissions", new { code = "a.thing" }));
+        var permissionB = await IdAsync(await global.Client.PostAsJsonAsync($"/admin/applications/{applicationB}/permissions", new { code = "b.thing" }));
+        var roleB = await IdAsync(await global.Client.PostAsJsonAsync($"/admin/applications/{applicationB}/roles", new { name = "B-role" }));
+        var userId = await factory.CreateUserAsync();
+
+        using var noMembership = await adminA.Client.PostAsync($"/admin/applications/{applicationA}/users/{userId}/roles/{roleA}", null);
+        Assert.IsTrue(noMembership.StatusCode is HttpStatusCode.Conflict or HttpStatusCode.NotFound);
+        await factory.CreateMembershipAsync(userId, applicationA);
+
+        using var crossPermission = await adminA.Client.PostAsync($"/admin/applications/{applicationA}/roles/{roleA}/permissions/{permissionB}", null);
+        using var crossRole = await adminA.Client.PostAsync($"/admin/applications/{applicationA}/roles/{roleB}/permissions/{permissionA}", null);
+        using var crossUserRole = await adminA.Client.PostAsync($"/admin/applications/{applicationA}/users/{userId}/roles/{roleB}", null);
+        Assert.IsTrue(new[] { crossPermission, crossRole, crossUserRole }.All(response => response.StatusCode is HttpStatusCode.Conflict or HttpStatusCode.NotFound));
+        using (var scope = factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AuthenticationDbContext>();
+            Assert.AreEqual(0, await db.RolePermissions.CountAsync(item => item.RoleId == roleA || item.RoleId == roleB));
+            Assert.AreEqual(0, await db.UserRoles.CountAsync(item => item.UserId == userId));
+        }
+
+        using var first = await adminA.Client.PostAsync($"/admin/applications/{applicationA}/roles/{roleA}/permissions/{permissionA}", null);
+        using var repeated = await adminA.Client.PostAsync($"/admin/applications/{applicationA}/roles/{roleA}/permissions/{permissionA}", null);
+        Assert.AreEqual(HttpStatusCode.Created, first.StatusCode);
+        Assert.AreEqual(HttpStatusCode.Conflict, repeated.StatusCode);
+        var rolePermissionId = JsonDocument.Parse(await first.Content.ReadAsStringAsync()).RootElement.GetProperty("id").GetGuid();
+        Assert.AreEqual(1, await EventCountAsync(factory, "permission.assigned", rolePermissionId));
+
+        using var assigned = await adminA.Client.PostAsync($"/admin/applications/{applicationA}/users/{userId}/roles/{roleA}", null);
+        using var assignedAgain = await adminA.Client.PostAsync($"/admin/applications/{applicationA}/users/{userId}/roles/{roleA}", null);
+        Assert.AreEqual(HttpStatusCode.Created, assigned.StatusCode);
+        Assert.AreEqual(HttpStatusCode.Conflict, assignedAgain.StatusCode);
+        var userRoleId = await IdAsync(assigned);
+        Assert.AreEqual(1, await EventCountAsync(factory, "role.assigned", userRoleId));
+        using var removed = await adminA.Client.PostAsync($"/admin/applications/{applicationA}/users/{userId}/roles/{roleA}/remove", null);
+        using var removedAgain = await adminA.Client.PostAsync($"/admin/applications/{applicationA}/users/{userId}/roles/{roleA}/remove", null);
+        Assert.AreEqual(HttpStatusCode.OK, removed.StatusCode);
+        Assert.AreEqual(HttpStatusCode.OK, removedAgain.StatusCode);
+        Assert.AreEqual(1, await EventCountAsync(factory, "role.removed", userRoleId));
+
+        using var scope2 = factory.Services.CreateScope();
+        var events = scope2.ServiceProvider.GetRequiredService<AuthenticationDbContext>().SecurityEvents;
+        Assert.AreEqual("role", await events.Where(item => item.EventType == "role.created" && item.SubjectId == roleA).Select(item => item.SubjectType).SingleAsync());
+        Assert.AreEqual("permission", await events.Where(item => item.EventType == "permission.created" && item.SubjectId == permissionA).Select(item => item.SubjectType).SingleAsync());
+        Assert.AreEqual("role-permission", await events.Where(item => item.SubjectId == rolePermissionId).Select(item => item.SubjectType).FirstAsync());
+        Assert.AreEqual("user-role", await events.Where(item => item.SubjectId == userRoleId).Select(item => item.SubjectType).FirstAsync());
+    }
+
+    [TestMethod]
+    public async Task Concurrent_identical_assignments_and_memberships_leave_exactly_one_record()
+    {
+        var policy = new TestGlobalAdministratorPolicy();
+        using var factory = await MigratedFactoryAsync(policy);
+        var (applicationId, _) = await factory.CreateApplicationAsync();
+        var userId = await factory.CreateUserAsync();
+
+        var memberships = await Task.WhenAll(Enumerable.Range(0, 4).Select(async _ =>
+        {
+            using var scope = factory.Services.CreateScope();
+            return (await scope.ServiceProvider.GetRequiredService<GaussAuth.Application.Memberships.MembershipService>().CreateAsync(userId, applicationId, CancellationToken.None)).Membership is not null;
+        }));
+        Assert.AreEqual(1, memberships.Count(created => created));
+
+        Guid roleId;
+        using (var scope = factory.Services.CreateScope())
+            roleId = (await scope.ServiceProvider.GetRequiredService<RoleService>().CreateAsync(applicationId, "Concurrent", null, CancellationToken.None)).Role!.Id;
+        var assignments = await Task.WhenAll(Enumerable.Range(0, 4).Select(async _ =>
+        {
+            using var scope = factory.Services.CreateScope();
+            return (await scope.ServiceProvider.GetRequiredService<UserRoleService>().AssignAsync(applicationId, userId, roleId, CancellationToken.None)).Created;
+        }));
+        Assert.AreEqual(1, assignments.Count(created => created));
+
+        using var check = factory.Services.CreateScope();
+        var db = check.ServiceProvider.GetRequiredService<AuthenticationDbContext>();
+        Assert.AreEqual(1, await db.ApplicationMemberships.CountAsync(item => item.UserId == userId && item.ApplicationId == applicationId));
+        Assert.AreEqual(1, await db.UserRoles.CountAsync(item => item.UserId == userId && item.RoleId == roleId));
+    }
+
+    [TestMethod]
+    public async Task Administrator_removing_their_own_administrative_role_loses_access_and_global_administrator_restores_it()
+    {
+        var policy = new TestGlobalAdministratorPolicy();
+        using var factory = await MigratedFactoryAsync(policy);
+        using var global = await factory.CreateGlobalAdministratorAsync(policy);
+        var (applicationId, code) = await factory.CreateApplicationAsync();
+        var email = $"self-{Guid.NewGuid():N}@example.test";
+        var userId = await factory.CreateUserAsync(email);
+        await factory.CreateMembershipAsync(userId, applicationId);
+        var roleId = await factory.GrantPermissionsAsync(applicationId, userId, AdministrativePermissionCatalog.RolesRead, AdministrativePermissionCatalog.RolesManage);
+        using var admin = await factory.SignInAsync(email, applicationId, code);
+
+        using var allowed = await admin.Client.GetAsync($"/admin/applications/{applicationId}/roles");
+        Assert.AreEqual(HttpStatusCode.OK, allowed.StatusCode);
+        using var removed = await admin.Client.PostAsync($"/admin/applications/{applicationId}/users/{userId}/roles/{roleId}/remove", null);
+        Assert.AreEqual(HttpStatusCode.OK, removed.StatusCode);
+        using var denied = await admin.Client.GetAsync($"/admin/applications/{applicationId}/roles");
+        Assert.AreEqual(HttpStatusCode.Forbidden, denied.StatusCode);
+
+        using var restored = await global.Client.PostAsync($"/admin/applications/{applicationId}/users/{userId}/roles/{roleId}", null);
+        Assert.IsTrue(restored.StatusCode is HttpStatusCode.OK or HttpStatusCode.Created);
+        using var again = await admin.Client.GetAsync($"/admin/applications/{applicationId}/roles");
+        Assert.AreEqual(HttpStatusCode.OK, again.StatusCode);
+    }
+
+    [TestMethod]
+    public async Task Authorization_view_matches_the_authorization_context_queries_and_omits_inactive_records()
+    {
+        var policy = new TestGlobalAdministratorPolicy();
+        using var factory = await MigratedFactoryAsync(policy);
+        using var global = await factory.CreateGlobalAdministratorAsync(policy);
+        var (applicationId, _) = await factory.CreateApplicationAsync();
+        var userId = await factory.CreateUserAsync();
+        await factory.CreateMembershipAsync(userId, applicationId);
+        var client = global.Client;
+
+        var activeRole = await IdAsync(await client.PostAsJsonAsync($"/admin/applications/{applicationId}/roles", new { name = "Active" }));
+        var inactiveRole = await IdAsync(await client.PostAsJsonAsync($"/admin/applications/{applicationId}/roles", new { name = "Inactive" }));
+        var kept = await IdAsync(await client.PostAsJsonAsync($"/admin/applications/{applicationId}/permissions", new { code = "kept.read" }));
+        var dropped = await IdAsync(await client.PostAsJsonAsync($"/admin/applications/{applicationId}/permissions", new { code = "dropped.read" }));
+        var viaInactiveRole = await IdAsync(await client.PostAsJsonAsync($"/admin/applications/{applicationId}/permissions", new { code = "inactive-role.read" }));
+        foreach (var (role, permission) in new[] { (activeRole, kept), (activeRole, dropped), (inactiveRole, viaInactiveRole) })
+            await client.PostAsync($"/admin/applications/{applicationId}/roles/{role}/permissions/{permission}", null);
+        foreach (var role in new[] { activeRole, inactiveRole })
+            await client.PostAsync($"/admin/applications/{applicationId}/users/{userId}/roles/{role}", null);
+        await client.PostAsync($"/admin/applications/{applicationId}/roles/{inactiveRole}/deactivate", null);
+        await client.PostAsync($"/admin/applications/{applicationId}/permissions/{dropped}/deactivate", null);
+
+        using var response = await client.GetAsync($"/admin/applications/{applicationId}/users/{userId}/authorization");
+        Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
+        var root = JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement;
+        Assert.AreEqual(applicationId, root.GetProperty("application").GetProperty("id").GetGuid());
+        Assert.IsTrue(root.GetProperty("user").GetProperty("isActive").GetBoolean());
+        Assert.IsTrue(root.GetProperty("membership").GetProperty("isActive").GetBoolean());
+
+        using var scope = factory.Services.CreateScope();
+        var userRoles = scope.ServiceProvider.GetRequiredService<GaussAuth.Application.Authorization.Ports.IUserRoleRepository>();
+        var expectedPermissions = (await userRoles.GetEffectivePermissionsAsync(userId, applicationId, CancellationToken.None))
+            .Select(permission => permission.Code).Distinct().OrderBy(value => value, StringComparer.Ordinal).ToArray();
+        var expectedRoles = (await userRoles.GetActiveRolesAsync(userId, applicationId, CancellationToken.None)).Select(role => role.Id).ToArray();
+        CollectionAssert.AreEqual(expectedPermissions, PermissionCodes(await response.Content.ReadAsStringAsync()));
+        CollectionAssert.AreEqual(new[] { "kept.read" }, expectedPermissions);
+        CollectionAssert.AreEqual(expectedRoles, root.GetProperty("roles").EnumerateArray().Select(role => role.GetProperty("id").GetGuid()).ToArray());
+        Assert.AreEqual(1, expectedRoles.Length);
+
+        using var noMembership = await client.GetAsync($"/admin/applications/{applicationId}/users/{await factory.CreateUserAsync()}/authorization");
+        Assert.AreEqual(JsonValueKind.Null, JsonDocument.Parse(await noMembership.Content.ReadAsStringAsync()).RootElement.GetProperty("membership").ValueKind);
+        using var missing = await client.GetAsync($"/admin/applications/{applicationId}/users/{Guid.NewGuid()}/authorization");
+        Assert.AreEqual(HttpStatusCode.NotFound, missing.StatusCode);
+    }
+
+    private static string[] PermissionCodes(string json) =>
+        JsonDocument.Parse(json).RootElement.GetProperty("permissions").EnumerateArray().Select(item => item.GetString()!).ToArray();
+
+    private static async Task<bool> SessionIsValidAsync(AdministratorClient session)
+    {
+        using var response = await session.Client.PostAsJsonAsync("/auth/session/validate", new { applicationCode = session.ApplicationCode });
+        return response.StatusCode == HttpStatusCode.OK;
+    }
+
+    private static async Task<AdministratorClient> NewMemberSessionAsync(WebApplicationFactory<Program> factory, Guid applicationId, string code, Guid? existingUser = null, string? email = null)
+    {
+        email ??= $"session-{Guid.NewGuid():N}@example.test";
+        if (existingUser is null)
+        {
+            var userId = await factory.CreateUserAsync(email);
+            await factory.CreateMembershipAsync(userId, applicationId);
+        }
+
+        return await factory.SignInAsync(email, applicationId, code);
+    }
+
+    [TestMethod]
+    public async Task Session_list_filters_paginates_and_is_scoped_to_the_application()
+    {
+        var policy = new TestGlobalAdministratorPolicy();
+        var time = new MutableTimeProvider();
+        using var factory = await MigratedFactoryAsync(policy, time);
+        var (applicationA, codeA) = await factory.CreateApplicationAsync();
+        var (applicationB, codeB) = await factory.CreateApplicationAsync();
+        using var old1 = await NewMemberSessionAsync(factory, applicationA, codeA);
+        using var old2 = await NewMemberSessionAsync(factory, applicationA, codeA);
+        time.Advance(TimeSpan.FromHours(9));
+        using var fresh = await NewMemberSessionAsync(factory, applicationA, codeA);
+        using var inB = await NewMemberSessionAsync(factory, applicationB, codeB);
+        using var adminA = await factory.CreateApplicationAdministratorAsync(applicationA, codeA,
+            AdministrativePermissionCatalog.SessionsRead, AdministrativePermissionCatalog.SessionsRevoke);
+        var userInA = old1.UserId;
+
+        var seen = new List<Guid>();
+        string? cursor = null;
+        do
+        {
+            using var page = await adminA.Client.GetAsync($"/admin/applications/{applicationA}/sessions?limit=2" + (cursor is null ? "" : $"&cursor={cursor}"));
+            Assert.AreEqual(HttpStatusCode.OK, page.StatusCode);
+            var root = JsonDocument.Parse(await page.Content.ReadAsStringAsync()).RootElement;
+            seen.AddRange(root.GetProperty("items").EnumerateArray().Select(item => item.GetProperty("id").GetGuid()));
+            cursor = root.GetProperty("nextCursor").GetString();
+        }
+        while (cursor is not null);
+        Assert.AreEqual(seen.Count, seen.Distinct().Count());
+        foreach (var session in new[] { old1, old2, fresh, adminA }) CollectionAssert.Contains(seen, session.SessionId);
+        CollectionAssert.DoesNotContain(seen, inB.SessionId);
+
+        async Task<List<Guid>> IdsAsync(string query)
+        {
+            using var response = await adminA.Client.GetAsync($"/admin/applications/{applicationA}/sessions?{query}");
+            Assert.AreEqual(HttpStatusCode.OK, response.StatusCode, query);
+            return JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement.GetProperty("items").EnumerateArray().Select(item => item.GetProperty("id").GetGuid()).ToList();
+        }
+
+        var expired = await IdsAsync("state=expired&limit=100");
+        CollectionAssert.IsSubsetOf(new[] { old1.SessionId, old2.SessionId }, expired);
+        CollectionAssert.DoesNotContain(expired, fresh.SessionId);
+        var active = await IdsAsync("state=active&limit=100");
+        CollectionAssert.Contains(active, fresh.SessionId);
+        CollectionAssert.DoesNotContain(active, old1.SessionId);
+        CollectionAssert.AreEqual(new[] { old1.SessionId }, await IdsAsync($"userId={userInA}&limit=100"));
+        Assert.AreEqual(0, (await IdsAsync("state=revoked&limit=100")).Count(id => id == fresh.SessionId));
+
+        using var revoke = await adminA.Client.PostAsync($"/admin/applications/{applicationA}/sessions/{fresh.SessionId}/revoke", null);
+        Assert.AreEqual(HttpStatusCode.OK, revoke.StatusCode);
+        CollectionAssert.Contains(await IdsAsync("state=revoked&limit=100"), fresh.SessionId);
+
+        foreach (var bad in new[] { "limit=0", "limit=101", "state=bogus", "cursor=zzz" })
+        {
+            using var rejected = await adminA.Client.GetAsync($"/admin/applications/{applicationA}/sessions?{bad}");
+            Assert.AreEqual(HttpStatusCode.BadRequest, rejected.StatusCode, bad);
+        }
+
+        using var otherApplication = await adminA.Client.GetAsync($"/admin/applications/{applicationB}/sessions");
+        using var otherSession = await adminA.Client.GetAsync($"/admin/applications/{applicationB}/sessions/{inB.SessionId}");
+        using var crossRevoke = await adminA.Client.PostAsync($"/admin/applications/{applicationB}/sessions/revoke", null);
+        Assert.AreEqual(HttpStatusCode.Forbidden, otherApplication.StatusCode);
+        Assert.AreEqual(HttpStatusCode.Forbidden, otherSession.StatusCode);
+        Assert.AreEqual(HttpStatusCode.Forbidden, crossRevoke.StatusCode);
+        using var wrongScope = await adminA.Client.GetAsync($"/admin/applications/{applicationA}/sessions/{inB.SessionId}");
+        Assert.AreEqual(HttpStatusCode.NotFound, wrongScope.StatusCode);
+        Assert.IsTrue(await SessionIsValidAsync(inB));
+
+        // A caller holding only the read permission cannot revoke.
+        using var reader = await factory.CreateApplicationAdministratorAsync(applicationA, codeA, AdministrativePermissionCatalog.SessionsRead);
+        using var forbidden = await reader.Client.PostAsync($"/admin/applications/{applicationA}/sessions/{old1.SessionId}/revoke", null);
+        Assert.AreEqual(HttpStatusCode.Forbidden, forbidden.StatusCode);
+    }
+
+    [TestMethod]
+    public async Task Revoking_sessions_by_scope_takes_effect_immediately_is_idempotent_and_audited_with_the_actor()
+    {
+        var policy = new TestGlobalAdministratorPolicy();
+        using var factory = await MigratedFactoryAsync(policy);
+        using var global = await factory.CreateGlobalAdministratorAsync(policy);
+        var (applicationA, codeA) = await factory.CreateApplicationAsync();
+        var (applicationB, codeB) = await factory.CreateApplicationAsync();
+        var email = $"multi-{Guid.NewGuid():N}@example.test";
+        var userId = await factory.CreateUserAsync(email);
+        await factory.CreateMembershipAsync(userId, applicationA);
+        await factory.CreateMembershipAsync(userId, applicationB);
+        using var userInA = await factory.SignInAsync(email, applicationA, codeA);
+        using var userInB = await factory.SignInAsync(email, applicationB, codeB);
+        using var otherInA = await NewMemberSessionAsync(factory, applicationA, codeA);
+
+        using var one = await global.Client.PostAsync($"/admin/applications/{applicationA}/sessions/{otherInA.SessionId}/revoke", null);
+        var body = await one.Content.ReadAsStringAsync();
+        Assert.AreEqual(HttpStatusCode.OK, one.StatusCode);
+        Assert.IsFalse(await SessionIsValidAsync(otherInA));
+        foreach (var forbidden in new[] { "token", "credential", "secret", "accessToken" })
+            Assert.IsFalse(body.Contains(forbidden, StringComparison.OrdinalIgnoreCase), forbidden);
+        using var oneAgain = await global.Client.PostAsync($"/admin/applications/{applicationA}/sessions/{otherInA.SessionId}/revoke", null);
+        Assert.AreEqual(HttpStatusCode.OK, oneAgain.StatusCode);
+        using var get = await global.Client.GetAsync($"/admin/applications/{applicationA}/sessions/{otherInA.SessionId}");
+        Assert.AreEqual("revoked", JsonDocument.Parse(await get.Content.ReadAsStringAsync()).RootElement.GetProperty("state").GetString());
+
+        using var inApplication = await global.Client.PostAsync($"/admin/applications/{applicationA}/users/{userId}/sessions/revoke", null);
+        Assert.AreEqual(HttpStatusCode.OK, inApplication.StatusCode);
+        var summary = JsonDocument.Parse(await inApplication.Content.ReadAsStringAsync()).RootElement;
+        Assert.AreEqual(1, summary.GetProperty("revoked").GetInt32());
+        Assert.IsFalse(summary.GetProperty("hasMore").GetBoolean());
+        Assert.IsFalse(await SessionIsValidAsync(userInA));
+        Assert.IsTrue(await SessionIsValidAsync(userInB));
+
+        using var everywhere = await global.Client.PostAsync($"/admin/users/{userId}/sessions/revoke", null);
+        Assert.AreEqual(1, JsonDocument.Parse(await everywhere.Content.ReadAsStringAsync()).RootElement.GetProperty("revoked").GetInt32());
+        Assert.IsFalse(await SessionIsValidAsync(userInB));
+        using var repeated = await global.Client.PostAsync($"/admin/users/{userId}/sessions/revoke", null);
+        Assert.AreEqual(0, JsonDocument.Parse(await repeated.Content.ReadAsStringAsync()).RootElement.GetProperty("revoked").GetInt32());
+
+        using var userSessions = await global.Client.GetAsync($"/admin/users/{userId}/sessions?state=revoked");
+        Assert.AreEqual(2, JsonDocument.Parse(await userSessions.Content.ReadAsStringAsync()).RootElement.GetProperty("items").GetArrayLength());
+
+        var (applicationC, codeC) = await factory.CreateApplicationAsync();
+        using var c1 = await NewMemberSessionAsync(factory, applicationC, codeC);
+        using var c2 = await NewMemberSessionAsync(factory, applicationC, codeC);
+        using var allInC = await global.Client.PostAsync($"/admin/applications/{applicationC}/sessions/revoke", null);
+        Assert.AreEqual(2, JsonDocument.Parse(await allInC.Content.ReadAsStringAsync()).RootElement.GetProperty("revoked").GetInt32());
+        Assert.IsFalse(await SessionIsValidAsync(c1));
+        Assert.IsFalse(await SessionIsValidAsync(c2));
+
+        using var missingUser = await global.Client.PostAsync($"/admin/users/{Guid.NewGuid()}/sessions/revoke", null);
+        Assert.AreEqual(HttpStatusCode.NotFound, missingUser.StatusCode);
+
+        using var scope = factory.Services.CreateScope();
+        var events = scope.ServiceProvider.GetRequiredService<AuthenticationDbContext>().SecurityEvents;
+        foreach (var session in new[] { otherInA, userInA, userInB, c1, c2 })
+        {
+            var recorded = await events.Where(item => item.EventType == "session.revoked" && item.SubjectId == session.SessionId).ToListAsync();
+            Assert.AreEqual(1, recorded.Count);
+            Assert.AreEqual("session", recorded[0].SubjectType);
+            Assert.AreEqual(global.UserId, recorded[0].ActorUserId);
+        }
+    }
+
+    [TestMethod]
+    public async Task Bulk_revocation_is_capped_and_reports_whether_more_remain()
+    {
+        Environment.SetEnvironmentVariable("Administration__MaxBulkSessionRevocation", "2");
+        try
+        {
+            var policy = new TestGlobalAdministratorPolicy();
+            using var factory = await MigratedFactoryAsync(policy);
+            using var global = await factory.CreateGlobalAdministratorAsync(policy);
+            var (applicationId, code) = await factory.CreateApplicationAsync();
+            var email = $"cap-{Guid.NewGuid():N}@example.test";
+            var userId = await factory.CreateUserAsync(email);
+            await factory.CreateMembershipAsync(userId, applicationId);
+            var sessions = new List<AdministratorClient>();
+            for (var i = 0; i < 3; i++) sessions.Add(await factory.SignInAsync(email, applicationId, code));
+            try
+            {
+                var results = new List<(int Revoked, bool HasMore)>();
+                for (var i = 0; i < 3; i++)
+                {
+                    using var response = await global.Client.PostAsync($"/admin/users/{userId}/sessions/revoke", null);
+                    var root = JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement;
+                    results.Add((root.GetProperty("revoked").GetInt32(), root.GetProperty("hasMore").GetBoolean()));
+                }
+
+                CollectionAssert.AreEqual(new[] { (2, true), (1, false), (0, false) }, results);
+                foreach (var session in sessions) Assert.IsFalse(await SessionIsValidAsync(session));
+            }
+            finally { foreach (var session in sessions) session.Dispose(); }
+        }
+        finally { Environment.SetEnvironmentVariable("Administration__MaxBulkSessionRevocation", null); }
+    }
+
+    [TestMethod]
+    public void Startup_fails_with_an_invalid_bulk_revocation_limit()
+    {
+        AssertStartupFails("Administration__MaxBulkSessionRevocation", "0");
+        AssertStartupFails("Administration__MaxBulkSessionRevocation", "10001");
+    }
+
     private static async Task<WebApplicationFactory<Program>> MigratedFactoryAsync(TestGlobalAdministratorPolicy policy, TimeProvider? time = null)
     {
         var factory = new WebApplicationFactory<Program>().WithGlobalAdministrators(policy);

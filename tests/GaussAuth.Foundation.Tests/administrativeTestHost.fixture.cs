@@ -126,7 +126,7 @@ internal static class AdministrativeTestHost
     }
 
     /// <summary>Creates a role holding the named permissions (which must already exist in the Application) and assigns it to the user.</summary>
-    public static async Task GrantPermissionsAsync(this WebApplicationFactory<Program> factory, Guid applicationId, Guid userId, params string[] permissionCodes)
+    public static async Task<Guid> GrantPermissionsAsync(this WebApplicationFactory<Program> factory, Guid applicationId, Guid userId, params string[] permissionCodes)
     {
         using var scope = factory.Services.CreateScope();
         var provider = scope.ServiceProvider;
@@ -144,5 +144,6 @@ internal static class AdministrativeTestHost
 
         var assignedRole = await provider.GetRequiredService<UserRoleService>().AssignAsync(applicationId, userId, role.Id, CancellationToken.None);
         if (assignedRole.UserRole is null) throw new InvalidOperationException("Test role assignment failed.");
+        return role.Id;
     }
 }

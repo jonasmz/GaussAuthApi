@@ -1,3 +1,4 @@
+using GaussAuth.Application.Administration.AuthorizationView;
 using GaussAuth.Application.Authorization;
 using GaussAuth.Domain.Authorization;
 using GaussAuth.Api.Administration;
@@ -17,6 +18,7 @@ public static class AuthorizationEndpoints
         app.MapPost("/applications/{applicationId:guid}/users/{userId:guid}/roles/{roleId:guid}/remove", RemoveUserRoleAsync).RequireApplicationAdministrator(AdministrativePermissionCatalog.RolesManage);
         app.MapGet("/applications/{applicationId:guid}/users/{userId:guid}/roles", ListUserRolesAsync).RequireApplicationAdministrator(AdministrativePermissionCatalog.RolesRead);
         app.MapGet("/applications/{applicationId:guid}/users/{userId:guid}/effective-permissions", GetEffectivePermissionsAsync).RequireApplicationAdministrator(AdministrativePermissionCatalog.RolesRead);
+        app.MapGet("/applications/{applicationId:guid}/users/{userId:guid}/authorization", GetAuthorizationViewAsync).RequireApplicationAdministrator(AdministrativePermissionCatalog.RolesRead);
         return app;
     }
 
@@ -67,6 +69,12 @@ public static class AuthorizationEndpoints
             not null => TypedResults.BadRequest(),
             _ => TypedResults.Ok(new EffectivePermissionListResponse(page.Items.Select(EffectivePermissionResponse.FromDomain).ToArray())),
         };
+    }
+
+    private static async Task<IResult> GetAuthorizationViewAsync(Guid applicationId, Guid userId, GetAuthorizationViewHandler handler, CancellationToken ct)
+    {
+        var result = await handler.HandleAsync(new GetAuthorizationViewQuery(applicationId, userId), ct);
+        return result.View is { } view ? TypedResults.Ok(AuthorizationViewResponse.FromDomain(view)) : NotFound();
     }
 
     private static IResult RolePermissionsPage(AuthorizationPage<RolePermission> page) => page.Failure switch

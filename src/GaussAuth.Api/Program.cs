@@ -1,4 +1,5 @@
 using GaussAuth.Api.DependencyInjection;
+using GaussAuth.Api.Administration;
 using GaussAuth.Api.Users;
 using GaussAuth.Api.Applications;
 using GaussAuth.Api.Memberships;
@@ -42,6 +43,7 @@ admin.MapMembershipsEndpoints();
 admin.MapRolesEndpoints();
 admin.MapPermissionsEndpoints();
 admin.MapAuthorizationEndpoints();
+admin.MapAdministrativeSessionEndpoints();
 app.MapLoginEndpoints();
 app.MapSessionsEndpoints();
 app.MapPasswordsEndpoints();

@@ -77,6 +77,9 @@ public static class InfrastructureServiceCollectionExtensions
             .AddSignInManager()
             .AddDefaultTokenProviders();
 
+        services.AddSingleton(new GaussAuth.Application.Administration.AdministrationOptions(
+            configuration.GetValue("Administration:MaxBulkSessionRevocation", GaussAuth.Application.Administration.AdministrationOptions.DefaultMaxBulkSessionRevocation)));
+
         SessionPolicy sessionPolicy;
         try
         {

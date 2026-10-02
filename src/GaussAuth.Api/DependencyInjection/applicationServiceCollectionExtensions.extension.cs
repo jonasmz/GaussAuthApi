@@ -1,6 +1,8 @@
 using GaussAuth.Application.Administration.Authorization;
+using GaussAuth.Application.Administration.AuthorizationView;
 using GaussAuth.Application.Administration.Bootstrap;
 using GaussAuth.Application.Administration.Ports;
+using GaussAuth.Application.Administration.Sessions;
 using GaussAuth.Application.Administration.Users.ListUsers;
 using GaussAuth.Application.Users.ActivateUser;
 using GaussAuth.Application.Users.CreateUser;
@@ -30,6 +32,8 @@ public static class ApplicationServiceCollectionExtensions
         services.AddScoped<CreateUserHandler>();
         services.AddScoped<GetUserHandler>();
         services.AddScoped<ListUsersHandler>();
+        services.AddScoped<AdministrativeSessionService>();
+        services.AddScoped<GetAuthorizationViewHandler>();
         services.AddScoped<UpdateProfileHandler>();
         services.AddScoped<ActivateUserHandler>();
         services.AddScoped<DeactivateUserHandler>();
