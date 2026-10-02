@@ -126,9 +126,17 @@ Conclusions: no `Up` drops or rewrites user, security, authorization-history or 
 
 Filled by T045–T049 (image, compose, persistence, shutdown).
 
+### Phase 7 runtime package
+
+The production image builds successfully from the Dockerfile. Inspection confirms non-root `app` (UID 1654), direct `dotnet GaussAuth.Api.dll` entrypoint, exposed port 8080, a non-empty `/app/db/gaussauth-schema.sql`, writable data directories, and no SDK in the runtime stage. The release compose validates its migrate-before-api dependency graph and declares persistent database, profile-image, and key-ring volumes. The application host shutdown timeout is 30 seconds and the compose grace period is 40 seconds.
+
 ## Security
 
 Filled by T050–T056 and T060–T062 (forwarded headers, headers/CORS/error shape, rate-limit coverage, secret scan).
+
+### Phase 8 HTTP/proxy baseline
+
+Forwarded headers are processed only from explicitly trusted proxies/networks and only for one `X-Forwarded-For`/`X-Forwarded-Proto` hop; missing trust configuration ignores them and warns, while the unsafe framework shortcut fails closed. Kestrel suppresses the Server header, HSTS is Production-class-only, HTTPS redirection needs an explicit port, CORS remains absent, and unexpected exceptions are logged with the trace id while responses stay generic. Focused Release startup/readiness regression: 17 passed, 0 failed.
 
 ## Findings
 

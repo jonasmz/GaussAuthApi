@@ -12,7 +12,7 @@ public sealed class SafeExceptionHandler(
         Exception exception,
         CancellationToken cancellationToken)
     {
-        logger.LogError("Unexpected API error");
+        logger.LogError(exception, "Unexpected API error. TraceId {TraceId}", context.TraceIdentifier);
         context.Response.StatusCode = StatusCodes.Status500InternalServerError;
 
         var written = await problemDetails.TryWriteAsync(new ProblemDetailsContext

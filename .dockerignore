@@ -1,9 +1,13 @@
 .git/
-.env
-.env.*
-!.env.example
+.env*
 **/bin/
 **/obj/
 packages/
 *.log
 coverage/
+specs/
+tests/
+docs/
+artifacts/
+.profile-images/
+*.pem
