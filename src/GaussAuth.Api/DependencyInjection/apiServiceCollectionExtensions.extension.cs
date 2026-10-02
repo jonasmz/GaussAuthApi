@@ -11,28 +11,7 @@ public static class ApiServiceCollectionExtensions
         services.AddProblemDetails();
         services.AddExceptionHandler<SafeExceptionHandler>();
 
-        var userCreationPermitLimit = configuration.GetValue("RateLimiting:UserCreation:PermitLimit", 5);
-        var userCreationWindow = TimeSpan.FromSeconds(configuration.GetValue("RateLimiting:UserCreation:WindowSeconds", 60));
-        var loginPermitLimit = configuration.GetValue("RateLimiting:Login:PermitLimit", 5);
-        var loginWindow = TimeSpan.FromSeconds(configuration.GetValue("RateLimiting:Login:WindowSeconds", 60));
-        var signingKeysPermitLimit = configuration.GetValue("RateLimiting:SigningKeys:PermitLimit", 60);
-        var signingKeysWindow = TimeSpan.FromSeconds(configuration.GetValue("RateLimiting:SigningKeys:WindowSeconds", 60));
-        var sessionCredentialsPermitLimit = configuration.GetValue("RateLimiting:SessionCredentials:PermitLimit", 600);
-        var sessionCredentialsWindow = TimeSpan.FromSeconds(configuration.GetValue("RateLimiting:SessionCredentials:WindowSeconds", 60));
-        var passwordRecoveryPermitLimit = configuration.GetValue("RateLimiting:PasswordRecovery:PermitLimit", 5);
-        var passwordRecoveryWindow = TimeSpan.FromSeconds(configuration.GetValue("RateLimiting:PasswordRecovery:WindowSeconds", 60));
-        var passwordResetPermitLimit = configuration.GetValue("RateLimiting:PasswordReset:PermitLimit", 5);
-        var passwordResetWindow = TimeSpan.FromSeconds(configuration.GetValue("RateLimiting:PasswordReset:WindowSeconds", 60));
-        var authorizationContextPermitLimit = configuration.GetValue("RateLimiting:AuthorizationContext:PermitLimit", 600);
-        var authorizationContextWindow = TimeSpan.FromSeconds(configuration.GetValue("RateLimiting:AuthorizationContext:WindowSeconds", 60));
-        var securityEventsPermitLimit = configuration.GetValue("RateLimiting:SecurityEvents:PermitLimit", 60);
-        var securityEventsWindow = TimeSpan.FromSeconds(configuration.GetValue("RateLimiting:SecurityEvents:WindowSeconds", 60));
-
-        var administrationPermitLimit = configuration.GetValue("RateLimiting:Administration:PermitLimit", 120);
-        var administrationWindow = TimeSpan.FromSeconds(configuration.GetValue("RateLimiting:Administration:WindowSeconds", 60));
-        if (administrationPermitLimit < 1 || administrationWindow <= TimeSpan.Zero) throw new InvalidOperationException("Administration rate limit configuration is invalid.");
-        var profileImageWritePermitLimit = configuration.GetValue("RateLimiting:ProfileImageWrite:PermitLimit", 10);
-        var profileImageWriteWindow = TimeSpan.FromSeconds(configuration.GetValue("RateLimiting:ProfileImageWrite:WindowSeconds", 60));
+        var limits = RateLimitOptions.Load(configuration);
 
         services.Configure<FormOptions>(options =>
         {
@@ -57,52 +36,28 @@ public static class ApiServiceCollectionExtensions
                 return ValueTask.CompletedTask;
             };
 
-            options.AddPolicy("user-creation", httpContext => RateLimitPartition.GetFixedWindowLimiter(
-                partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
-                factory: _ => new FixedWindowRateLimiterOptions
-                {
-                    PermitLimit = userCreationPermitLimit,
-                    Window = userCreationWindow,
-                    QueueLimit = 0
-                }));
-
-            options.AddPolicy("login", httpContext => RateLimitPartition.GetFixedWindowLimiter(
-                partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
-                factory: _ => new FixedWindowRateLimiterOptions
-                {
-                    PermitLimit = loginPermitLimit,
-                    Window = loginWindow,
-                    QueueLimit = 0
-                }));
-
-            options.AddPolicy("signing-keys", httpContext => RateLimitPartition.GetFixedWindowLimiter(
-                partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
-                factory: _ => new FixedWindowRateLimiterOptions { PermitLimit = signingKeysPermitLimit, Window = signingKeysWindow, QueueLimit = 0 }));
-
-            options.AddPolicy("session-credentials", httpContext => RateLimitPartition.GetFixedWindowLimiter(
-                partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
-                factory: _ => new FixedWindowRateLimiterOptions { PermitLimit = sessionCredentialsPermitLimit, Window = sessionCredentialsWindow, QueueLimit = 0 }));
-
-            options.AddPolicy("password-recovery", httpContext => RateLimitPartition.GetFixedWindowLimiter(
-                partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
-                factory: _ => new FixedWindowRateLimiterOptions { PermitLimit = passwordRecoveryPermitLimit, Window = passwordRecoveryWindow, QueueLimit = 0 }));
-            options.AddPolicy("password-reset", httpContext => RateLimitPartition.GetFixedWindowLimiter(
-                partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
-                factory: _ => new FixedWindowRateLimiterOptions { PermitLimit = passwordResetPermitLimit, Window = passwordResetWindow, QueueLimit = 0 }));
-            options.AddPolicy("authorization-context", httpContext => RateLimitPartition.GetFixedWindowLimiter(
-                partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
-                factory: _ => new FixedWindowRateLimiterOptions { PermitLimit = authorizationContextPermitLimit, Window = authorizationContextWindow, QueueLimit = 0 }));
-            options.AddPolicy("profile-image-write", httpContext => RateLimitPartition.GetFixedWindowLimiter(
-                partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
-                factory: _ => new FixedWindowRateLimiterOptions { PermitLimit = profileImageWritePermitLimit, Window = profileImageWriteWindow, QueueLimit = 0 }));
-            options.AddPolicy("administration", httpContext => RateLimitPartition.GetFixedWindowLimiter(
-                partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
-                factory: _ => new FixedWindowRateLimiterOptions { PermitLimit = administrationPermitLimit, Window = administrationWindow, QueueLimit = 0 }));
-            options.AddPolicy("security-events", httpContext => RateLimitPartition.GetFixedWindowLimiter(
-                partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
-                factory: _ => new FixedWindowRateLimiterOptions { PermitLimit = securityEventsPermitLimit, Window = securityEventsWindow, QueueLimit = 0 }));
+            AddFixedWindowPolicy(options, "user-creation", limits.UserCreation);
+            AddFixedWindowPolicy(options, "login", limits.Login);
+            AddFixedWindowPolicy(options, "signing-keys", limits.SigningKeys);
+            AddFixedWindowPolicy(options, "session-credentials", limits.SessionCredentials);
+            AddFixedWindowPolicy(options, "password-recovery", limits.PasswordRecovery);
+            AddFixedWindowPolicy(options, "password-reset", limits.PasswordReset);
+            AddFixedWindowPolicy(options, "authorization-context", limits.AuthorizationContext);
+            AddFixedWindowPolicy(options, "profile-image-write", limits.ProfileImageWrite);
+            AddFixedWindowPolicy(options, "administration", limits.Administration);
+            AddFixedWindowPolicy(options, "security-events", limits.SecurityEvents);
         });
 
         return services;
     }
+
+    private static void AddFixedWindowPolicy(RateLimiterOptions options, string name, RateLimitPolicyOptions limit) =>
+        options.AddPolicy(name, httpContext => RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = limit.PermitLimit,
+                Window = limit.Window,
+                QueueLimit = 0
+            }));
 }

@@ -110,8 +110,9 @@ src/GaussAuth.Infrastructure/
 ├── Configuration/
 │   ├── startupConfigurationException.exception.cs # NEW: setting-naming, value-free
 │   ├── productionClassEnvironment.extension.cs    # NEW: Production-class rule (R1)
-│   ├── dataProtectionOptions.options.cs           # NEW: key-ring path (required in Production-class)
-│   ├── dataProtectionOptions.validator.cs         # NEW
+│   ├── keyRingOptions.options.cs                  # NEW: key-ring path (required in Production-class)
+│   ├── keyRingOptions.validator.cs                # NEW
+│   ├── configurationValueReader.extension.cs      # NEW: value-free typed/bounded configuration reads
 │   └── startupDiagnostics.service.cs              # NEW: startup/shutdown summary + Production-class warnings
 ├── Health/
 │   ├── databaseReadiness.check.cs                 # NEW: reachable + schema current
@@ -138,6 +139,7 @@ src/GaussAuth.Api/
     ├── forwardedHeadersSetup.extension.cs         # NEW: explicit trusted proxies only
     ├── forwardedHeadersOptions.options.cs         # NEW
     ├── forwardedHeadersOptions.validator.cs       # NEW
+    ├── rateLimitPolicy.options.cs                 # NEW: one group's PermitLimit/Window
     ├── rateLimitOptions.options.cs                # NEW: validated per-group limits
     ├── rateLimitOptions.validator.cs              # NEW
     ├── readinessEndpoints.extension.cs            # NEW: /health/ready
@@ -151,6 +153,8 @@ tests/GaussAuth.Foundation.Tests/
 ├── httpBaselineTests.test.cs                      # NEW (headers, CORS denied, limits, error shape)
 ├── rateLimitCoverageTests.test.cs                 # NEW (every endpoint limited or exempt-by-rationale)
 ├── recoveryWithoutDeliveryTests.test.cs           # NEW
+├── countingPasswordCredentialService.fixture.cs   # NEW: spy proving no credential is generated
+├── testHostEnvironment.fixture.cs                 # NEW: IHostEnvironment with a chosen name
 ├── throwawayDatabase.fixture.cs                   # NEW: uniquely named empty database per test
 ├── throwawayDatabaseTests.test.cs                 # NEW: fixture sanity (created empty, unique, dropped)
 ├── startupFailureReporterTests.test.cs            # NEW: reporter output is key-only, no stack trace

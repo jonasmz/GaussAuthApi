@@ -10,9 +10,20 @@ namespace GaussAuth.Foundation.Tests;
 /// </summary>
 internal static class ApiProcess
 {
+    public static Task<(int ExitCode, string Output, bool TimedOut)> RunAsync(
+        IReadOnlyDictionary<string, string?> environment,
+        TimeSpan timeout,
+        params string[] arguments) => RunAsync(environment, timeout, null, arguments);
+
+    /// <summary>
+    /// Runs the API until it exits, the timeout elapses, or <paramref name="stopWhen"/> reports that the captured output
+    /// shows what the test is waiting for (for example the web host announcing it is listening); in that case the process
+    /// is killed and the exit code is reported as -2.
+    /// </summary>
     public static async Task<(int ExitCode, string Output, bool TimedOut)> RunAsync(
         IReadOnlyDictionary<string, string?> environment,
         TimeSpan timeout,
+        Func<string, bool>? stopWhen,
         params string[] arguments)
     {
         var start = new ProcessStartInfo("dotnet")
@@ -45,9 +56,28 @@ internal static class ApiProcess
 
         using var cancellation = new CancellationTokenSource(timeout);
         var timedOut = false;
+        var stoppedEarly = false;
         try
         {
-            await process.WaitForExitAsync(cancellation.Token);
+            var exited = process.WaitForExitAsync(cancellation.Token);
+            while (!exited.IsCompleted)
+            {
+                if (stopWhen is not null)
+                {
+                    string snapshot;
+                    lock (sync) snapshot = output.ToString();
+                    if (stopWhen(snapshot))
+                    {
+                        stoppedEarly = true;
+                        process.Kill(entireProcessTree: true);
+                        break;
+                    }
+                }
+
+                await Task.WhenAny(exited, Task.Delay(100, cancellation.Token));
+            }
+
+            await process.WaitForExitAsync();
             // Drain asynchronous output handlers after exit.
             process.WaitForExit();
         }
@@ -60,6 +90,6 @@ internal static class ApiProcess
 
         string captured;
         lock (sync) captured = output.ToString();
-        return (timedOut ? -1 : process.ExitCode, captured, timedOut);
+        return (timedOut ? -1 : stoppedEarly ? -2 : process.ExitCode, captured, timedOut);
     }
 }

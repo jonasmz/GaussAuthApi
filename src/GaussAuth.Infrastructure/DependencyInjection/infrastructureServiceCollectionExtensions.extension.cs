@@ -1,5 +1,6 @@
 using GaussAuth.Application.Administration.Ports;
 using GaussAuth.Infrastructure.Administration;
+using GaussAuth.Infrastructure.Configuration;
 using GaussAuth.Application.Users.Ports;
 using GaussAuth.Application.Applications.Ports;
 using GaussAuth.Application.Memberships.Ports;
@@ -23,6 +24,7 @@ using GaussAuth.Application.Profiles.Avatars.Ports;
 using GaussAuth.Infrastructure.ProfileImages;
 using GaussAuth.Infrastructure.Persistence;
 using GaussAuth.Infrastructure.Security;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -39,32 +41,34 @@ public static class InfrastructureServiceCollectionExtensions
         IConfiguration configuration,
         IHostEnvironment? environment = null)
     {
+        const string connectionKey = "ConnectionStrings:AuthenticationDatabase";
         var connection = configuration.GetConnectionString("AuthenticationDatabase");
         if (string.IsNullOrWhiteSpace(connection))
         {
-            throw new InvalidOperationException("Authentication database connection configuration is missing or invalid.");
+            throw new StartupConfigurationException(connectionKey, "is required: configure a PostgreSQL connection string");
         }
 
+        NpgsqlConnectionStringBuilder parsed;
         try
         {
-            var parsed = new NpgsqlConnectionStringBuilder(connection);
-            if (!parsed.ContainsKey("Host") || !parsed.ContainsKey("Database") ||
-                !parsed.ContainsKey("Username") || string.IsNullOrWhiteSpace(parsed.Host) ||
-                string.IsNullOrWhiteSpace(parsed.Database) || string.IsNullOrWhiteSpace(parsed.Username))
-            {
-                throw new InvalidOperationException("Authentication database connection configuration is missing or invalid.");
-            }
+            parsed = new NpgsqlConnectionStringBuilder(connection);
         }
         catch (ArgumentException)
         {
-            throw new InvalidOperationException("Authentication database connection configuration is missing or invalid.");
+            throw new StartupConfigurationException(connectionKey, "is not a valid PostgreSQL connection string");
+        }
+
+        if (!parsed.ContainsKey("Host") || !parsed.ContainsKey("Database") || !parsed.ContainsKey("Username") ||
+            string.IsNullOrWhiteSpace(parsed.Host) || string.IsNullOrWhiteSpace(parsed.Database) || string.IsNullOrWhiteSpace(parsed.Username))
+        {
+            throw new StartupConfigurationException(connectionKey, "must specify Host, Database and Username");
         }
 
         services.AddDbContext<AuthenticationDbContext>(options => options.UseNpgsql(connection));
         services.AddAuthentication();
 
-        var maxFailedAccessAttempts = configuration.GetValue("Identity:Lockout:MaxFailedAccessAttempts", 5);
-        var lockoutMinutes = configuration.GetValue("Identity:Lockout:DefaultLockoutMinutes", 5);
+        var maxFailedAccessAttempts = configuration.GetBoundedInt32("Identity:Lockout:MaxFailedAccessAttempts", 5, 1, 1_000);
+        var lockoutMinutes = configuration.GetBoundedInt32("Identity:Lockout:DefaultLockoutMinutes", 5, 1, 525_600);
 
         services.AddIdentityCore<IdentityUser<Guid>>(options =>
             {
@@ -78,19 +82,20 @@ public static class InfrastructureServiceCollectionExtensions
             .AddDefaultTokenProviders();
 
         services.AddSingleton(new GaussAuth.Application.Administration.AdministrationOptions(
-            configuration.GetValue("Administration:MaxBulkSessionRevocation", GaussAuth.Application.Administration.AdministrationOptions.DefaultMaxBulkSessionRevocation)));
+            configuration.GetBoundedInt32(
+                "Administration:MaxBulkSessionRevocation",
+                GaussAuth.Application.Administration.AdministrationOptions.DefaultMaxBulkSessionRevocation,
+                1,
+                GaussAuth.Application.Administration.AdministrationOptions.MaximumAllowedBulkSessionRevocation)));
 
-        SessionPolicy sessionPolicy;
-        try
+        var sessionMinutes = configuration.GetBoundedInt32("Sessions:SessionLifetimeMinutes", 480, 1, 525_600);
+        var accessMinutes = configuration.GetBoundedInt32("Sessions:AccessTokenLifetimeMinutes", 15, 1, 525_600);
+        if (accessMinutes > sessionMinutes)
         {
-            sessionPolicy = new SessionPolicy(
-                TimeSpan.FromMinutes(configuration.GetValue("Sessions:SessionLifetimeMinutes", 480)),
-                TimeSpan.FromMinutes(configuration.GetValue("Sessions:AccessTokenLifetimeMinutes", 15)));
+            throw new StartupConfigurationException("Sessions:AccessTokenLifetimeMinutes", "must not exceed Sessions:SessionLifetimeMinutes");
         }
-        catch (ArgumentException)
-        {
-            throw new InvalidOperationException("Session lifetime configuration is missing or invalid.");
-        }
+
+        var sessionPolicy = new SessionPolicy(TimeSpan.FromMinutes(sessionMinutes), TimeSpan.FromMinutes(accessMinutes));
         services.AddSingleton(sessionPolicy);
 
         var signingKey = AccessCredentialSigningKey.Load(configuration, environment);
@@ -122,12 +127,19 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddSingleton<IGlobalAdministratorPolicy>(new ConfiguredGlobalAdministratorPolicy(configuration));
         services.AddScoped<ISecurityEventRecorder, PersistedSecurityEventRecorder>();
 
+        var keyRing = KeyRingOptions.Load(configuration, environment);
+        services.AddSingleton(keyRing);
+        var dataProtection = services.AddDataProtection().SetApplicationName("GaussAuth");
+        if (keyRing.KeysPath is not null) dataProtection.PersistKeysToFileSystem(new DirectoryInfo(keyRing.KeysPath));
+
         var profileImages = ProfileImagesOptions.Load(configuration, environment);
         services.AddSingleton(profileImages);
         services.AddSingleton(profileImages.Limits);
         services.AddSingleton<IProfileImageProcessor>(new SkiaProfileImageProcessor(profileImages.Limits));
         services.AddSingleton<IProfileImageStorage>(provider => new LocalProfileImageStorage(
             profileImages, provider.GetRequiredService<ILogger<LocalProfileImageStorage>>()));
+
+        services.AddHostedService<StartupDiagnostics>();
 
         return services;
     }

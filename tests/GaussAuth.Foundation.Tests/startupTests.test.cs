@@ -14,6 +14,8 @@ public sealed class StartupTests
     private const string TestConnection = "Host=localhost;Database=foundation_test;Username=test;Password=not_a_secret";
     private static readonly string TestProfileImagesRoot = Path.Combine(Path.GetTempPath(), "gaussauth-startup-test-images");
 
+    private static readonly string TestKeyRingPath = Path.Combine(Path.GetTempPath(), "gaussauth-startup-test-keys");
+
     private static readonly string TestSigningKeyPem = ECDsa.Create(ECCurve.NamedCurves.nistP256).ExportPkcs8PrivateKeyPem();
 
     [TestMethod]
@@ -58,7 +60,7 @@ public sealed class StartupTests
         var output = result.Output;
 
         Assert.AreNotEqual(0, result.ExitCode);
-        Assert.Contains("database connection configuration", output);
+        Assert.Contains("ConnectionStrings:AuthenticationDatabase", output);
         if (connection.Length > 0)
         {
             Assert.DoesNotContain(connection, output);
@@ -80,6 +82,8 @@ public sealed class StartupTests
                 ["ConnectionStrings__AuthenticationDatabase"] = TestConnection,
                 ["ASPNETCORE_ENVIRONMENT"] = "Production",
                 ["ProfileImages__RootPath"] = TestProfileImagesRoot,
+                ["ProfileImages__StorageIsPersistent"] = "true",
+                ["DataProtection__KeysPath"] = TestKeyRingPath,
                 ["Sessions__Signing__PrivateKeyPem"] = withKey ? TestSigningKeyPem : "",
                 [key] = value
             },
@@ -87,8 +91,10 @@ public sealed class StartupTests
         if (result.TimedOut) Assert.Fail("API remained running with invalid session configuration.");
         var output = result.Output;
         Assert.AreNotEqual(0, result.ExitCode);
-        Assert.IsTrue(output.Contains("Session lifetime configuration is missing or invalid.") ||
-                      output.Contains("Access credential signing configuration is missing or invalid."));
+        var expectedSetting = key.StartsWith("Sessions__Signing", StringComparison.Ordinal)
+            ? "Sessions:Signing:PrivateKeyPem"
+            : key.Replace("__", ":", StringComparison.Ordinal);
+        Assert.Contains(expectedSetting, output);
         Assert.DoesNotContain("BEGIN PRIVATE KEY", output);
         Assert.DoesNotContain("not_a_secret", output);
     }
@@ -152,6 +158,8 @@ public sealed class StartupTests
         // Environment variables are visible to the eager configuration reads in Program.cs; in-memory sources are not.
         Environment.SetEnvironmentVariable("Sessions__Signing__PrivateKeyPem", TestSigningKeyPem);
         Environment.SetEnvironmentVariable("ProfileImages__RootPath", TestProfileImagesRoot);
+        Environment.SetEnvironmentVariable("ProfileImages__StorageIsPersistent", "true");
+        Environment.SetEnvironmentVariable("DataProtection__KeysPath", TestKeyRingPath);
         return new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
         {
             builder.UseEnvironment("Production");

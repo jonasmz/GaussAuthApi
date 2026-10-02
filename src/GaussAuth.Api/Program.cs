@@ -26,8 +26,7 @@ if (commandExitCode is { } exitCode) return exitCode;
 try
 {
     var builder = WebApplication.CreateBuilder(args);
-    var maximumRequestBodyBytes = builder.Configuration.GetValue("RequestLimits:MaxBodyBytes", 65_536);
-    if (maximumRequestBodyBytes is < 1 or > 1_048_576) throw new InvalidOperationException("Request body limit configuration is invalid.");
+    var maximumRequestBodyBytes = builder.Configuration.GetBoundedInt32("RequestLimits:MaxBodyBytes", 65_536, 1, 1_048_576);
     builder.WebHost.ConfigureKestrel(options => options.Limits.MaxRequestBodySize = maximumRequestBodyBytes);
 
     builder.Services.AddApplication();

@@ -1,4 +1,5 @@
 using GaussAuth.Application.Administration.Ports;
+using GaussAuth.Infrastructure.Configuration;
 using Microsoft.Extensions.Configuration;
 
 namespace GaussAuth.Infrastructure.Administration;
@@ -12,7 +13,7 @@ public sealed class ConfiguredGlobalAdministratorPolicy : IGlobalAdministratorPo
     public ConfiguredGlobalAdministratorPolicy(IConfiguration configuration)
     {
         if (!string.IsNullOrWhiteSpace(configuration[LegacyConfigurationKey]))
-            throw new InvalidOperationException($"{LegacyConfigurationKey} is no longer supported; configure {ConfigurationKey} instead.");
+            throw new StartupConfigurationException(LegacyConfigurationKey, $"is no longer supported; configure {ConfigurationKey} instead");
 
         var administrators = new HashSet<Guid>();
         foreach (var entry in configuration.GetSection(ConfigurationKey).GetChildren())
@@ -20,7 +21,7 @@ public sealed class ConfiguredGlobalAdministratorPolicy : IGlobalAdministratorPo
             // A blank entry means "not configured" (for example an unset deployment variable) and confers no authority.
             if (string.IsNullOrWhiteSpace(entry.Value)) continue;
             if (!Guid.TryParse(entry.Value, out var userId) || userId == Guid.Empty)
-                throw new InvalidOperationException("Global administrator configuration is invalid.");
+                throw new StartupConfigurationException(ConfigurationKey, "contains an entry that is not a valid non-empty GUID");
             administrators.Add(userId);
         }
 

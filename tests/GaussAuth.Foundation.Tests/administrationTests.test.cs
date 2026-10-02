@@ -9,6 +9,7 @@ using GaussAuth.Application.Authorization;
 using GaussAuth.Application.Sessions;
 using GaussAuth.Application.Users.DeactivateUser;
 using GaussAuth.Infrastructure.Administration;
+using GaussAuth.Infrastructure.Configuration;
 using GaussAuth.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
@@ -47,18 +48,22 @@ public sealed class AdministrationTests
     [TestMethod]
     public void Global_administrator_policy_rejects_invalid_entries_and_the_legacy_key()
     {
-        Assert.Throws<InvalidOperationException>(() => new ConfiguredGlobalAdministratorPolicy(Configuration(new()
+        var invalid = Assert.ThrowsExactly<StartupConfigurationException>(() => new ConfiguredGlobalAdministratorPolicy(Configuration(new()
         {
             ["Administration:GlobalAdministratorUserIds:0"] = "not-a-guid",
         })));
-        Assert.Throws<InvalidOperationException>(() => new ConfiguredGlobalAdministratorPolicy(Configuration(new()
+        Assert.AreEqual("Administration:GlobalAdministratorUserIds", invalid.Setting);
+        Assert.DoesNotContain("not-a-guid", invalid.Message);
+        var empty = Assert.ThrowsExactly<StartupConfigurationException>(() => new ConfiguredGlobalAdministratorPolicy(Configuration(new()
         {
             ["Administration:GlobalAdministratorUserIds:0"] = Guid.Empty.ToString(),
         })));
-        var legacy = Assert.Throws<InvalidOperationException>(() => new ConfiguredGlobalAdministratorPolicy(Configuration(new()
+        Assert.AreEqual("Administration:GlobalAdministratorUserIds", empty.Setting);
+        var legacy = Assert.ThrowsExactly<StartupConfigurationException>(() => new ConfiguredGlobalAdministratorPolicy(Configuration(new()
         {
             ["SecurityAudit:GlobalReviewerUserId"] = Guid.NewGuid().ToString(),
         })));
+        Assert.AreEqual("SecurityAudit:GlobalReviewerUserId", legacy.Setting);
         StringAssert.Contains(legacy.Message, "Administration:GlobalAdministratorUserIds");
     }
 
