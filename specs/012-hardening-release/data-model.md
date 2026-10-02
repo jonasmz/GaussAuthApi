@@ -9,11 +9,11 @@ The complete set of externally supplied settings for one environment. Full key l
 | Concept | Rules |
 |---------|-------|
 | Environment class | `Development` and `Testing` are *non-production*; every other name is *Production-class* (R1). Unsafe defaults are only reachable in non-production classes. |
-| Required in Production-class | database connection; signing key (PEM or PEM file); profile storage root; profile storage persistence declaration. |
-| Optional with validated defaults | session/access lifetimes, lockout, request body limit, per-group rate limits, administration limits, audit retention, global administrator list, forwarded-header trust lists, Data Protection key path, HTTPS redirect port, image limits. |
-| Value rules | lifetimes > 0 and access lifetime ≤ session lifetime; rate limits `PermitLimit ≥ 1`, `WindowSeconds ≥ 1`; request body 1..1 048 576 bytes; image limits > 0; storage and key paths absolute and free of NUL; global admin ids valid non-empty GUIDs (blank entries ignored); trust lists parse as IPs/CIDRs and never include a match-everything network; legacy `SecurityAudit:GlobalReviewerUserId` must be unset. |
+| Required in Production-class | database connection; signing key (PEM or PEM file; ECDSA NIST P-256); profile storage root; profile storage persistence declaration; **Data Protection key-ring location**. |
+| Optional with validated defaults | session/access lifetimes, lockout, request body limit, per-group rate limits, administration limits, audit retention, global administrator list, forwarded-header trust lists, HTTPS redirect port, image limits. |
+| Value rules | lifetimes > 0 and access lifetime ≤ session lifetime; rate limits `PermitLimit ≥ 1`, `WindowSeconds ≥ 1`; request body 1..1 048 576 bytes; image limits > 0; storage and key-ring paths absolute, free of NUL, and the key-ring path creatable/writable at startup (persistence itself is the operator's declared responsibility and is not inferred); global admin ids valid non-empty GUIDs (blank entries ignored); trust lists parse as IPs/CIDRs and never include a match-everything network; legacy `SecurityAudit:GlobalReviewerUserId` must be unset. |
 | Failure semantics | Invalid → startup refuses, one Critical log naming each offending **setting key** and a value-free reason, non-zero exit, no stack trace. Secrets never appear. |
-| Warnings (start anyway) | no trusted proxies configured; recovery delivery not configured; storage declared non-persistent; Data Protection key path not set; (Production-class only). |
+| Warnings (start anyway) | no trusted proxies configured; recovery delivery not configured; storage declared non-persistent; (Production-class only). The framework's "key stored without encryption at rest" warning is expected and documented. |
 
 ### State: startup
 
@@ -64,6 +64,22 @@ Invariants to validate: applies from an empty PostgreSQL 17 database in this ord
 
 Critical constraints/indexes asserted after migration from zero (names taken from the model snapshot during implementation): unique normalized email; unique application code; unique membership per (user, application); unique role name and permission code per application; unique role-permission and user-role pairs; one consumer credential row per application; session and security-event lookup indexes; the cross-application integrity constraints from 004.
 
+## First Administrator Bootstrap
+
+Operational procedure, not a persisted concept. No new table or column; it creates one ordinary User through the existing create-user use case.
+
+| Rule | Detail |
+|------|--------|
+| Precondition | user store empty (any existing user ⇒ refuse, exit ≠ 0, nothing written). |
+| Inputs | email, password (env or mounted file), optional names — never arguments. |
+| Output | exit 0 and the new `UserId` plus the config key to set; no secret printed or logged. |
+| Authority | none by itself; only `Administration:GlobalAdministratorUserIds` grants it; empty list ⇒ none. |
+
+```text
+empty system ─(migrate)─► schema ─(bootstrap-admin)─► user exists, no authority
+      ─(list UserId + restart)─► global administrator ─► normal 011 administration
+```
+
 ## Release Validation Record
 
 A Markdown document `specs/012-hardening-release/release-validation.md`, created during implementation.
@@ -80,4 +96,4 @@ A Markdown document `specs/012-hardening-release/release-validation.md`, created
 
 ## Operational Documentation Set
 
-Five documents under `docs/` — deployment, configuration, database, security-baseline, limitations — mapped to FR-043 in [research.md](research.md#r19--documentation-set). They link to the contracts rather than duplicating them.
+Six documents under `docs/` — deployment, configuration, database, bootstrap, security-baseline, limitations — mapped to FR-043 in [research.md](research.md#r19--documentation-set). They link to the contracts rather than duplicating them.

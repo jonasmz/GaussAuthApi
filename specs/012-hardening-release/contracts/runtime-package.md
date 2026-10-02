@@ -11,7 +11,7 @@
 | Contents | Published application, `/app/db/gaussauth-schema.sql`. **No** SDK, source, tests, `.env`, keys, passwords, consumer secrets, or development tooling. |
 | Writable paths | `/data/profile-images`, `/data/keys` — created and owned by `app`; declared as volumes. Everything else read-only capable. |
 | Ports | 8080 (HTTP). TLS terminates upstream (proxy/ingress). |
-| Commands | no args → API; `migrate` → migration command. |
+| Commands | no args → API; `migrate` → [migration command](migration-command.md); `bootstrap-admin` → [first administrator bootstrap](bootstrap-command.md). |
 
 ## Evaluation composition (`compose.release.yml`)
 
@@ -21,7 +21,7 @@
 | `migrate` | same API image, `command: ["migrate"]`, one-shot, depends on healthy `postgres`. |
 | `api` | API image; `depends_on: migrate: service_completed_successfully`; port 8080 published to localhost; volumes for profile images and key ring; `stop_grace_period` greater than the host shutdown timeout. |
 
-Configuration comes from `.env.release` (git-ignored; template `.env.release.example` has `replace_with_*` placeholders only). The signing key is a mounted file referenced by `Sessions__Signing__PrivateKeyPemFile`. Required Production settings set explicitly: connection string, signing key file, `ProfileImages__RootPath=/data/profile-images`, `ProfileImages__StorageIsPersistent=true`, `DataProtection__KeysPath=/data/keys`. No trusted proxy is configured by default (direct evaluation; the documented warning appears).
+Configuration comes from `.env.release` (git-ignored; template `.env.release.example` has `replace_with_*` placeholders only). The signing key is a mounted file referenced by `Sessions__Signing__PrivateKeyPemFile`. Required Production settings set explicitly: connection string, signing key file, `ProfileImages__RootPath=/data/profile-images`, `ProfileImages__StorageIsPersistent=true`, `DataProtection__KeysPath=/data/keys` (**required**: the API refuses to start in Production without it; the `/data/keys` volume must persist across container recreation). No trusted proxy is configured by default (direct evaluation; the documented warning appears).
 
 `compose.dev.yml` and the AI development container are not modified; the development container is not the production image.
 

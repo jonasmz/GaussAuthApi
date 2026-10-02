@@ -4,11 +4,14 @@ Environment variables use `__` for `:` (e.g. `Sessions__Signing__PrivateKeyPemFi
 
 ## Required in Production-class
 
+Five keys: connection, signing key, profile storage root, profile storage persistence declaration, Data Protection key-ring location.
+
 | Key | Meaning | Validation |
 |-----|---------|------------|
 | `ConnectionStrings:AuthenticationDatabase` | PostgreSQL 17 connection (**secret**) | parses; host, database, username present |
-| `Sessions:Signing:PrivateKeyPem` *or* `Sessions:Signing:PrivateKeyPemFile` | ES256 (P-256) private key, PEM (**secret**); the file form is preferred for mounted secrets | valid PEM, 256-bit EC; absent ⇒ startup refused (no ephemeral key outside Development) |
+| `Sessions:Signing:PrivateKeyPem` *or* `Sessions:Signing:PrivateKeyPemFile` | access-credential **signing key: ECDSA on the NIST P-256 curve (JWS ES256)**, private key in PEM (**secret**); the file form is preferred for mounted secrets. Asymmetric and unrelated to the symmetric per-Application consumer secrets below | valid PEM, 256-bit EC; absent ⇒ startup refused (no ephemeral key outside Development) |
 | `ProfileImages:RootPath` | absolute directory for sanitized profile images (user content) | absolute, no NUL; usable (readiness) |
+| `DataProtection:KeysPath` **NEW** | absolute directory for the ASP.NET Core Data Protection key ring. **Must be on storage that survives application/container recreation.** Required to preserve Identity password-reset credentials and any other Data Protection–protected state across restarts and replicas. Key files are key material: owner-only permissions, treat as secret-grade (unencrypted at rest by default) | absent, relative, NUL-containing or not creatable/writable ⇒ startup refused naming only this key; optional in Development/Testing (ephemeral ring) |
 | `ProfileImages:StorageIsPersistent` **NEW** | operator declaration that the root is on persistent storage | absent ⇒ startup refused; `true` ⇒ normal; `false` ⇒ starts with a Warning |
 
 ## Optional (validated, with defaults)
@@ -21,7 +24,8 @@ Environment variables use `__` for `:` (e.g. `Sessions__Signing__PrivateKeyPemFi
 | `Identity:Lockout:MaxFailedAccessAttempts` / `DefaultLockoutMinutes` | 5 / 5 | > 0 |
 | `RequestLimits:MaxBodyBytes` | 65 536 | 1 … 1 048 576 |
 | `ProfileImages:MaxBytes` / `MaxDimension` | 5 242 880 / 4096 | > 0 |
-| `Administration:GlobalAdministratorUserIds:N` | none | valid non-empty GUIDs; blank ignored; empty list ⇒ no global authority (011 decision); legacy `SecurityAudit:GlobalReviewerUserId` must be unset |
+| `Administration:GlobalAdministratorUserIds:N` | none | valid non-empty GUIDs; blank ignored; **empty list ⇒ no global authority (feature 011 decision, unchanged)**; malformed ⇒ startup refused; legacy `SecurityAudit:GlobalReviewerUserId` must be unset. The first id is obtained with the `bootstrap-admin` command ([contract](bootstrap-command.md)) |
+| `Bootstrap:AdministratorEmail` / `Bootstrap:AdministratorPassword` *or* `…PasswordFile` / `…FirstName` / `…LastName` **NEW** | none (names default to `Auth` / `Administrator`) | read **only** by the `bootstrap-admin` command, never by the web host; password is secret-grade (mounted file preferred); remove after use |
 | `Administration:MaxBulkSessionRevocation` | 1000 | 1 … 10 000 |
 | `SecurityAudit:RetentionDays` | unset | > 0 when set |
 | `AuthorizationConsumers:<app-code>:CurrentSecretHash` / `RetiringSecretHash` | none | **hash only**, never plaintext (secret-grade); runtime rotation via 011 admin API |
@@ -52,7 +56,6 @@ Health endpoints are intentionally outside named policies (see health contract).
 | `ForwardedHeaders:KnownNetworks:N` | empty | trusted CIDR ranges; `0.0.0.0/0` and `::/0` (trust-anyone) ⇒ startup refused |
 | *(both empty)* | — | forwarded headers **ignored**; direct-deployment behavior; Production-class logs a Warning that remote address, HTTPS detection and dependent policies may not represent the real client |
 | `HttpsRedirection:HttpsPort` | unset | when set, HTTP→HTTPS redirect is enabled; unset ⇒ no redirect (TLS terminates at the proxy) |
-| `DataProtection:KeysPath` | unset | absolute directory for the Data Protection key ring (on persistent storage); unset in Production-class ⇒ Warning that reset credentials will not survive restarts/replicas |
 | `ProfileImages:RequirePersistenceDeclaration` | `false` (implicitly `true` in Production-class) | opt-in to the declaration check in Development/Testing |
 
 ## Environment variables that must NOT be set

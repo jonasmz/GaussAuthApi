@@ -6,13 +6,14 @@
 
 ## Summary
 
-Make the assembled platform (features 001–011) releasable without adding functional capability. The work is a verification pass plus targeted hardening of seven concrete gaps found by reading the current code (see [research.md](research.md)):
+Make the assembled platform (features 001–011) releasable without adding product functionality. The work is a verification pass plus targeted hardening of eight concrete gaps found by reading the current code (see [research.md](research.md)):
 
 1. **Startup/config** — consolidate scattered eager checks into typed, fail-fast validation with setting-naming, secret-free messages and no stack-trace dump; make "Production-class" (anything other than Development/Testing) the single rule for unsafe-default gating.
 2. **Health** — keep liveness, add a minimal unauthenticated readiness check (database reachable, schema current, profile storage usable) using the built-in ASP.NET Core health-check infrastructure.
 3. **Network edge** — safe forwarded-header handling (explicit trusted proxies only), HSTS limited to Production-class, no `Server` header, CORS stays denied, all rate-limit values validated, endpoint rate-limit coverage test.
 4. **Recovery in Production** — `IRecoveryDelivery` gains an availability signal so no reset credential is generated when no channel exists (FR-018a); no new delivery mechanism.
-5. **Persistence declarations** — Production must declare profile-storage persistence; optional persistent Data Protection key ring with a warning when absent.
+5. **Persistence requirements** — Production must declare profile-storage persistence **and must configure a persistent Data Protection key-ring location** (mandatory in Production-class, optional in Development/Testing) so password-reset credentials and other protected state survive restarts and replicas.
+5a. **First-administrator bootstrap** — the platform currently cannot be bootstrapped in production (creating a user requires a global administrator, and the global list only holds UserIds of existing users). A one-off `bootstrap-admin` command in the same image creates the first user through the existing creation rules and prints its UserId; authority still comes only from the configured list (empty list ⇒ none).
 6. **Migrations** — one-off `migrate` command in the same image (no auto-migrate at runtime) plus an idempotent SQL script generated in the same build; validation from zero and from the 009 schema state with data.
 7. **Runtime package + docs** — production `Dockerfile`, `compose.release.yml` for evaluation, operator documentation set under `docs/`, secret-hygiene scan, and a recorded release-validation log (full Release build + regression run).
 
@@ -24,7 +25,7 @@ No new NuGet packages. No schema changes (no new migration) are planned; if the 
 
 **Primary Dependencies**: ASP.NET Core (shared framework, including built-in health checks, rate limiting, forwarded-headers, HSTS, Data Protection), ASP.NET Core Identity, EF Core 10 + Npgsql provider, SkiaSharp (existing, profile images). **No new packages.**
 
-**Storage**: PostgreSQL 17 (EF Core migrations); local filesystem for profile images (`ProfileImages:RootPath`); optional filesystem key ring for Data Protection
+**Storage**: PostgreSQL 17 (EF Core migrations); local filesystem for profile images (`ProfileImages:RootPath`); filesystem key ring for Data Protection (required in Production-class)
 
 **Testing**: MSTest (`tests/GaussAuth.Foundation.Tests`), `WebApplicationFactory<Program>`, real PostgreSQL 17 from the development compose; new throwaway-database tests for migration-from-zero/upgrade
 
@@ -36,7 +37,7 @@ No new NuGet packages. No schema changes (no new migration) are planned; if the 
 
 **Constraints**: No new functional capability; no redesign; no external observability or secret-management product; no new dependencies; one top-level type per C# file named `<name>.<type>.cs`; .NET commands run in the sdk container; liveness must not touch external systems; health responses must be empty-bodied.
 
-**Scale/Scope**: Cross-cutting: ~10 small C# files, 1 Dockerfile, 1 compose file, 2 scripts, 5 operator documents, ~8 focused test files. Verification touches all 11 prior features.
+**Scale/Scope**: Cross-cutting: ~14 small C# files, 1 Dockerfile, 1 compose file, 2 scripts, 6 operator documents, ~10 focused test files. Verification touches all 11 prior features.
 
 ## Constitution Check
 
@@ -50,9 +51,9 @@ No new NuGet packages. No schema changes (no new migration) are planned; if the 
 | IV. Roles, permissions, sessions | PASS. Verified; session freshness policy from 006 unchanged. |
 | V. Fixed technology & persistence | PASS. .NET 10, EF Core, PostgreSQL 17, versioned migrations only. Development container rules unchanged. **Constitution "undecided" list:** this plan explicitly resolves *production containerization* = Docker image + evaluation compose (as the spec Assumptions state). *Deployment platform* and *reverse proxy product* remain undecided; only a behavioral proxy contract (trusted-proxy configuration) is defined. No amendment required — the constitution permits resolution by a plan. |
 | VI. Security by design | PASS / strengthens. Secret-free startup errors, safe forwarded headers, no stack traces, no secrets in logs, Production-class gating. |
-| VII. Simplicity & dependency governance | PASS. Built-in .NET health checks, options validation, `ForwardedHeaders`, Data Protection used; no packages added. New infrastructure (Dockerfile/compose) is justified by FR-040/042 and uses only Microsoft base images already implied by the stack. Subcommand `migrate` chosen over a separate tool/bundle for fewer moving parts (research R4). |
+| VII. Simplicity & dependency governance | PASS. The `bootstrap-admin` command is a correction of a release-blocking startup-reliability defect, reuses the existing create-user use case, adds no endpoint and no dependency, and is explicitly operator-run. Built-in .NET health checks, options validation, `ForwardedHeaders`, Data Protection used; no packages added. New infrastructure (Dockerfile/compose) is justified by FR-040/042 and uses only Microsoft base images already implied by the stack. Subcommand `migrate` chosen over a separate tool/bundle for fewer moving parts (research R4). |
 | VIII. Proportionate testing / error contracts | PASS. Tests target release-blocking categories only; no coverage padding. Error contract unchanged (RFC 7807 problem details). |
-| IX. Spec-driven development | PASS. Plan derives from spec; two spec-level discoveries (recovery adapter, Data Protection keys) are documented in research and either map to existing FRs (FR-018a) or are declared optional operational hardening. |
+| IX. Spec-driven development | PASS. Plan derives from spec; three spec-level discoveries (recovery adapter, Data Protection key ring, first-administrator bootstrap) are documented in research, confirmed with the project owner, and written back into the spec (FR-018a, FR-041a, FR-044–046). |
 | Operational constraints | PASS. Rate limits, request/upload limits, structured logging, external configuration, no secrets in images all addressed. |
 | One type per file / naming | PASS by construction; tasks must follow `<name>.<type>.cs`. |
 
@@ -73,6 +74,7 @@ specs/012-hardening-release/
 ├── contracts/
 │   ├── health-endpoints.md
 │   ├── migration-command.md
+│   ├── bootstrap-command.md
 │   ├── configuration-reference.md
 │   └── runtime-package.md
 ├── checklists/requirements.md
@@ -93,7 +95,8 @@ scripts/
 docs/
 ├── deployment.md                                  # runtime, compose, proxy/HTTPS, health, shutdown
 ├── configuration.md                               # reference + secrets + environments
-├── database.md                                    # migrations, upgrade, backup/restore, profile storage
+├── database.md                                    # migrations, upgrade, backup/restore, profile storage, key ring
+├── bootstrap.md                                   # first global administrator procedure
 ├── security-baseline.md                           # HTTP baseline, CORS, rate limits, consumer secrets, crypto, logging
 └── limitations.md                                 # known operational limitations
 
@@ -105,11 +108,12 @@ src/GaussAuth.Infrastructure/
 ├── Configuration/
 │   ├── startupConfigurationException.exception.cs # NEW: setting-naming, value-free
 │   ├── productionClassEnvironment.extension.cs    # NEW: Production-class rule (R1)
-│   └── dataProtectionOptions.options.cs           # NEW: optional key-ring path + warning
+│   └── dataProtectionOptions.options.cs           # NEW: key-ring path (required in Production-class)
 ├── Health/
 │   ├── databaseReadiness.check.cs                 # NEW: reachable + schema current
 │   └── profileStorageReadiness.check.cs           # NEW: root usable
 ├── Migrations/databaseMigrator.service.cs         # NEW: shared by `migrate` command
+├── Bootstrap/firstAdministratorBootstrap.service.cs # NEW: guarded first-user creation (reuses create-user use case)
 ├── Passwords/protectedFileRecoveryDelivery.service.cs  # UPDATED: availability
 ├── ProfileImages/profileImagesOptions.options.cs  # UPDATED: persistence declaration
 ├── Sessions/accessCredentialSigningKey.service.cs # UPDATED: setting-naming messages
@@ -120,7 +124,8 @@ src/GaussAuth.Api/
 ├── appsettings.json                               # NEW: safe logging defaults, no secrets
 ├── appsettings.Production.json                    # NEW: JSON console, quieter levels
 ├── appsettings.Development.json                   # NEW: verbose
-├── Migrations/migrateCommand.command.cs           # NEW: `migrate` subcommand host
+├── Commands/migrateCommand.command.cs              # NEW: `migrate` subcommand host
+├── Commands/bootstrapAdminCommand.command.cs       # NEW: `bootstrap-admin` subcommand host
 └── DependencyInjection/
     ├── forwardedHeadersSetup.extension.cs         # NEW: explicit trusted proxies only
     ├── rateLimitOptions.options.cs                # NEW: validated per-group limits
@@ -136,6 +141,7 @@ tests/GaussAuth.Foundation.Tests/
 ├── rateLimitCoverageTests.test.cs                 # NEW (every endpoint limited or exempt-by-rationale)
 ├── recoveryWithoutDeliveryTests.test.cs           # NEW
 ├── releaseMigrationValidationTests.test.cs        # NEW (zero + upgrade-with-data, throwaway DBs)
+├── bootstrapAdministratorTests.test.cs            # NEW (refuses when users exist, no secret output, no authority by itself)
 ├── repositorySecretHygieneTests.test.cs           # NEW
 └── (existing suites)                              # run unchanged as regression
 ```

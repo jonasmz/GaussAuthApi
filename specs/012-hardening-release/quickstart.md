@@ -44,12 +44,12 @@ Expected: identical schema dump and identical history rows. The image contains n
 ## 4. Startup validation (US1, FR-014–021)
 
 ```bash
-for missing in ConnectionStrings__AuthenticationDatabase Sessions__Signing__PrivateKeyPemFile ProfileImages__RootPath ProfileImages__StorageIsPersistent; do
+for missing in ConnectionStrings__AuthenticationDatabase Sessions__Signing__PrivateKeyPemFile ProfileImages__RootPath ProfileImages__StorageIsPersistent DataProtection__KeysPath; do
   # start image in Production with that one setting removed
 done
 ```
 
-Expected (also covered by `productionStartupValidationTests`): non-zero exit within seconds, a Critical log naming the setting key, no value printed, no stack trace; with every setting valid the service starts. Also verify: `Staging` behaves as Production-class; `Development` still allows an ephemeral key; `ASPNETCORE_FORWARDEDHEADERS_ENABLED=true` without trust lists is refused; `ForwardedHeaders__KnownNetworks__0=0.0.0.0/0` is refused; `ProfileImages__StorageIsPersistent=false` starts with a visible Warning; with no recovery adapter the structured Warning appears.
+Expected (also covered by `productionStartupValidationTests`): non-zero exit within seconds, a Critical log naming the setting key, no value printed, no stack trace; with every setting valid the service starts. Also verify: `DataProtection__KeysPath` relative or unwritable is refused naming only the key; Development/Testing start without it; `Staging` behaves as Production-class; `Development` still allows an ephemeral key; `ASPNETCORE_FORWARDEDHEADERS_ENABLED=true` without trust lists is refused; `ForwardedHeaders__KnownNetworks__0=0.0.0.0/0` is refused; `ProfileImages__StorageIsPersistent=false` starts with a visible Warning; with no recovery adapter the structured Warning appears; a reset credential issued before restarting the API container (key ring on the persistent volume) still validates after the restart, and does not when the volume is dropped (documented).
 
 ## 5. Health and readiness (US3)
 
@@ -62,6 +62,16 @@ docker compose -f compose.release.yml start postgres ; sleep 8 ; curl -i localho
 ```
 
 Expected: no body or dependency detail in any response; transition logged once. Repeat with the profile storage volume made unusable (`readinessTests` simulates it) and with a database one migration behind (pending migrations ⇒ 503).
+
+## 5a. First administrator bootstrap (US7, FR-044–046)
+
+```bash
+docker run --rm --network <net> -e ConnectionStrings__AuthenticationDatabase=… \
+  -e Bootstrap__AdministratorEmail=admin@example.test -e Bootstrap__AdministratorPasswordFile=/run/secrets/bootstrap_pw \
+  -v ./bootstrap_pw:/run/secrets/bootstrap_pw:ro gaussauth:release bootstrap-admin
+```
+
+Expected (`bootstrapAdministratorTests` + image run): prints a `UserId` and exit 0 on an empty database; the password is absent from output/logs; re-running exits non-zero with `users-exist` and writes nothing; with the list still empty a global operation is rejected; after setting `Administration__GlobalAdministratorUserIds__0=<UserId>` and restarting, the same user logs in and a global operation succeeds; the command refuses when users already exist even if the list is empty.
 
 ## 6. Recovery without a delivery channel (US1, FR-018a)
 
@@ -105,7 +115,7 @@ Existing `consumerCredentialTests` plus log-capture assertions: per-application 
 
 ## 11. Documentation walk-through (US7, FR-043)
 
-On a clean checkout follow `docs/deployment.md` → `docs/database.md` → `docs/configuration.md` to deploy, migrate, upgrade (previous image → new image), back up and restore (database + profile storage together), and rotate a consumer secret. Every Production-required key appears in `docs/configuration.md`; every item in `docs/limitations.md` is non-release-blocking.
+On a clean checkout follow `docs/deployment.md` → `docs/database.md` → `docs/configuration.md` to deploy, migrate, upgrade (previous image → new image), back up and restore (database + profile storage together), and rotate a consumer secret. Every Production-required key appears in `docs/configuration.md`; `docs/bootstrap.md` takes an empty database to a working global administrator; the documentation states ECDSA NIST P-256 for the signing key separately from the symmetric per-Application consumer secrets, that an empty administrator list means no global authority, and that key-ring persistence is required for reset credentials and other protected state; every item in `docs/limitations.md` is non-release-blocking.
 
 ## Done criteria
 
