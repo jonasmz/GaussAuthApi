@@ -15,7 +15,8 @@ public static class CommandLineCommands
     // Subcommands reserved by the release contract. Handlers are registered here as they are implemented.
     private static readonly Dictionary<string, CommandHandler> Handlers = new(StringComparer.Ordinal)
     {
-        ["migrate"] = MigrateCommand.RunAsync
+        ["migrate"] = MigrateCommand.RunAsync,
+        ["bootstrap-admin"] = BootstrapAdministratorCommand.RunAsync
     };
 
     private static readonly string[] ReservedCommands = ["migrate", "bootstrap-admin"];
@@ -31,12 +32,6 @@ public static class CommandLineCommands
 
         var name = args[0];
         if (Handlers.TryGetValue(name, out var handler)) return await handler(args[1..]);
-
-        if (Array.IndexOf(ReservedCommands, name) >= 0)
-        {
-            await Console.Error.WriteLineAsync($"Command '{name}' is not available in this build.");
-            return UnavailableCommandExitCode;
-        }
 
         await Console.Error.WriteLineAsync(
             $"Unknown command '{name}'. Supported commands: {string.Join(", ", ReservedCommands)}. Run without arguments to start the API.");
